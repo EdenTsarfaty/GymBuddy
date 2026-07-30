@@ -1,19 +1,26 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --text-muted: #9a97a3;
-  --bg: #fff;
-  --card-bg: #fff;
-  --chip-bg: #f4f3f7;
-  --border: #e5e4e7;
+  /* Light theme (default) */
+  --text: #45454c;
+  --text-h: #131316;
+  --text-muted: #6f6f78;
+  --bg: #fbfbfc;
+  --card-bg: #ffffff;
+  --chip-bg: #f2f1f5;
+  --border: #e4e4e9;
+  --accent: #06b6d4;
+  --accent-2: #8b5cf6;
   --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+    rgba(20, 20, 30, 0.16) 0 8px 16px -4px, rgba(20, 20, 30, 0.1) 0 2px 6px -1px;
+  --shadow-hover:
+    rgba(20, 20, 30, 0.22) 0 14px 24px -6px, rgba(20, 20, 30, 0.12) 0 4px 8px -2px,
+    rgba(6, 182, 212, 0.4) 0 0 16px 0;
+
+  color-scheme: light;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -22,7 +29,24 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark theme deferred to a future version */
+:root[data-theme='dark'] {
+  --text: #c7c7cf;
+  --text-h: #f2f2f5;
+  --text-muted: #93939e;
+  --bg: #111114;
+  --card-bg: #1a1a1f;
+  --chip-bg: #232329;
+  --border: #2a2a32;
+  --accent: #22d3ee;
+  --accent-2: #a78bfa;
+  --shadow:
+    rgba(0, 0, 0, 0.55) 0 8px 16px -4px, rgba(0, 0, 0, 0.35) 0 2px 6px -1px;
+  --shadow-hover:
+    rgba(0, 0, 0, 0.6) 0 14px 20px -4px, rgba(0, 0, 0, 0.4) 0 6px 8px -2px,
+    rgba(34, 211, 238, 0.45) 0 0 18px 0;
+
+  color-scheme: dark;
+}
 
 * {
   box-sizing: border-box;
@@ -30,6 +54,8 @@
 
 body {
   margin: 0;
+  background: var(--bg);
+  transition: background-color 0.15s ease;
 }
 
 h1,
