@@ -1,0 +1,45 @@
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --text-muted: #9a97a3;
+  --bg: #fff;
+  --card-bg: #fff;
+  --chip-bg: #f4f3f7;
+  --border: #e5e4e7;
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark theme deferred to a future version */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+p {
+  margin: 0;
+}

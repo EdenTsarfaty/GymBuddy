@@ -1,0 +1,101 @@
+.page {
+  width: 480px;
+  max-width: 100%;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+}
+
+.page-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  grid-column: 1;
+  justify-self: start;
+  font-size: 28px;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.today {
+  grid-column: 2;
+  justify-self: center;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.workout-card {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 10px 16px;
+}
+
+.workout-card-title {
+  font-size: 20px;
+  margin: 0;
+}
+
+.workout-card-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.stat-value {
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 10px;
+}
+
+.expand-btn {
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: default;
+}
+
+.page-footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
