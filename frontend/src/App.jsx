@@ -2,40 +2,9 @@ import { useEffect, useState } from 'react'
 import WorkoutCard from './components/WorkoutCard'
 import './App.css'
 
-const APP_VERSION = '0.0.2'
+const APP_VERSION = '0.0.3'
 const THEME_STORAGE_KEY = 'gymbuddy-theme'
-
-const initialExercises = [
-  {
-    exercise: 'Squat',
-    sets: 3,
-    weight: 60,
-    description:
-      'A compound lower-body lift that builds strength through the quads, glutes, and core.',
-    bullets: ['Feet shoulder-width apart', 'Keep chest up', 'Drive through your heels'],
-  },
-  {
-    exercise: 'Bench Press',
-    sets: 4,
-    weight: 40,
-    description: 'A pressing movement that targets the chest, shoulders, and triceps.',
-    bullets: ['Shoulder blades retracted', 'Bar path over the chest', 'Control the descent'],
-  },
-  {
-    exercise: 'Deadlift',
-    sets: 3,
-    weight: 80,
-    description: 'A full-body pull that builds posterior chain strength from the ground up.',
-    bullets: ['Neutral spine throughout', 'Bar close to your shins', 'Hips and shoulders rise together'],
-  },
-  {
-    exercise: 'Overhead Press',
-    sets: 3,
-    weight: 25,
-    description: 'A standing press that builds shoulder strength and core stability.',
-    bullets: ['Brace your core', 'Press bar in a straight line', 'Avoid arching your lower back'],
-  },
-]
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
 
@@ -47,21 +16,40 @@ function getInitialTheme() {
 
 function App() {
   const [theme, setTheme] = useState(getInitialTheme)
-  const [exercises, setExercises] = useState(initialExercises)
+  const [exercises, setExercises] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_STORAGE_KEY, theme)
   }, [theme])
 
+  useEffect(() => {
+    fetch(`${API_BASE}/api/exercises`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load exercises')
+        return res.json()
+      })
+      .then(setExercises)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
   function toggleTheme() {
     setTheme((current) => (current === 'light' ? 'dark' : 'light'))
   }
 
-  function updateExercise(name, updates) {
+  function updateExercise(id, updates) {
     setExercises((current) =>
-      current.map((item) => (item.exercise === name ? { ...item, ...updates } : item)),
+      current.map((item) => (item.id === id ? { ...item, ...updates } : item)),
     )
+
+    fetch(`${API_BASE}/api/exercises/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
   }
 
   return (
@@ -72,17 +60,21 @@ function App() {
       </header>
 
       <main className="card-list">
-        {exercises.map((item) => (
-          <WorkoutCard
-            key={item.exercise}
-            exercise={item.exercise}
-            sets={item.sets}
-            weight={item.weight}
-            description={item.description}
-            bullets={item.bullets}
-            onSave={(updates) => updateExercise(item.exercise, updates)}
-          />
-        ))}
+        {loading && <p className="status-message">Loading exercises...</p>}
+        {error && <p className="status-message">Couldn't load exercises: {error}</p>}
+        {!loading &&
+          !error &&
+          exercises.map((item) => (
+            <WorkoutCard
+              key={item.id}
+              exercise={item.name}
+              sets={item.sets}
+              weight={item.weight}
+              description={item.description}
+              bullets={item.bullets}
+              onSave={(updates) => updateExercise(item.id, updates)}
+            />
+          ))}
       </main>
 
       <footer className="page-footer">
