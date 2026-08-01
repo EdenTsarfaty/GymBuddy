@@ -30,6 +30,35 @@
   position: relative;
   grid-column: 2;
   justify-self: center;
+  display: flex;
+  align-items: center;
+}
+
+.settings-btn {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.settings-btn:hover,
+.settings-btn.is-active {
+  color: var(--accent);
+}
+
+@keyframes gear-spin {
+  to { transform: rotate(360deg); }
+}
+
+.settings-btn:not(.is-active):hover svg {
+  animation: gear-spin 2.8s linear infinite;
 }
 
 .today {
@@ -38,8 +67,9 @@
   border: none;
   padding: 0;
   color: var(--accent);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
   cursor: pointer;
 }
 
@@ -108,6 +138,11 @@
   font-weight: 600;
 }
 
+.plan-menu-option.is-picked-day {
+  background: var(--accent-tint-bg);
+  font-weight: 600;
+}
+
 .plan-menu-option:disabled {
   color: var(--text-muted);
   opacity: 0.5;
@@ -139,6 +174,39 @@
 .plan-menu-back:hover {
   color: var(--accent);
   background: var(--chip-bg);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes header-center-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  animation: view-in 0.22s ease-out;
+}
+
+.plan-picker {
+  animation: header-center-in 0.18s ease-out;
 }
 
 .card-list {
@@ -203,6 +271,7 @@
 
 .workout-card-title {
   font-size: 20px;
+  font-weight: 600;
   margin: 0;
 }
 
@@ -227,6 +296,7 @@
 
 .stat-label {
   font-size: 10px;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -234,6 +304,7 @@
 
 .stat-value {
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
   background: var(--chip-bg);
   border: 1px solid var(--border);
@@ -303,6 +374,7 @@
 .workout-card-description {
   margin: 0;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.4;
   color: var(--text);
 }
@@ -314,6 +386,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  font-weight: 500;
 }
 
 .instruction-bullets li {
@@ -439,6 +512,7 @@
 
 .weight-picker-num.current {
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
   background: var(--chip-bg);
   border: 1px solid var(--border);
@@ -474,6 +548,7 @@
   min-width: 16px;
   text-align: center;
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-h);
   background: var(--chip-bg);
   border: 1px solid var(--border);
@@ -496,17 +571,92 @@
   color: var(--text-muted);
 }
 
-.theme-toggle {
-  font-size: 13px;
-  color: var(--text-muted);
-  background: var(--chip-bg);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
+.today.is-static {
+  cursor: default;
+  user-select: none;
 }
 
-.theme-toggle:hover {
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+
+.settings-row-label {
+  font-size: 17px;
+  font-weight: 600;
   color: var(--text-h);
-  border-color: var(--accent);
+}
+
+.settings-separator {
+  height: 1px;
+  background: var(--border);
+}
+
+.theme-toggle-pill {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent-border-light);
+  background: none;
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 3);
+  height: calc(100% - 6px);
+  border-radius: 999px;
+  background: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.theme-toggle-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.theme-toggle-option.is-active {
+  color: var(--bg);
+}
+
+.settings-row-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.settings-row-link {
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.settings-row-link:hover {
+  color: var(--accent);
 }

@@ -1,14 +1,16 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import WorkoutCard from './components/WorkoutCard'
 import Logo from './components/Logo'
+import SettingsPage from './components/SettingsPage'
 import CalendarIcon from './components/icons/CalendarIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
+import GearIcon from './components/icons/GearIcon'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = '0.0.4.1'
-const THEME_STORAGE_KEY = 'gymbuddy-theme'
+const APP_VERSION = '0.0.4.2'
+const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
@@ -38,14 +40,23 @@ function getOrderedWeekdays() {
 
 const weekdays = getOrderedWeekdays()
 
-function getInitialTheme() {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY)
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+function getInitialThemeMode() {
+  const stored = localStorage.getItem(THEME_MODE_STORAGE_KEY)
+  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
+  return 'system'
+}
+
+function resolveTheme(mode) {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return mode
 }
 
 function App() {
-  const [theme, setTheme] = useState(getInitialTheme)
+  const [view, setView] = useState('home')
+  const [themeMode, setThemeMode] = useState(getInitialThemeMode)
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(getInitialThemeMode()))
   const [exercises, setExercises] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -57,9 +68,22 @@ function App() {
   const planMenuRef = useRef(null)
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    localStorage.setItem(THEME_STORAGE_KEY, theme)
-  }, [theme])
+    document.documentElement.dataset.theme = resolvedTheme
+  }, [resolvedTheme])
+
+  useEffect(() => {
+    localStorage.setItem(THEME_MODE_STORAGE_KEY, themeMode)
+    setResolvedTheme(resolveTheme(themeMode))
+
+    if (themeMode !== 'system') return
+
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
+    function handleSystemChange() {
+      setResolvedTheme(resolveTheme('system'))
+    }
+    mql.addEventListener('change', handleSystemChange)
+    return () => mql.removeEventListener('change', handleSystemChange)
+  }, [themeMode])
 
   useEffect(() => {
     setLoading(true)
@@ -100,10 +124,6 @@ function App() {
     setPlanMenuScreen('root')
   }
 
-  function toggleTheme() {
-    setTheme((current) => (current === 'light' ? 'dark' : 'light'))
-  }
-
   function openWeekDays() {
     setPlanView('week')
     setPlanMenuScreen('days')
@@ -126,109 +146,135 @@ function App() {
     })
   }
 
+  function toggleSettings() {
+    setView((current) => (current === 'settings' ? 'home' : 'settings'))
+  }
+
   return (
     <div className="page">
       <header className="page-header">
         <Logo height={64} className="page-logo" />
-        <div className="plan-picker" ref={planMenuRef}>
-          <button
-            type="button"
-            className="today"
-            onClick={() => setPlanMenuOpen((current) => !current)}
-            aria-haspopup="menu"
-            aria-expanded={planMenuOpen}
-          >
-            {selectedDay}
-          </button>
 
-          {planMenuOpen && planMenuScreen === 'root' && (
-            <div className="plan-menu" role="menu">
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={planView === 'week'}
-                className={`plan-menu-option ${planView === 'week' ? 'is-selected' : ''}`}
-                onClick={openWeekDays}
-              >
-                Week
-                <TableIcon size={16} />
-              </button>
-              <div className="plan-menu-separator" />
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={false}
-                className="plan-menu-option"
-                disabled
-                title="Coming soon"
-              >
-                Month
-                <CalendarIcon size={16} />
-              </button>
-            </div>
-          )}
+        {view === 'settings' ? (
+          <div className="plan-picker">
+            <span className="today is-static">Settings</span>
+          </div>
+        ) : (
+          <div className="plan-picker" ref={planMenuRef}>
+            <button
+              type="button"
+              className="today"
+              onClick={() => setPlanMenuOpen((current) => !current)}
+              aria-haspopup="menu"
+              aria-expanded={planMenuOpen}
+            >
+              {selectedDay}
+            </button>
 
-          {planMenuOpen && planMenuScreen === 'days' && (
-            <div className="plan-menu" role="menu">
-              <button
-                type="button"
-                className="plan-menu-back"
-                onClick={() => setPlanMenuScreen('root')}
-                aria-label="Back to week/month picker"
-              >
-                <ChevronLeftIcon size={16} />
-              </button>
-              {weekdays.map((day, index) => (
-                <Fragment key={day}>
-                  {index > 0 && <div className="plan-menu-separator" />}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    aria-checked={day === selectedDay}
-                    className={`plan-menu-option ${day === today ? 'is-today' : ''} ${day === selectedDay ? 'is-selected' : ''} ${day !== today && !daysWithWorkouts.has(day) ? 'is-empty-day' : ''}`}
-                    onClick={() => selectDay(day)}
-                  >
-                    {day}
-                  </button>
-                </Fragment>
-              ))}
-            </div>
-          )}
-        </div>
-      </header>
+            {planMenuOpen && planMenuScreen === 'root' && (
+              <div className="plan-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={planView === 'week'}
+                  className={`plan-menu-option ${planView === 'week' ? 'is-selected' : ''}`}
+                  onClick={openWeekDays}
+                >
+                  Week
+                  <TableIcon size={16} />
+                </button>
+                <div className="plan-menu-separator" />
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={false}
+                  className="plan-menu-option"
+                  disabled
+                  title="Coming soon"
+                >
+                  Month
+                  <CalendarIcon size={16} />
+                </button>
+              </div>
+            )}
 
-      <main className="card-list">
-        {loading && <p className="status-message">Loading exercises...</p>}
-        {error && <p className="status-message">Couldn't load exercises: {error}</p>}
-        {!loading && !error && exercises.length === 0 && (
-          <div className="empty-day">
-            <ZzzIcon className="empty-day-zzz" />
-            <p className="empty-day-message">
-              This seems to be a rest day... Feeling a bit enthusiastic, are we?
-            </p>
+            {planMenuOpen && planMenuScreen === 'days' && (
+              <div className="plan-menu" role="menu">
+                <button
+                  type="button"
+                  className="plan-menu-back"
+                  onClick={() => setPlanMenuScreen('root')}
+                  aria-label="Back to week/month picker"
+                >
+                  <ChevronLeftIcon size={16} />
+                </button>
+                {weekdays.map((day, index) => (
+                  <Fragment key={day}>
+                    {index > 0 && <div className="plan-menu-separator" />}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-checked={day === selectedDay}
+                      className={`plan-menu-option ${day === today ? 'is-today' : ''} ${day === selectedDay ? 'is-picked-day' : ''} ${day !== today && !daysWithWorkouts.has(day) ? 'is-empty-day' : ''}`}
+                      onClick={() => selectDay(day)}
+                    >
+                      {day}
+                    </button>
+                  </Fragment>
+                ))}
+              </div>
+            )}
           </div>
         )}
-        {!loading &&
-          !error &&
-          exercises.map((item) => (
-            <WorkoutCard
-              key={item.id}
-              exercise={item.name}
-              sets={item.sets}
-              weight={item.weight}
-              description={item.description}
-              bullets={item.bullets}
-              onSave={(updates) => updateExercise(item.id, updates)}
-            />
-          ))}
-      </main>
 
-      <footer className="page-footer">
-        <span>v{APP_VERSION}</span>
-        <button type="button" className="theme-toggle" onClick={toggleTheme}>
-          {theme === 'light' ? 'Light' : 'Dark'}
+        <button
+          type="button"
+          className={`settings-btn ${view === 'settings' ? 'is-active' : ''}`}
+          onClick={toggleSettings}
+          aria-label="Settings"
+          aria-pressed={view === 'settings'}
+        >
+          <GearIcon size={28} />
         </button>
-      </footer>
+      </header>
+
+      <div key={view} className="view-content">
+        {view === 'settings' ? (
+          <SettingsPage themeMode={themeMode} onChangeThemeMode={setThemeMode} version={APP_VERSION} />
+        ) : (
+          <main className="card-list">
+            {loading && <p className="status-message">Loading exercises...</p>}
+            {error && <p className="status-message">Couldn't load exercises: {error}</p>}
+            {!loading && !error && exercises.length === 0 && (
+              <div className="empty-day">
+                <ZzzIcon className="empty-day-zzz" />
+                <p className="empty-day-message">
+                  This seems to be a rest day... Feeling a bit enthusiastic, are we?
+                </p>
+              </div>
+            )}
+            {!loading &&
+              !error &&
+              exercises.map((item) => (
+                <WorkoutCard
+                  key={item.id}
+                  exercise={item.name}
+                  sets={item.sets}
+                  weight={item.weight}
+                  description={item.description}
+                  bullets={item.bullets}
+                  onSave={(updates) => updateExercise(item.id, updates)}
+                />
+              ))}
+          </main>
+        )}
+      </div>
+
+      {view !== 'settings' && (
+        <footer className="page-footer">
+          <span>v{APP_VERSION}</span>
+        </footer>
+      )}
     </div>
   )
 }
