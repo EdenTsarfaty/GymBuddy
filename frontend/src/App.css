@@ -9,18 +9,21 @@
 }
 
 .page-header {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  margin-bottom: 24px;
+  height: 40px;
+  margin-top: 16px;
+  margin-bottom: 48px;
 }
 
-.page-header h1 {
-  grid-column: 1;
-  justify-self: start;
-  font-size: 28px;
-  margin: 0;
-  letter-spacing: -0.5px;
+.page-logo {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-h);
 }
 
 .today {

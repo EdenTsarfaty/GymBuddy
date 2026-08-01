@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import WorkoutCard from './components/WorkoutCard'
+import Logo from './components/Logo'
 import './App.css'
 
-const APP_VERSION = '0.0.3'
+const APP_VERSION = '0.0.4'
 const THEME_STORAGE_KEY = 'gymbuddy-theme'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -55,7 +56,7 @@ function App() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>GymBuddy</h1>
+        <Logo height={64} className="page-logo" />
         <p className="today">{today}</p>
       </header>
 
