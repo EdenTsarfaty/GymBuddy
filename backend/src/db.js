@@ -13,6 +13,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS exercises (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    day TEXT NOT NULL,
     sets INTEGER NOT NULL,
     weight INTEGER NOT NULL,
     description TEXT,
@@ -24,12 +25,13 @@ const exerciseCount = db.prepare('SELECT COUNT(*) AS count FROM exercises').get(
 
 if (exerciseCount === 0) {
   const insert = db.prepare(
-    'INSERT INTO exercises (name, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (name, day, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?, ?)',
   )
 
   const seedExercises = [
     {
       name: 'Squat',
+      day: 'Monday',
       sets: 3,
       weight: 60,
       description:
@@ -38,6 +40,7 @@ if (exerciseCount === 0) {
     },
     {
       name: 'Bench Press',
+      day: 'Monday',
       sets: 4,
       weight: 40,
       description: 'A pressing movement that targets the chest, shoulders, and triceps.',
@@ -45,6 +48,7 @@ if (exerciseCount === 0) {
     },
     {
       name: 'Deadlift',
+      day: 'Wednesday',
       sets: 3,
       weight: 80,
       description: 'A full-body pull that builds posterior chain strength from the ground up.',
@@ -52,16 +56,31 @@ if (exerciseCount === 0) {
     },
     {
       name: 'Overhead Press',
+      day: 'Wednesday',
       sets: 3,
       weight: 25,
       description: 'A standing press that builds shoulder strength and core stability.',
       bullets: ['Brace your core', 'Press bar in a straight line', 'Avoid arching your lower back'],
+    },
+    {
+      name: 'Lunges',
+      day: 'Saturday',
+      sets: 4,
+      weight: 20,
+      description:
+        'Lunges are a lower-body unilateral strength move that targets the quadriceps, glutes, and hamstrings while also training balance and core stability.',
+      bullets: [
+        'Step so both knees bend to about 90 degrees',
+        'Keep your torso tall and braced',
+        'Push through the whole foot to stand back up',
+      ],
     },
   ]
 
   for (const exercise of seedExercises) {
     insert.run(
       exercise.name,
+      exercise.day,
       exercise.sets,
       exercise.weight,
       exercise.description,

@@ -26,12 +26,119 @@
   color: var(--text-h);
 }
 
-.today {
+.plan-picker {
+  position: relative;
   grid-column: 2;
   justify-self: center;
+}
+
+.today {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
   color: var(--accent);
   font-size: 15px;
   font-weight: 500;
+  cursor: pointer;
+}
+
+@keyframes plan-menu-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.plan-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: var(--shadow-menu);
+  padding: 4px;
+  z-index: 10;
+  animation: plan-menu-in 0.15s ease-out;
+}
+
+.plan-menu-separator {
+  height: 1px;
+  margin: 4px -4px;
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+.plan-menu-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.plan-menu-option:hover:not(:disabled) {
+  background: var(--chip-bg);
+}
+
+.plan-menu-option.is-empty-day {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.plan-menu-option.is-selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.plan-menu-option:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.plan-menu-option.is-today {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.plan-menu-back {
+  position: absolute;
+  top: -1px;
+  left: -38px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--card-bg);
+  border: 1.5px solid var(--accent);
+  box-shadow: var(--shadow-menu);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.plan-menu-back:hover {
+  color: var(--accent);
+  background: var(--chip-bg);
 }
 
 .card-list {
@@ -46,6 +153,28 @@
   color: var(--text-muted);
   font-size: 14px;
   margin-top: 16px;
+}
+
+.empty-day {
+  text-align: center;
+  margin-top: 40px;
+  user-select: none;
+}
+
+.empty-day-zzz {
+  color: var(--accent);
+  opacity: 0.45;
+}
+
+.empty-day-message {
+  max-width: 260px;
+  margin: 0 auto;
+  color: var(--accent);
+  opacity: 0.55;
+  font-size: 15px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1.4;
 }
 
 .workout-card {
@@ -261,6 +390,12 @@
   color: #e5484d;
   border-color: #e5484d;
   background: #e5484d26;
+}
+
+.swap-btn:hover {
+  color: #ff862f;
+  border-color: #ff8228;
+  background: #f9731626;
 }
 
 .workout-card-edit {

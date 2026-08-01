@@ -14,17 +14,46 @@ fastify.get('/api/health', async () => {
   return { status: 'ok' }
 })
 
-fastify.get('/api/exercises', async () => {
-  const rows = db.prepare('SELECT * FROM exercises').all()
+const VALID_DAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+]
+
+function currentDayName() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' })
+}
+
+fastify.get('/api/exercises', async (request, reply) => {
+  const { day } = request.query
+
+  if (day && !VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  const rows = day
+    ? db.prepare('SELECT * FROM exercises WHERE day = ?').all(day)
+    : db.prepare('SELECT * FROM exercises').all()
+
   return rows.map((row) => ({ ...row, bullets: JSON.parse(row.bullets) }))
 })
 
 fastify.post('/api/exercises/generate', async (request, reply) => {
-  const { title } = request.body || {}
+  const { title, day } = request.body || {}
 
   if (!title || !title.trim()) {
     reply.code(400)
     return { error: 'title is required' }
+  }
+
+  if (day && !VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
   }
 
   let generated
@@ -37,10 +66,11 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   }
 
   const insert = db.prepare(
-    'INSERT INTO exercises (name, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (name, day, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
     title.trim(),
+    day || currentDayName(),
     generated.sets,
     generated.weight,
     generated.description,

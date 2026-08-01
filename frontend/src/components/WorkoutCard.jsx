@@ -190,7 +190,7 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, onSave }) {
                 </button>
               )}
               {editing ? (
-                <button type="button" className="icon-btn" aria-label="Ask AI to swap this exercise">
+                <button type="button" className="icon-btn swap-btn" aria-label="Ask AI to swap this exercise">
                   <SwapIcon size={16} />
                 </button>
               ) : (
