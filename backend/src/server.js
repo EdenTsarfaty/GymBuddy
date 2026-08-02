@@ -28,8 +28,13 @@ function currentDayName() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' })
 }
 
+fastify.get('/api/users', async () => {
+  return db.prepare('SELECT id, name FROM users ORDER BY id').all()
+})
+
 fastify.get('/api/exercises', async (request, reply) => {
-  const { day } = request.query
+  const { day, user_id } = request.query
+  const uid = user_id ? Number(user_id) : 1
 
   if (day && !VALID_DAYS.includes(day)) {
     reply.code(400)
@@ -37,14 +42,15 @@ fastify.get('/api/exercises', async (request, reply) => {
   }
 
   const rows = day
-    ? db.prepare('SELECT * FROM exercises WHERE day = ?').all(day)
-    : db.prepare('SELECT * FROM exercises').all()
+    ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ?').all(day, uid)
+    : db.prepare('SELECT * FROM exercises WHERE user_id = ?').all(uid)
 
   return rows.map((row) => ({ ...row, bullets: JSON.parse(row.bullets) }))
 })
 
 fastify.post('/api/exercises/generate', async (request, reply) => {
-  const { title, day } = request.body || {}
+  const { title, day, user_id } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
 
   if (!title || !title.trim()) {
     reply.code(400)
@@ -66,9 +72,10 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   }
 
   const insert = db.prepare(
-    'INSERT INTO exercises (name, day, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
+    uid,
     title.trim(),
     day || currentDayName(),
     generated.sets,
@@ -80,6 +87,25 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
   reply.code(201)
   return { ...created, bullets: JSON.parse(created.bullets) }
+})
+
+fastify.get('/api/profile', async (request) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  return db.prepare('SELECT age, height, weight FROM user_profile WHERE id = ?').get(uid)
+})
+
+fastify.put('/api/profile', async (request) => {
+  const { user_id, age, height, weight } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  db.prepare(
+    'UPDATE user_profile SET age = ?, height = ?, weight = ? WHERE id = ?',
+  ).run(
+    age !== undefined ? age : null,
+    height !== undefined ? height : null,
+    weight !== undefined ? weight : null,
+    uid,
+  )
+  return db.prepare('SELECT age, height, weight FROM user_profile WHERE id = ?').get(uid)
 })
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {

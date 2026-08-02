@@ -9,7 +9,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = '0.0.4.2'
+const APP_VERSION = 'alpha 0.1.0'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -57,6 +57,8 @@ function App() {
   const [view, setView] = useState('home')
   const [themeMode, setThemeMode] = useState(getInitialThemeMode)
   const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(getInitialThemeMode()))
+  const [users, setUsers] = useState([])
+  const [currentUser, setCurrentUser] = useState(null)
   const [exercises, setExercises] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -86,10 +88,21 @@ function App() {
   }, [themeMode])
 
   useEffect(() => {
+    fetch(`${API_BASE}/api/users`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        setUsers(data)
+        if (data.length > 0) setCurrentUser(data[0])
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!currentUser) return
     setLoading(true)
     setError(null)
 
-    fetch(`${API_BASE}/api/exercises?day=${encodeURIComponent(selectedDay)}`)
+    fetch(`${API_BASE}/api/exercises?day=${encodeURIComponent(selectedDay)}&user_id=${currentUser.id}`)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load exercises')
         return res.json()
@@ -97,14 +110,15 @@ function App() {
       .then(setExercises)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [selectedDay])
+  }, [selectedDay, currentUser])
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/exercises`)
+    if (!currentUser) return
+    fetch(`${API_BASE}/api/exercises?user_id=${currentUser.id}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((all) => setDaysWithWorkouts(new Set(all.map((item) => item.day))))
       .catch(() => {})
-  }, [])
+  }, [currentUser])
 
   useEffect(() => {
     if (!planMenuOpen) return
@@ -240,7 +254,14 @@ function App() {
 
       <div key={view} className="view-content">
         {view === 'settings' ? (
-          <SettingsPage themeMode={themeMode} onChangeThemeMode={setThemeMode} version={APP_VERSION} />
+          <SettingsPage
+            themeMode={themeMode}
+            onChangeThemeMode={setThemeMode}
+            version={APP_VERSION}
+            users={users}
+            currentUser={currentUser}
+            onChangeUser={setCurrentUser}
+          />
         ) : (
           <main className="card-list">
             {loading && <p className="status-message">Loading exercises...</p>}
@@ -272,7 +293,7 @@ function App() {
 
       {view !== 'settings' && (
         <footer className="page-footer">
-          <span>v{APP_VERSION}</span>
+          <span>{APP_VERSION}</span>
         </footer>
       )}
     </div>

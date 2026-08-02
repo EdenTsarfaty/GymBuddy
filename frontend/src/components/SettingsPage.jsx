@@ -1,14 +1,141 @@
+import { useEffect, useRef, useState } from 'react'
+import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
 import SunIcon from './icons/SunIcon'
 
 const THEME_MODES = ['light', 'dark', 'system']
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
-function SettingsPage({ themeMode, onChangeThemeMode, version }) {
+function UserPicker({ users, currentUser, onChangeUser }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  if (!currentUser) return null
+
+  return (
+    <div className="settings-row">
+      <span className="settings-row-label">User</span>
+      <div className="user-picker" ref={ref}>
+        <button
+          className={`user-picker-pill ${open ? 'is-open' : ''}`}
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span>{currentUser.name}</span>
+          <span className={`user-picker-chevron ${open ? 'is-open' : ''}`}>
+            <ChevronLeftIcon size={12} />
+          </span>
+        </button>
+
+        {open && (
+          <div className="user-picker-menu" role="listbox">
+            {users.filter(u => u.id !== currentUser.id).map((user, i) => (
+              <div key={user.id}>
+                {i > 0 && <div className="user-picker-separator" />}
+                <button
+                  className="user-picker-option"
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => { onChangeUser(user); setOpen(false) }}
+                >
+                  {user.name}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BioRow({ label, value, onSave, placeholder }) {
+  const [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState(false)
+
+  function handleEdit() {
+    setDraft(value ?? '')
+    setEditing(true)
+  }
+
+  function handleSave() {
+    onSave(draft)
+    setEditing(false)
+  }
+
+  function handleCancel() {
+    setEditing(false)
+  }
+
+  return (
+    <div className="settings-row">
+      <span className="settings-row-label">{label}</span>
+      <div className="bio-row-right">
+        {editing && (
+          <button className="bio-cancel-btn" onClick={handleCancel} aria-label="Cancel">
+            <ChevronLeftIcon size={12} />
+          </button>
+        )}
+        <input
+          className="bio-input"
+          type="text"
+          value={editing ? draft : (value ?? '')}
+          disabled={!editing}
+          placeholder={editing ? placeholder : '—'}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSave()
+            if (e.key === 'Escape') handleCancel()
+          }}
+        />
+        <button className="bio-edit-btn" onClick={editing ? handleSave : handleEdit}>
+          {editing ? 'Save' : 'Edit'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
+  const [profile, setProfile] = useState({ age: null, height: null, weight: null })
+
+  useEffect(() => {
+    if (!currentUser) return
+    fetch(`${API_BASE}/api/profile?user_id=${currentUser.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setProfile(data) })
+      .catch(() => {})
+  }, [currentUser])
+
+  function saveField(field, raw) {
+    const value = raw === '' ? null : Number(raw)
+    const updated = { ...profile, [field]: value, user_id: currentUser?.id }
+    setProfile(updated)
+    fetch(`${API_BASE}/api/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
+  }
 
   return (
     <div className="settings-list">
+      <UserPicker users={users} currentUser={currentUser} onChangeUser={onChangeUser} />
+
+      <div className="settings-separator" />
+
       <div className="settings-row">
         <span className="settings-row-label">Theme</span>
         <div className="theme-toggle-pill" role="radiogroup" aria-label="Theme">
@@ -48,7 +175,30 @@ function SettingsPage({ themeMode, onChangeThemeMode, version }) {
           </button>
         </div>
       </div>
+
       <div className="settings-separator" />
+
+      <BioRow
+        label="Age"
+        value={profile.age != null ? String(profile.age) : ''}
+        onSave={(v) => saveField('age', v)}
+        placeholder="years"
+      />
+      <BioRow
+        label="Height"
+        value={profile.height != null ? String(profile.height) : ''}
+        onSave={(v) => saveField('height', v)}
+        placeholder="cm"
+      />
+      <BioRow
+        label="Weight"
+        value={profile.weight != null ? String(profile.weight) : ''}
+        onSave={(v) => saveField('weight', v)}
+        placeholder="kg"
+      />
+
+      <div className="settings-separator" />
+
       <div className="settings-row">
         <span className="settings-row-label">Current version</span>
         <a
@@ -56,7 +206,7 @@ function SettingsPage({ themeMode, onChangeThemeMode, version }) {
           href="https://github.com/EdenTsarfaty/GymBuddy"
           target="_blank"
           rel="noopener noreferrer"
-        >v{version}</a>
+        >{version}</a>
       </div>
     </div>
   )
