@@ -5,11 +5,12 @@ import SettingsPage from './components/SettingsPage'
 import CalendarIcon from './components/icons/CalendarIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
+import PlugOffIcon from './components/icons/PlugOffIcon'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.2.0'
+const APP_VERSION = 'alpha 0.2.1'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -68,6 +69,7 @@ function App() {
   const [exercises, setExercises] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [serverDown, setServerDown] = useState(false)
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
   const [planView, setPlanView] = useState('week')
@@ -94,28 +96,49 @@ function App() {
   }, [themeMode])
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/users`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
+
+    fetch(`${API_BASE}/api/users`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         setUsers(data)
         if (data.length > 0) setCurrentUser(data[0])
+        else setLoading(false)
       })
-      .catch(() => {})
+      .catch(() => {
+        setServerDown(true)
+        setLoading(false)
+      })
+      .finally(() => clearTimeout(timeout))
   }, [])
 
   useEffect(() => {
     if (!currentUser) return
     setLoading(true)
     setError(null)
+    setServerDown(false)
 
-    fetch(`${API_BASE}/api/exercises?day=${encodeURIComponent(selectedDay)}&user_id=${currentUser.id}`)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
+
+    fetch(`${API_BASE}/api/exercises?day=${encodeURIComponent(selectedDay)}&user_id=${currentUser.id}`, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load exercises')
         return res.json()
       })
       .then(setExercises)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        if (err.name === 'AbortError' || err.name === 'TypeError') {
+          setServerDown(true)
+        } else {
+          setError(err.message)
+        }
+      })
+      .finally(() => {
+        clearTimeout(timeout)
+        setLoading(false)
+      })
   }, [selectedDay, currentUser])
 
   useEffect(() => {
@@ -297,9 +320,17 @@ function App() {
           />
         ) : (
           <main className="card-list">
-            {loading && <p className="status-message">Loading exercises...</p>}
-            {error && <p className="status-message">Couldn't load exercises: {error}</p>}
-            {!loading && !error && exercises.length === 0 && (
+            {loading && <p className="loading-message">Loading exercises...</p>}
+            {!loading && serverDown && (
+              <div className="empty-day">
+                <PlugOffIcon className="empty-day-zzz" size={80} />
+                <p className="empty-day-message">
+                  The server isn't responding.<br />This might be your lucky day!
+                </p>
+              </div>
+            )}
+            {!loading && !serverDown && error && <p className="status-message">Couldn't load exercises: {error}</p>}
+            {!loading && !serverDown && !error && exercises.length === 0 && (
               <div className="empty-day">
                 <ZzzIcon className="empty-day-zzz" />
                 <p className="empty-day-message">
@@ -308,6 +339,7 @@ function App() {
               </div>
             )}
             {!loading &&
+              !serverDown &&
               !error &&
               exercises.map((item) => (
                 <WorkoutCard
