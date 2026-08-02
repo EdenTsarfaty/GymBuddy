@@ -189,7 +189,10 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, on
   return (
     <div className="workout-card">
       <div className="workout-card-main">
-        <h3 className="workout-card-title">{exercise}</h3>
+        <h3
+          className="workout-card-title"
+          style={{ '--title-len': exercise.length }}
+        >{exercise}</h3>
 
         <div className="workout-card-main-right">
           {!editing ? (
