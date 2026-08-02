@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
@@ -60,6 +61,52 @@ function UserPicker({ users, currentUser, onChangeUser }) {
   )
 }
 
+const GOALS = [
+  { id: 'lose_weight',  label: 'I want to lose weight' },
+  { id: 'stay_healthy', label: 'I want to stay healthy' },
+  { id: 'look_better',  label: 'I want a better looking body' },
+  { id: 'get_stronger', label: 'I want to get stronger' },
+  { id: 'endurance',    label: 'I want better endurance' },
+]
+
+function GoalsModal({ onClose }) {
+  const [checked, setChecked] = useState(new Set())
+
+  function toggle(id) {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  return createPortal(
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        <div className="modal-box goals-modal">
+          <div className="goals-list">
+            {GOALS.map((goal) => (
+              <label key={goal.id} className={`goals-option ${checked.has(goal.id) ? 'is-checked' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="goals-checkbox"
+                  checked={checked.has(goal.id)}
+                  onChange={() => toggle(goal.id)}
+                />
+                <span className="goals-checkbox-box" aria-hidden="true" />
+                <span className="goals-option-label">{goal.label}</span>
+              </label>
+            ))}
+          </div>
+          <button className="goals-save-btn" onClick={onClose}>Save</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function BioRow({ label, value, onSave, placeholder }) {
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
@@ -110,6 +157,7 @@ function BioRow({ label, value, onSave, placeholder }) {
 function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({ age: null, height: null, weight: null })
+  const [goalsOpen, setGoalsOpen] = useState(false)
 
   useEffect(() => {
     if (!currentUser) return
@@ -196,6 +244,15 @@ function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUse
         onSave={(v) => saveField('weight', v)}
         placeholder="kg"
       />
+
+      <div className="settings-separator" />
+
+      <div className="settings-row">
+        <span className="settings-row-label">Goals</span>
+        <button className="bio-edit-btn" onClick={() => setGoalsOpen(true)}>Edit</button>
+      </div>
+
+      {goalsOpen && <GoalsModal onClose={() => setGoalsOpen(false)} />}
 
       <div className="settings-separator" />
 
