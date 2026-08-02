@@ -9,7 +9,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.1.2.2'
+const APP_VERSION = 'alpha 0.1.3'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -306,6 +306,7 @@ function App() {
                   weight={item.weight}
                   description={item.description}
                   bullets={item.bullets}
+                  videoId={item.video_id}
                   onSave={(updates) => updateExercise(item.id, updates)}
                   onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
                 />

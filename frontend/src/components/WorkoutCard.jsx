@@ -129,7 +129,7 @@ const MIN_WEIGHT = 0
 const MAX_WEIGHT = 200
 const WEIGHT_PX_PER_UNIT = 22
 
-function WorkoutCard({ exercise, sets, weight, description, bullets, onSave, onSwap }) {
+function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, onSave, onSwap }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
@@ -319,7 +319,13 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, onSave, onS
                   <button type="button" className="icon-btn" aria-label="Chat about this exercise">
                     <ChatIcon size={16} />
                   </button>
-                  <button type="button" className="icon-btn" aria-label="Watch on YouTube">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Watch on YouTube"
+                    disabled={!videoId}
+                    onClick={() => videoId && window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
+                  >
                     <YouTubeIcon size={16} />
                   </button>
                 </>

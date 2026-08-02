@@ -134,6 +134,11 @@ db.exec(`
   )
 `)
 
+const exerciseColNames = exerciseCols.map((c) => c.name)
+if (!exerciseColNames.includes('video_id')) {
+  db.exec('ALTER TABLE exercises ADD COLUMN video_id TEXT')
+}
+
 const profileCols = db.prepare('PRAGMA table_info(user_profile)').all()
 if (!profileCols.find((c) => c.name === 'goals')) {
   db.exec('ALTER TABLE user_profile ADD COLUMN goals TEXT')

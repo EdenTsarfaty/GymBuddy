@@ -77,7 +77,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   }
 
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, weight, description, bullets) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, weight, description, bullets, video_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
     uid,
@@ -87,6 +87,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     generated.weight,
     generated.description,
     JSON.stringify(generated.bullets),
+    generated.video_id || null,
   )
 
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
@@ -154,8 +155,8 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   }
 
   db.prepare(
-    'UPDATE exercises SET name = ?, sets = ?, weight = ?, description = ?, bullets = ? WHERE id = ?',
-  ).run(generated.name, generated.sets, generated.weight, generated.description, JSON.stringify(generated.bullets), id)
+    'UPDATE exercises SET name = ?, sets = ?, weight = ?, description = ?, bullets = ?, video_id = ? WHERE id = ?',
+  ).run(generated.name, generated.sets, generated.weight, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }
