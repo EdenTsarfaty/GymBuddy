@@ -53,12 +53,25 @@
   color: var(--accent);
 }
 
-@keyframes gear-spin {
-  to { transform: rotate(360deg); }
+@keyframes gear-snap {
+  to { transform: rotate(300deg); }
 }
 
-.settings-btn:not(.is-active):hover svg {
-  animation: gear-spin 2.8s linear infinite;
+@keyframes gear-ccw {
+  to { transform: rotate(-300deg); }
+}
+
+.settings-btn:not(.is-active):not(.is-closing):hover svg {
+  animation: gear-snap 0.35s ease-out forwards;
+}
+
+.settings-btn.is-closing,
+.settings-btn.is-closing:hover {
+  color: var(--text-muted);
+}
+
+.settings-btn.is-closing svg {
+  animation: gear-ccw 0.4s ease-out forwards;
 }
 
 .today {
@@ -907,25 +920,26 @@
 
 .goals-checkbox-box {
   flex-shrink: 0;
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 6px;
   border: 1.5px solid var(--border);
   background: var(--chip-bg);
   transition: border-color 0.2s ease, background 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .goals-checkbox-box::after {
   content: '';
-  width: 5px;
-  height: 9px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 8px;
   border: 2px solid var(--bg);
   border-top: none;
   border-left: none;
-  transform: rotate(45deg) translate(0px, -2px);
+  transform: translate(-50%, -58%) rotate(45deg);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
