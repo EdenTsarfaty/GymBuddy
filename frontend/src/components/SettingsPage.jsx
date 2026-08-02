@@ -62,15 +62,17 @@ function UserPicker({ users, currentUser, onChangeUser }) {
 }
 
 const GOALS = [
-  { id: 'lose_weight',  label: 'I want to lose weight' },
-  { id: 'stay_healthy', label: 'I want to stay healthy' },
-  { id: 'look_better',  label: 'I want a better looking body' },
-  { id: 'get_stronger', label: 'I want to get stronger' },
-  { id: 'endurance',    label: 'I want better endurance' },
+  { id: 'lose_weight',    label: 'I want to lose weight' },
+  { id: 'stay_healthy',   label: 'I want to stay healthy' },
+  { id: 'look_better',    label: 'I want a better looking body' },
+  { id: 'get_stronger',   label: 'I want to get stronger' },
+  { id: 'endurance',      label: 'I want better endurance' },
+  { id: 'mental_health',  label: 'I want to improve my mental wellbeing' },
+  { id: 'daily_energy',   label: 'I want to boost my daily energy levels' },
 ]
 
-function GoalsModal({ onClose }) {
-  const [checked, setChecked] = useState(new Set())
+function GoalsModal({ initialGoals, onSave, onClose }) {
+  const [checked, setChecked] = useState(new Set(initialGoals || []))
 
   function toggle(id) {
     setChecked((prev) => {
@@ -78,6 +80,11 @@ function GoalsModal({ onClose }) {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  function handleSave() {
+    onSave([...checked])
+    onClose()
   }
 
   return createPortal(
@@ -99,7 +106,7 @@ function GoalsModal({ onClose }) {
               </label>
             ))}
           </div>
-          <button className="goals-save-btn" onClick={onClose}>Save</button>
+          <button className="goals-save-btn" onClick={handleSave}>Save</button>
         </div>
       </div>
     </div>,
@@ -156,19 +163,19 @@ function BioRow({ label, value, onSave, placeholder }) {
 
 function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
-  const [profile, setProfile] = useState({ age: null, height: null, weight: null })
+  const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [] })
   const [goalsOpen, setGoalsOpen] = useState(false)
 
   useEffect(() => {
     if (!currentUser) return
     fetch(`${API_BASE}/api/profile?user_id=${currentUser.id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setProfile(data) })
+      .then((data) => { if (data) setProfile({ ...data, goals: data.goals || [] }) })
       .catch(() => {})
   }, [currentUser])
 
   function saveField(field, raw) {
-    const value = raw === '' ? null : Number(raw)
+    const value = Array.isArray(raw) ? raw : (raw === '' ? null : Number(raw))
     const updated = { ...profile, [field]: value, user_id: currentUser?.id }
     setProfile(updated)
     fetch(`${API_BASE}/api/profile`, {
@@ -252,7 +259,13 @@ function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUse
         <button className="bio-edit-btn" onClick={() => setGoalsOpen(true)}>Edit</button>
       </div>
 
-      {goalsOpen && <GoalsModal onClose={() => setGoalsOpen(false)} />}
+      {goalsOpen && (
+        <GoalsModal
+          initialGoals={profile.goals}
+          onSave={(goals) => saveField('goals', goals)}
+          onClose={() => setGoalsOpen(false)}
+        />
+      )}
 
       <div className="settings-separator" />
 

@@ -62,9 +62,14 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     return { error: 'Invalid day' }
   }
 
+  const profileRow = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [] }
+    : null
+
   let generated
   try {
-    generated = await generateExerciseData(title.trim())
+    generated = await generateExerciseData(title.trim(), profile)
   } catch (err) {
     request.log.error(err)
     reply.code(502)
@@ -91,21 +96,24 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
 
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  return db.prepare('SELECT age, height, weight FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
 fastify.put('/api/profile', async (request) => {
-  const { user_id, age, height, weight } = request.body || {}
+  const { user_id, age, height, weight, goals } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    'UPDATE user_profile SET age = ?, height = ?, weight = ? WHERE id = ?',
+    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ? WHERE id = ?',
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
     weight !== undefined ? weight : null,
+    goals !== undefined ? JSON.stringify(goals) : null,
     uid,
   )
-  return db.prepare('SELECT age, height, weight FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {

@@ -134,6 +134,11 @@ db.exec(`
   )
 `)
 
+const profileCols = db.prepare('PRAGMA table_info(user_profile)').all()
+if (!profileCols.find((c) => c.name === 'goals')) {
+  db.exec('ALTER TABLE user_profile ADD COLUMN goals TEXT')
+}
+
 db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (1)').run()
 db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (2)').run()
 

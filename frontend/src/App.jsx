@@ -9,7 +9,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.1.1'
+const APP_VERSION = 'alpha 0.1.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -160,7 +160,13 @@ function App() {
     })
   }
 
+  const [settingsClosing, setSettingsClosing] = useState(false)
+
   function toggleSettings() {
+    if (view === 'settings') {
+      setSettingsClosing(true)
+      setTimeout(() => setSettingsClosing(false), 400)
+    }
     setView((current) => (current === 'settings' ? 'home' : 'settings'))
   }
 
@@ -243,7 +249,7 @@ function App() {
 
         <button
           type="button"
-          className={`settings-btn ${view === 'settings' ? 'is-active' : ''}`}
+          className={`settings-btn ${view === 'settings' ? 'is-active' : ''} ${settingsClosing ? 'is-closing' : ''}`}
           onClick={toggleSettings}
           aria-label="Settings"
           aria-pressed={view === 'settings'}
