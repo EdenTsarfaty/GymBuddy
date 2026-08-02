@@ -7,9 +7,20 @@ import CheckIcon from './icons/CheckIcon'
 import ChevronDownIcon from './icons/ChevronDownIcon'
 import ChevronUpIcon from './icons/ChevronUpIcon'
 import CircleSlashIcon from './icons/CircleSlashIcon'
+import DumbbellIcon from './icons/DumbbellIcon'
+import MachineIcon from './icons/MachineIcon'
 import PencilIcon from './icons/PencilIcon'
+import StretchIcon from './icons/StretchIcon'
 import SwapIcon from './icons/SwapIcon'
+import TreadmillIcon from './icons/TreadmillIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
+
+const CATEGORY_META = {
+  free_weight: { label: 'Free weight', Icon: DumbbellIcon },
+  machine:     { label: 'Machine',     Icon: MachineIcon },
+  warm_up:     { label: 'Warm up',     Icon: TreadmillIcon },
+  stretch:     { label: 'Stretch',     Icon: StretchIcon },
+}
 
 
 function hexToNormalized(hex) {
@@ -128,13 +139,26 @@ const MAX_SETS = 10
 const MIN_WEIGHT = 0
 const MAX_WEIGHT = 200
 const WEIGHT_PX_PER_UNIT = 22
+const MIN_DURATION = 5
+const MAX_DURATION = 3600
+const DURATION_STEP = 15
 
-function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, onSave, onSwap }) {
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s > 0 ? `${m}m ${s}s` : `${m}m`
+}
+
+function WorkoutCard({ exercise, sets, weight, duration, description, bullets, videoId, category, onSave, onSwap }) {
+  const hasDuration = duration !== null && duration !== undefined
+  const hasSets = sets > 0
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
-  const [draftWeight, setDraftWeight] = useState(weight)
+  const [draftWeight, setDraftWeight] = useState(weight ?? 0)
+  const [draftDuration, setDraftDuration] = useState(duration ?? MIN_DURATION)
   const [weightDragPx, setWeightDragPx] = useState(0)
   const [isDraggingWeight, setIsDraggingWeight] = useState(false)
   const weightDragRef = useRef(null)
@@ -146,12 +170,16 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, on
 
   function startEditing() {
     setDraftSets(sets)
-    setDraftWeight(weight)
+    setDraftWeight(weight ?? 0)
+    setDraftDuration(duration ?? MIN_DURATION)
     setEditing(true)
   }
 
   function confirmEditing() {
-    onSave({ sets: draftSets, weight: draftWeight })
+    onSave(hasDuration
+      ? { sets: draftSets, weight: null, duration: draftDuration }
+      : { sets: draftSets, weight: draftWeight, duration: null }
+    )
     setEditing(false)
   }
 
@@ -197,59 +225,95 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, on
         <div className="workout-card-main-right">
           {!editing ? (
             <div className="workout-card-right">
-              <div className="stat">
-                <span className="stat-label">Sets</span>
-                <span className="stat-value">{sets}</span>
-              </div>
-              <div className="stat">
-                <span className="stat-label">Weight</span>
-                <span className="stat-value">{weight} kg</span>
-              </div>
+              {hasSets && (
+                <div className="stat">
+                  <span className="stat-label">Sets</span>
+                  <span className="stat-value">{sets}</span>
+                </div>
+              )}
+              {hasDuration ? (
+                <div className="stat">
+                  <span className="stat-label">Duration</span>
+                  <span className="stat-value">{formatDuration(duration)}</span>
+                </div>
+              ) : (
+                <div className="stat">
+                  <span className="stat-label">Weight</span>
+                  <span className="stat-value">{weight} kg</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="workout-card-edit">
-              <div className="edit-field">
-                <span className="stat-label">Sets</span>
-                <div className="sets-stepper">
-                  <button
-                    type="button"
-                    className="stepper-btn"
-                    onClick={() => setDraftSets((current) => Math.max(MIN_SETS, current - 1))}
-                    aria-label="Decrease sets"
-                  >
-                    <ChevronDownIcon size={14} />
-                  </button>
-                  <span className="stepper-value">{draftSets}</span>
-                  <button
-                    type="button"
-                    className="stepper-btn"
-                    onClick={() => setDraftSets((current) => Math.min(MAX_SETS, current + 1))}
-                    aria-label="Increase sets"
-                  >
-                    <ChevronUpIcon size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="edit-field">
-                <span className="stat-label">Weight (kg)</span>
-                <div
-                  className="weight-picker"
-                  onPointerDown={handleWeightPointerDown}
-                  onPointerMove={handleWeightPointerMove}
-                  onPointerUp={handleWeightPointerUp}
-                  onPointerCancel={handleWeightPointerUp}
-                >
-                  <div
-                    className={`weight-picker-track ${isDraggingWeight ? 'is-dragging' : ''}`}
-                    style={{ transform: `translateX(${weightDragPx}px)` }}
-                  >
-                    <span className="weight-picker-num">{Math.max(MIN_WEIGHT, draftWeight - 1)}</span>
-                    <span className="weight-picker-num current">{draftWeight}</span>
-                    <span className="weight-picker-num">{Math.min(MAX_WEIGHT, draftWeight + 1)}</span>
+              {hasSets && (
+                <div className="edit-field">
+                  <span className="stat-label">Sets</span>
+                  <div className="sets-stepper">
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftSets((current) => Math.max(MIN_SETS, current - 1))}
+                      aria-label="Decrease sets"
+                    >
+                      <ChevronDownIcon size={14} />
+                    </button>
+                    <span className="stepper-value">{draftSets}</span>
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftSets((current) => Math.min(MAX_SETS, current + 1))}
+                      aria-label="Increase sets"
+                    >
+                      <ChevronUpIcon size={14} />
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {hasDuration ? (
+                <div className="edit-field">
+                  <span className="stat-label">Duration</span>
+                  <div className="sets-stepper">
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftDuration((v) => Math.max(MIN_DURATION, v - DURATION_STEP))}
+                      aria-label="Decrease duration"
+                    >
+                      <ChevronDownIcon size={14} />
+                    </button>
+                    <span className="stepper-value">{formatDuration(draftDuration)}</span>
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftDuration((v) => Math.min(MAX_DURATION, v + DURATION_STEP))}
+                      aria-label="Increase duration"
+                    >
+                      <ChevronUpIcon size={14} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="edit-field">
+                  <span className="stat-label">Weight (kg)</span>
+                  <div
+                    className="weight-picker"
+                    onPointerDown={handleWeightPointerDown}
+                    onPointerMove={handleWeightPointerMove}
+                    onPointerUp={handleWeightPointerUp}
+                    onPointerCancel={handleWeightPointerUp}
+                  >
+                    <div
+                      className={`weight-picker-track ${isDraggingWeight ? 'is-dragging' : ''}`}
+                      style={{ transform: `translateX(${weightDragPx}px)` }}
+                    >
+                      <span className="weight-picker-num">{Math.max(MIN_WEIGHT, draftWeight - 1)}</span>
+                      <span className="weight-picker-num current">{draftWeight}</span>
+                      <span className="weight-picker-num">{Math.min(MAX_WEIGHT, draftWeight + 1)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="edit-confirm-actions">
                 <button
@@ -282,6 +346,15 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, videoId, on
         <div className="details-collapse-inner" inert={!expanded}>
           <div className="workout-card-details">
             <div className="workout-card-info">
+              {category && CATEGORY_META[category] && (() => {
+                const { label, Icon } = CATEGORY_META[category]
+                return (
+                  <div className="exercise-category">
+                    <Icon size={25} />
+                    <span>{label}</span>
+                  </div>
+                )
+              })()}
               <p className="workout-card-description">{description}</p>
               <ul className="instruction-bullets">
                 {bullets.map((bullet) => (

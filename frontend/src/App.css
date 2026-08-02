@@ -390,6 +390,18 @@
   min-width: 0;
 }
 
+.exercise-category {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
 .workout-card-description {
   margin: 0;
   font-size: 14px;

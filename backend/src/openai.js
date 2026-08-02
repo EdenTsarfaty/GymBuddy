@@ -51,6 +51,8 @@ function buildSystemPrompt(profile) {
   lines.push('- Exercise name: keep it short and common (e.g. "Squat", "Dumbbell Row") — avoid long anatomical or branded names.')
   lines.push('- Description: be concise. Use short sentences, each on its own line. Beginner-friendly. State what muscles it works and why it matters.')
   lines.push('- Instructions: start with any setup steps (adjust seat, set weight, grip width, foot position, etc.), then describe the movement step by step. Write for someone doing this exercise for the first time.')
+  lines.push('- Category: classify the exercise as one of: free_weight (dumbbells, barbells, kettlebells, bodyweight), machine (cable machines, seated machines, smith machine), warm_up (cardio, dynamic activation, mobility), stretch (static or dynamic flexibility work).')
+  lines.push('- Weight vs duration: set weight (kg) and duration null for weighted exercises. Set duration (seconds) and weight null for timed exercises — use duration for warm_up, stretch, and any hold-based exercise like plank, wall sit, or dead hang.')
 
   return lines.join('\n')
 }
@@ -212,19 +214,28 @@ const EXERCISE_SCHEMA = {
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {
-      type: 'number',
-      description: 'A reasonable starting weight in kilograms for a beginner-to-intermediate lifter.',
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'Starting weight in kg. Set to null for timed exercises (use duration instead).',
+    },
+    duration: {
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Duration in seconds for timed exercises (warm-up, stretch, plank, etc.). Set to null for weighted exercises.',
     },
     sets: {
-      type: 'integer',
-      description: 'A reasonable number of working sets, typically 3-4.',
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Number of working sets, typically 3-4. Set to null for exercises where sets are not applicable (e.g. treadmill jog, static stretches).',
     },
     video_id: {
       anyOf: [{ type: 'string' }, { type: 'null' }],
       description: 'YouTube video ID of the best instructional video found via search_youtube.',
     },
+    category: {
+      type: 'string',
+      enum: ['free_weight', 'machine', 'warm_up', 'stretch'],
+      description: 'Exercise category: free_weight, machine, warm_up, or stretch.',
+    },
   },
-  required: ['description', 'bullets', 'weight', 'sets', 'video_id'],
+  required: ['description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],
   additionalProperties: false,
 }
 
@@ -247,19 +258,28 @@ const SWAP_SCHEMA = {
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {
-      type: 'number',
-      description: 'A reasonable starting weight in kilograms for a beginner-to-intermediate lifter.',
+      anyOf: [{ type: 'number' }, { type: 'null' }],
+      description: 'Starting weight in kg. Set to null for timed exercises (use duration instead).',
+    },
+    duration: {
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Duration in seconds for timed exercises (warm-up, stretch, plank, etc.). Set to null for weighted exercises.',
     },
     sets: {
-      type: 'integer',
-      description: 'A reasonable number of working sets, typically 3-4.',
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Number of working sets, typically 3-4. Set to null for exercises where sets are not applicable (e.g. treadmill jog, static stretches).',
     },
     video_id: {
       anyOf: [{ type: 'string' }, { type: 'null' }],
       description: 'YouTube video ID of the best instructional video found via search_youtube.',
     },
+    category: {
+      type: 'string',
+      enum: ['free_weight', 'machine', 'warm_up', 'stretch'],
+      description: 'Exercise category: free_weight, machine, warm_up, or stretch.',
+    },
   },
-  required: ['name', 'description', 'bullets', 'weight', 'sets', 'video_id'],
+  required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],
   additionalProperties: false,
 }
 
