@@ -31,6 +31,16 @@ function buildSystemPrompt(profile) {
         if (label) lines.push(`* ${label}`)
       }
     }
+
+    if (profile.beginner_mode) {
+      lines.push('')
+      lines.push('## Beginner mode')
+      lines.push('The user is new to the gym and new to working out. Adjust all guidance accordingly:')
+      lines.push('- Recommend conservative starting weights — err on the side of lighter')
+      lines.push('- Keep instructions especially clear, step-by-step, and safety-focused')
+      lines.push('- Call out common beginner mistakes to avoid')
+      lines.push('- When swapping exercises, prefer simpler movements or machine-based alternatives over free weights')
+    }
   }
 
   lines.push('')

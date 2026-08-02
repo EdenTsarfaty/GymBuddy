@@ -62,9 +62,9 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     return { error: 'Invalid day' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   const profile = profileRow
-    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [] }
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
 
   let generated
@@ -97,23 +97,24 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
 
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  const row = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
 fastify.put('/api/profile', async (request) => {
-  const { user_id, age, height, weight, goals } = request.body || {}
+  const { user_id, age, height, weight, goals, beginner_mode } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ? WHERE id = ?',
+    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ? WHERE id = ?',
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
     weight !== undefined ? weight : null,
     goals !== undefined ? JSON.stringify(goals) : null,
+    beginner_mode !== undefined ? (beginner_mode ? 1 : 0) : 0,
     uid,
   )
-  const row = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
@@ -134,9 +135,9 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
     return { error: 'Exercise not found' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(existing.user_id)
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
   const profile = profileRow
-    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [] }
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
 
   const exercise = {

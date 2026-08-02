@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import CheckIcon from './icons/CheckIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
 import SunIcon from './icons/SunIcon'
+import XIcon from './icons/XIcon'
 
 const THEME_MODES = ['light', 'dark', 'system']
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -161,7 +163,7 @@ function BioRow({ label, value, onSave, placeholder }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUser, onChangeUser }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, version, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [] })
   const [goalsOpen, setGoalsOpen] = useState(false)
@@ -170,7 +172,12 @@ function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUse
     if (!currentUser) return
     fetch(`${API_BASE}/api/profile?user_id=${currentUser.id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setProfile({ ...data, goals: data.goals || [] }) })
+      .then((data) => {
+      if (data) {
+        setProfile({ ...data, goals: data.goals || [] })
+        onChangeBeginnerMode(!!data.beginner_mode)
+      }
+    })
       .catch(() => {})
   }, [currentUser])
 
@@ -229,6 +236,39 @@ function SettingsPage({ themeMode, onChangeThemeMode, version, users, currentUse
             System
           </button>
         </div>
+      </div>
+
+      <div className="settings-separator" />
+
+      <div className="settings-row">
+        <div className="settings-row-label-group">
+          <span className="settings-row-label">Beginner mode</span>
+          <span className="settings-row-sublabel">Lets the AI know you're new to the gym</span>
+        </div>
+        <button
+          type="button"
+          className="theme-toggle-pill beginner-toggle-pill"
+          role="switch"
+          aria-checked={beginnerMode}
+          aria-label="Beginner mode"
+          data-on={String(beginnerMode)}
+          onClick={() => {
+            const next = !beginnerMode
+            onChangeBeginnerMode(next)
+            saveField('beginner_mode', next ? 1 : 0)
+          }}
+        >
+          <div
+            className="theme-toggle-thumb"
+            style={{ transform: `translateX(${beginnerMode ? 100 : 0}%)` }}
+          />
+          <span className={`theme-toggle-option ${!beginnerMode ? 'is-active' : ''}`}>
+            <XIcon size={14} />
+          </span>
+          <span className={`theme-toggle-option ${beginnerMode ? 'is-active' : ''}`}>
+            <CheckIcon size={14} />
+          </span>
+        </button>
       </div>
 
       <div className="settings-separator" />

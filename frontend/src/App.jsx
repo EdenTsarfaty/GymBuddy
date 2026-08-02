@@ -9,8 +9,9 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.1.3.2'
+const APP_VERSION = 'alpha 0.1.4'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
+const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
@@ -40,6 +41,10 @@ function getOrderedWeekdays() {
 
 const weekdays = getOrderedWeekdays()
 
+function getInitialBeginnerMode() {
+  return localStorage.getItem(BEGINNER_MODE_STORAGE_KEY) === 'true'
+}
+
 function getInitialThemeMode() {
   const stored = localStorage.getItem(THEME_MODE_STORAGE_KEY)
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
@@ -56,6 +61,7 @@ function resolveTheme(mode) {
 function App() {
   const [view, setView] = useState('home')
   const [themeMode, setThemeMode] = useState(getInitialThemeMode)
+  const [beginnerMode, setBeginnerMode] = useState(getInitialBeginnerMode)
   const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(getInitialThemeMode()))
   const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
@@ -279,6 +285,11 @@ function App() {
           <SettingsPage
             themeMode={themeMode}
             onChangeThemeMode={setThemeMode}
+            beginnerMode={beginnerMode}
+            onChangeBeginnerMode={(val) => {
+              setBeginnerMode(val)
+              localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
+            }}
             version={APP_VERSION}
             users={users}
             currentUser={currentUser}
