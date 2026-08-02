@@ -36,6 +36,11 @@ function buildSystemPrompt(profile) {
   lines.push('')
   lines.push('Use the profile and goals to personalise starting weight and set recommendations where relevant.')
   lines.push('Always use the search_youtube tool to find the best instructional video for the exercise before responding.')
+  lines.push('')
+  lines.push('## Content guidelines')
+  lines.push('- Exercise name: keep it short and common (e.g. "Squat", "Dumbbell Row") — avoid long anatomical or branded names.')
+  lines.push('- Description: be concise. Use short sentences, each on its own line. Beginner-friendly. State what muscles it works and why it matters.')
+  lines.push('- Instructions: start with any setup steps (adjust seat, set weight, grip width, foot position, etc.), then describe the movement step by step. Write for someone doing this exercise for the first time.')
 
   return lines.join('\n')
 }
@@ -193,7 +198,7 @@ const EXERCISE_SCHEMA = {
       type: 'array',
       items: { type: 'string' },
       minItems: 3,
-      maxItems: 3,
+      maxItems: 5,
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {
@@ -228,7 +233,7 @@ const SWAP_SCHEMA = {
       type: 'array',
       items: { type: 'string' },
       minItems: 3,
-      maxItems: 3,
+      maxItems: 5,
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {

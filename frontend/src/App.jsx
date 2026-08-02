@@ -9,7 +9,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.1.3.1'
+const APP_VERSION = 'alpha 0.1.3.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
