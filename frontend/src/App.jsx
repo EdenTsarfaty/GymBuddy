@@ -9,7 +9,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.1.2.1'
+const APP_VERSION = 'alpha 0.1.2.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -160,6 +160,22 @@ function App() {
     })
   }
 
+  function swapExercise(id, reason, otherText) {
+    return fetch(`${API_BASE}/api/exercises/${id}/swap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, other_text: otherText }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((updated) => {
+        if (!updated) return
+        setExercises((current) =>
+          current.map((item) => (item.id === id ? updated : item)),
+        )
+      })
+      .catch(() => {})
+  }
+
   const [settingsClosing, setSettingsClosing] = useState(false)
 
   function toggleSettings() {
@@ -291,6 +307,7 @@ function App() {
                   description={item.description}
                   bullets={item.bullets}
                   onSave={(updates) => updateExercise(item.id, updates)}
+                  onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
                 />
               ))}
           </main>

@@ -982,6 +982,145 @@
   opacity: 0.85;
 }
 
+/* Swap exercise modal */
+.swap-modal-top {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.swap-modal-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.swap-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.swap-modal-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.swap-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.swap-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.swap-radio-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.swap-radio-box {
+  flex-shrink: 0;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.swap-radio-box::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.swap-radio-option.is-checked .swap-radio-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.swap-radio-option.is-checked .swap-radio-box::after {
+  opacity: 1;
+}
+
+.swap-radio-label {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text-h);
+  transition: color 0.15s ease;
+}
+
+.swap-radio-option.is-checked .swap-radio-label {
+  color: var(--accent);
+}
+
+.swap-other-textarea {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: none;
+  min-height: 72px;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.swap-other-textarea:focus {
+  border-color: var(--accent);
+}
+
+.swap-confirm-btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 32px;
+  cursor: pointer;
+  align-self: center;
+  transition: opacity 0.15s ease;
+}
+
+.swap-confirm-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.swap-confirm-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .settings-row-value {
   font-size: 15px;
   font-weight: 500;

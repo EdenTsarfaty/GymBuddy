@@ -1,6 +1,6 @@
 const fastify = require('fastify')({ logger: true })
 const db = require('./db')
-const { generateExerciseData } = require('./openai')
+const { generateExerciseData, generateSwapExercise } = require('./openai')
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
@@ -114,6 +114,51 @@ fastify.put('/api/profile', async (request) => {
   )
   const row = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
+})
+
+const VALID_SWAP_REASONS = ['hurts', 'new', 'unavailable', 'other']
+
+fastify.post('/api/exercises/:id/swap', async (request, reply) => {
+  const { id } = request.params
+  const { reason, other_text } = request.body || {}
+
+  if (!VALID_SWAP_REASONS.includes(reason)) {
+    reply.code(400)
+    return { error: 'Invalid reason' }
+  }
+
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  const profileRow = db.prepare('SELECT age, height, weight, goals FROM user_profile WHERE id = ?').get(existing.user_id)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [] }
+    : null
+
+  const exercise = {
+    name: existing.name,
+    description: existing.description,
+    bullets: JSON.parse(existing.bullets),
+  }
+
+  let generated
+  try {
+    generated = await generateSwapExercise(exercise, reason, other_text || '', profile)
+  } catch (err) {
+    request.log.error(err)
+    reply.code(502)
+    return { error: 'Failed to generate replacement exercise' }
+  }
+
+  db.prepare(
+    'UPDATE exercises SET name = ?, sets = ?, weight = ?, description = ?, bullets = ? WHERE id = ?',
+  ).run(generated.name, generated.sets, generated.weight, generated.description, JSON.stringify(generated.bullets), id)
+
+  const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return { ...updated, bullets: JSON.parse(updated.bullets) }
 })
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {

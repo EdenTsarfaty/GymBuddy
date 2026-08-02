@@ -1,4 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import lottie from 'lottie-web'
+import loadingDark from '../assets/loading_dark.json'
 import ChatIcon from './icons/ChatIcon'
 import CheckIcon from './icons/CheckIcon'
 import ChevronDownIcon from './icons/ChevronDownIcon'
@@ -8,15 +11,128 @@ import PencilIcon from './icons/PencilIcon'
 import SwapIcon from './icons/SwapIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
 
+
+function hexToNormalized(hex) {
+  const h = hex.replace('#', '').trim()
+  return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255]
+}
+
+function recolorLottie(data, accentHex) {
+  const [r, g, b] = hexToNormalized(accentHex)
+  const clone = JSON.parse(JSON.stringify(data))
+  function traverse(obj) {
+    if (!obj || typeof obj !== 'object') return
+    if (Array.isArray(obj)) { obj.forEach(traverse); return }
+    if (obj.ty === 'fl' && Array.isArray(obj.c?.k)) obj.c.k = [r, g, b, 1]
+    if (obj.ty === 'st' && Array.isArray(obj.c?.k)) obj.c.k = [r, g, b, 1]
+    if (obj.nm === 'Map White To' && Array.isArray(obj.v?.k)) obj.v.k = [r, g, b, 1]
+    Object.values(obj).forEach(traverse)
+  }
+  traverse(clone)
+  return clone
+}
+
+function LottiePlayer() {
+  const ref = useRef(null)
+  useEffect(() => {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    const anim = lottie.loadAnimation({
+      container: ref.current,
+      renderer: 'svg',
+      loop: true,
+      autoplay: true,
+      animationData: recolorLottie(loadingDark, accent),
+    })
+    return () => anim.destroy()
+  }, [])
+  return <div ref={ref} style={{ width: 210, height: 210 }} />
+}
+
+const SWAP_REASONS = [
+  { id: 'hurts', label: 'This exercise hurts' },
+  { id: 'new', label: 'I want a new exercise' },
+  { id: 'unavailable', label: 'This exercise is unavailable in my gym' },
+  { id: 'other', label: 'Other' },
+]
+
+function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
+  const [reason, setReason] = useState(null)
+  const [otherText, setOtherText] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const canConfirm = reason && (reason !== 'other' || otherText.trim())
+
+  async function handleConfirm() {
+    if (!canConfirm) return
+    setLoading(true)
+    await onConfirm(reason, otherText)
+  }
+
+  return createPortal(
+    <div className="modal-overlay">
+      {loading ? (
+        <LottiePlayer />
+      ) : (
+        <div className="modal-wrap">
+          <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+          <div className="modal-box swap-modal">
+            <div className="swap-modal-top">
+              <div className="swap-modal-header">
+                <h2 className="swap-modal-title">Swap Exercise</h2>
+                <span className="swap-modal-subtitle">{exerciseName}</span>
+              </div>
+              <div className="swap-radios">
+                {SWAP_REASONS.map(({ id, label }) => (
+                  <label key={id} className={`swap-radio-option ${reason === id ? 'is-checked' : ''}`}>
+                    <input
+                      type="radio"
+                      name="swap-reason"
+                      value={id}
+                      checked={reason === id}
+                      onChange={() => setReason(id)}
+                      className="swap-radio-input"
+                    />
+                    <span className="swap-radio-box" />
+                    <span className="swap-radio-label">{label}</span>
+                  </label>
+                ))}
+                {reason === 'other' && (
+                  <textarea
+                    className="swap-other-textarea"
+                    placeholder="Describe your reason..."
+                    value={otherText}
+                    onChange={(e) => setOtherText(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="swap-confirm-btn"
+              disabled={!canConfirm}
+              onClick={handleConfirm}
+            >
+              Swap
+            </button>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body,
+  )
+}
+
 const MIN_SETS = 1
 const MAX_SETS = 10
 const MIN_WEIGHT = 0
 const MAX_WEIGHT = 200
 const WEIGHT_PX_PER_UNIT = 22
 
-function WorkoutCard({ exercise, sets, weight, description, bullets, onSave }) {
+function WorkoutCard({ exercise, sets, weight, description, bullets, onSave, onSwap }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
   const [draftWeight, setDraftWeight] = useState(weight)
   const [weightDragPx, setWeightDragPx] = useState(0)
@@ -190,7 +306,12 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, onSave }) {
                 </button>
               )}
               {editing ? (
-                <button type="button" className="icon-btn swap-btn" aria-label="Ask AI to swap this exercise">
+                <button
+                  type="button"
+                  className="icon-btn swap-btn"
+                  aria-label="Ask AI to swap this exercise"
+                  onClick={() => setSwapOpen(true)}
+                >
                   <SwapIcon size={16} />
                 </button>
               ) : (
@@ -207,6 +328,18 @@ function WorkoutCard({ exercise, sets, weight, description, bullets, onSave }) {
           </div>
         </div>
       </div>
+
+      {swapOpen && (
+        <SwapExerciseModal
+          exerciseName={exercise}
+          onClose={() => setSwapOpen(false)}
+          onConfirm={async (reason, otherText) => {
+            await onSwap?.(reason, otherText)
+            setSwapOpen(false)
+            setEditing(false)
+          }}
+        />
+      )}
     </div>
   )
 }
