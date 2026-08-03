@@ -1,6 +1,6 @@
 const fastify = require('fastify')({ logger: true })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
@@ -67,9 +67,13 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
 
+  const effectiveDay = day || currentDayName()
+  const dayPlan = db.prepare('SELECT title FROM day_plans WHERE user_id = ? AND day = ?').get(uid, effectiveDay)
+  const dayTitle = dayPlan?.title || null
+
   let generated
   try {
-    generated = await generateExerciseData(title.trim(), profile)
+    generated = await generateExerciseData(title.trim(), profile, dayTitle)
   } catch (err) {
     request.log.error(err)
     reply.code(502)
@@ -82,7 +86,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   const result = insert.run(
     uid,
     title.trim(),
-    day || currentDayName(),
+    effectiveDay,
     generated.sets ?? null,
     generated.weight ?? null,
     generated.duration ?? null,
@@ -142,6 +146,9 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
 
+  const swapDayPlan = db.prepare('SELECT title FROM day_plans WHERE user_id = ? AND day = ?').get(existing.user_id, existing.day)
+  const swapDayTitle = swapDayPlan?.title || null
+
   const exercise = {
     name: existing.name,
     description: existing.description,
@@ -150,7 +157,7 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
 
   let generated
   try {
-    generated = await generateSwapExercise(exercise, reason, other_text || '', profile)
+    generated = await generateSwapExercise(exercise, reason, other_text || '', profile, swapDayTitle)
   } catch (err) {
     request.log.error(err)
     reply.code(502)
@@ -159,10 +166,52 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
 
   db.prepare(
     'UPDATE exercises SET name = ?, sets = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
-  ).run(generated.name, generated.sets, generated.weight ?? 0, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
+  ).run(generated.name, generated.sets ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }
+})
+
+fastify.post('/api/plan/structure', async (request, reply) => {
+  const { user_id, days_per_week, start_day, beginner_mode, include_warm_up, include_stretch } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!start_day || !VALID_DAYS.includes(start_day)) {
+    reply.code(400)
+    return { error: 'Invalid start_day' }
+  }
+
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
+    : null
+
+  const settings = {
+    daysPerWeek: Number(days_per_week) || 3,
+    startDay: start_day,
+    beginnerMode: beginner_mode ?? profile?.beginner_mode ?? false,
+    includeWarmUp: include_warm_up ?? true,
+    includeStretch: include_stretch ?? true,
+  }
+
+  let plan
+  try {
+    plan = await generatePlanStructure(profile, settings)
+  } catch (err) {
+    request.log.error(err)
+    reply.code(502)
+    return { error: 'Failed to generate plan structure' }
+  }
+
+  // Clear existing data and write new day titles
+  db.prepare('DELETE FROM exercises WHERE user_id = ?').run(uid)
+  db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(uid)
+  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title) VALUES (?, ?, ?)')
+  for (const day of plan.days) {
+    insertDayPlan.run(uid, day.day, day.title)
+  }
+
+  return plan
 })
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {

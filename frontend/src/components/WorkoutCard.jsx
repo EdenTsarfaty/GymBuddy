@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import lottie from 'lottie-web'
-import loadingDark from '../assets/loading_dark.json'
+import LottiePlayer from './LottiePlayer'
 import ChatIcon from './icons/ChatIcon'
 import CheckIcon from './icons/CheckIcon'
 import ChevronDownIcon from './icons/ChevronDownIcon'
@@ -23,41 +22,6 @@ const CATEGORY_META = {
 }
 
 
-function hexToNormalized(hex) {
-  const h = hex.replace('#', '').trim()
-  return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255]
-}
-
-function recolorLottie(data, accentHex) {
-  const [r, g, b] = hexToNormalized(accentHex)
-  const clone = JSON.parse(JSON.stringify(data))
-  function traverse(obj) {
-    if (!obj || typeof obj !== 'object') return
-    if (Array.isArray(obj)) { obj.forEach(traverse); return }
-    if (obj.ty === 'fl' && Array.isArray(obj.c?.k)) obj.c.k = [r, g, b, 1]
-    if (obj.ty === 'st' && Array.isArray(obj.c?.k)) obj.c.k = [r, g, b, 1]
-    if (obj.nm === 'Map White To' && Array.isArray(obj.v?.k)) obj.v.k = [r, g, b, 1]
-    Object.values(obj).forEach(traverse)
-  }
-  traverse(clone)
-  return clone
-}
-
-function LottiePlayer() {
-  const ref = useRef(null)
-  useEffect(() => {
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
-    const anim = lottie.loadAnimation({
-      container: ref.current,
-      renderer: 'svg',
-      loop: true,
-      autoplay: true,
-      animationData: recolorLottie(loadingDark, accent),
-    })
-    return () => anim.destroy()
-  }, [])
-  return <div ref={ref} style={{ width: 210, height: 210 }} />
-}
 
 const SWAP_REASONS = [
   { id: 'hurts', label: 'This exercise hurts' },

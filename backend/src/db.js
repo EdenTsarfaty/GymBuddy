@@ -48,6 +48,17 @@ db.exec(`
 db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (1)').run()
 db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (2)').run()
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS day_plans (
+    user_id INTEGER NOT NULL,
+    day     TEXT NOT NULL,
+    title   TEXT NOT NULL,
+    PRIMARY KEY (user_id, day)
+  )
+`)
+
+db.prepare("INSERT OR IGNORE INTO day_plans (user_id, day, title) VALUES (1, 'Monday', 'Legs and Chest Day')").run()
+
 const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count
   if (count > 0) return

@@ -1199,3 +1199,330 @@
 .settings-row-link:hover {
   color: var(--accent);
 }
+
+/* Regenerate plan modal */
+.regen-modal {
+  min-width: 580px;
+  max-width: min(660px, calc(100vw - 32px));
+  gap: 28px;
+}
+
+.regen-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.regen-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.regen-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.regen-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.regen-count-group {
+  display: flex;
+  gap: 6px;
+}
+
+.regen-count-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.regen-count-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.regen-count-btn.is-active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.regen-day-group {
+  display: flex;
+  gap: 4px;
+}
+
+.regen-day-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.regen-day-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.regen-day-btn.is-active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.regen-row-checks {
+  justify-content: flex-start;
+  gap: 36px;
+}
+
+.regen-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.regen-check input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.regen-check-box {
+  flex-shrink: 0;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.regen-check-box::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 7px;
+  border: 2px solid var(--bg);
+  border-top: none;
+  border-left: none;
+  transform: translate(-50%, -58%) rotate(45deg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.regen-check.is-checked {
+  color: var(--accent);
+}
+
+.regen-check.is-checked .regen-check-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.regen-check.is-checked .regen-check-box::after {
+  opacity: 1;
+}
+
+.regen-check-label {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.regen-footer-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 1.5px solid var(--accent-border-light);
+  border-radius: 999px;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.regen-footer-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint-bg);
+}
+
+/* Regenerate confirm modal */
+.regen-confirm-overlay {
+  z-index: 210;
+}
+
+.regen-confirm-box {
+  min-width: 340px;
+  max-width: 400px;
+  gap: 20px;
+  padding: 32px 28px 28px;
+}
+
+.regen-confirm-heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.regen-confirm-body {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.regen-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.regen-confirm-cancel {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.regen-confirm-cancel:hover {
+  color: var(--text-h);
+  border-color: var(--text-muted);
+}
+
+.regen-confirm-ok {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #e5484d;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.regen-confirm-ok:hover {
+  opacity: 0.85;
+}
+
+/* Plan generating overlay */
+.regen-generating-overlay {
+  z-index: 220;
+}
+
+.regen-generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.regen-sentence {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  font-style: italic;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.regen-sentence.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.regen-day-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+  margin-top: 0;
+}
+
+.regen-day-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  transition: border-color 0.3s ease, opacity 0.3s ease;
+}
+
+.regen-day-card.is-active {
+  border-color: var(--accent);
+}
+
+.regen-day-card.is-done {
+  border-color: var(--accent);
+  opacity: 0.5;
+}
+
+.regen-day-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.regen-day-card-status {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.regen-day-card.is-active .regen-day-card-status,
+.regen-day-card.is-done .regen-day-card-status {
+  color: var(--accent);
+}

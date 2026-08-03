@@ -6,6 +6,8 @@ import CalendarIcon from './components/icons/CalendarIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import PlugOffIcon from './components/icons/PlugOffIcon'
+import RegeneratePlanModal from './components/RegeneratePlanModal'
+import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
@@ -75,6 +77,7 @@ function App() {
   const [planView, setPlanView] = useState('week')
   const [selectedDay, setSelectedDay] = useState(today)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
+  const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const planMenuRef = useRef(null)
 
   useEffect(() => {
@@ -139,7 +142,7 @@ function App() {
         clearTimeout(timeout)
         setLoading(false)
       })
-  }, [selectedDay, currentUser])
+  }, [selectedDay, currentUser, exercisesRefreshKey])
 
   useEffect(() => {
     if (!currentUser) return
@@ -147,7 +150,7 @@ function App() {
       .then((res) => (res.ok ? res.json() : []))
       .then((all) => setDaysWithWorkouts(new Set(all.map((item) => item.day))))
       .catch(() => {})
-  }, [currentUser])
+  }, [currentUser, exercisesRefreshKey])
 
   useEffect(() => {
     if (!planMenuOpen) return
@@ -205,7 +208,65 @@ function App() {
       .catch(() => {})
   }
 
+  const [regenOpen, setRegenOpen] = useState(false)
+  const [planGenerating, setPlanGenerating] = useState(false)
+  const [planPhase, setPlanPhase] = useState('thinking')
+  const [planStructure, setPlanStructure] = useState(null)
   const [settingsClosing, setSettingsClosing] = useState(false)
+
+  async function handleGenerate(settings) {
+    setRegenOpen(false)
+    setPlanPhase('thinking')
+    setPlanGenerating(true)
+    setPlanStructure(null)
+
+    try {
+      const res = await fetch(`${API_BASE}/api/plan/structure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUser.id,
+          days_per_week: settings.daysPerWeek,
+          start_day: settings.startDay,
+          beginner_mode: settings.beginner,
+          include_warm_up: settings.includeWarmUp,
+          include_stretch: settings.includeStretch,
+        }),
+      })
+      if (!res.ok) throw new Error('Plan structure failed')
+      const { days } = await res.json()
+
+      const structure = days.map((d) => ({ ...d, completed: 0, done: false }))
+      setPlanStructure(structure)
+      setPlanPhase('generating')
+
+      await Promise.all(
+        structure.map((dayPlan, dayIndex) =>
+          Promise.all(
+            dayPlan.exercises.map(async (exerciseName) => {
+              await fetch(`${API_BASE}/api/exercises/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: exerciseName, day: dayPlan.day, user_id: currentUser.id }),
+              })
+              setPlanStructure((prev) =>
+                prev.map((d, i) =>
+                  i === dayIndex
+                    ? { ...d, completed: d.completed + 1, done: d.completed + 1 >= d.exercises.length }
+                    : d,
+                ),
+              )
+            }),
+          ),
+        ),
+      )
+    } catch (err) {
+      console.error('Plan generation failed', err)
+    } finally {
+      setPlanGenerating(false)
+      setExercisesRefreshKey((k) => k + 1)
+    }
+  }
 
   function toggleSettings() {
     if (view === 'settings') {
@@ -362,8 +423,26 @@ function App() {
 
       {view !== 'settings' && (
         <footer className="page-footer">
+          <button className="regen-footer-btn" onClick={() => setRegenOpen(true)}>
+            Regenerate plan
+          </button>
           <span>{APP_VERSION}</span>
         </footer>
+      )}
+
+      {regenOpen && (
+        <RegeneratePlanModal
+          beginnerMode={beginnerMode}
+          onClose={() => setRegenOpen(false)}
+          onGenerate={handleGenerate}
+        />
+      )}
+
+      {planGenerating && (
+        <PlanGeneratingOverlay
+          phase={planPhase}
+          planStructure={planStructure}
+        />
       )}
     </div>
   )
