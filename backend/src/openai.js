@@ -58,8 +58,8 @@ function buildSystemPrompt(profile, dayTitle) {
   lines.push('- Exercise name: keep it short and common (e.g. "Squat", "Dumbbell Row") — avoid long anatomical or branded names.')
   lines.push('- Description: be concise. Use short sentences, each on its own line. Beginner-friendly. State what muscles it works and why it matters.')
   lines.push('- Instructions: start with any setup steps (adjust seat, set weight, grip width, foot position, etc.), then describe the movement step by step. Write for someone doing this exercise for the first time.')
-  lines.push('- Category: classify the exercise as one of: free_weight (dumbbells, barbells, kettlebells, bodyweight), machine (cable machines, seated machines, smith machine), warm_up (cardio, dynamic activation, mobility), stretch (static or dynamic flexibility work).')
-  lines.push('- Weight vs duration: set weight (kg) and duration null for weighted exercises. Set duration (seconds) and weight null for timed exercises — use duration for warm_up, stretch, and any hold-based exercise like plank, wall sit, or dead hang.')
+  lines.push('- Category: classify the exercise as one of: free_weight (dumbbells, barbells, kettlebells — requires external weight), body_weight (exercises using only your own bodyweight as resistance: push-ups, pull-ups, dips, plank, dead bug, lunges, bodyweight squat, etc.), machine (strength machines only — cable machines, seated resistance machines, smith machine; never cardio equipment), warm_up (cardio equipment like treadmill, rowing machine, bike, elliptical; also dynamic activation and mobility work at the start of a session), stretch (static or dynamic flexibility work).')
+  lines.push('- Weight vs duration: set weight (kg) and duration null for weighted exercises. Set duration (seconds) and weight null for timed exercises. Duration is REQUIRED (never null) for warm_up and stretch exercises — cardio warm-ups are typically 300–600s (5–10 min), stretches are typically 30–60s per side.')
   lines.push('- Sets: must be null for every warm_up and stretch exercise, and for any exercise where duration is set. Only provide sets for weighted free_weight or machine exercises.')
   lines.push('')
   lines.push('## Output examples')
@@ -160,7 +160,7 @@ const PLAN_EXERCISES_SCHEMA = {
   additionalProperties: false,
 }
 
-async function generatePlanStructure(profile, settings) {
+async function generatePlanStructure(profile, settings, onLog) {
   const system = buildPlanningSystemPrompt(profile, settings)
 
   // ── Stage 1: Free reasoning ───────────────────────────────────────────────
@@ -169,17 +169,19 @@ async function generatePlanStructure(profile, settings) {
     {
       role: 'user',
       content: `Think carefully about this user's situation before committing to anything. Consider:
-- Which days of the week should they train, and which should be rest days? Avoid clustering too many consecutive workout days.
+
+- **Day spacing (most important):** The week is a cycle of 7 days — Sunday wraps back to Monday. Spread the ${settings.daysPerWeek} workout days as evenly as possible across all 7. Minimise consecutive workout days — avoid them entirely if the count allows it (1–4 days/week), and keep them to a minimum if unavoidable (5 days/week). Show your work: list all 7 days, mark each W (workout) or R (rest), and verify the gaps look balanced.
+- One workout day must fall on ${settings.startDay}.
 - What muscle group split makes most sense given their goals, experience level, and number of days per week?
 - How should muscle groups be balanced across the week to allow proper recovery?
 - Does their goal suggest any particular emphasis (e.g. "get stronger" → compound-heavy; "lose weight" → more volume, possibly cardio warm-ups)?
-- How does beginner vs intermediate status affect the split and exercise selection?
-- Bear in mind that one workout day must fall on ${settings.startDay}.`,
+- How does beginner vs intermediate status affect the split and exercise selection?`,
     },
   ]
 
   const r1 = await callOpenAI({ model: PLAN_MODEL, messages: stage1Messages })
   const reasoning = r1.choices[0].message.content
+  if (onLog) onLog('plan_reasoning', reasoning)
 
   // ── Stage 2: Commit to day structure ─────────────────────────────────────
   const stage2Messages = [
@@ -190,6 +192,7 @@ async function generatePlanStructure(profile, settings) {
       content: `Based on your reasoning, commit to the exact workout days and their titles. Rules:
 - Exactly ${settings.daysPerWeek} days total
 - ${settings.startDay} must be one of them
+- Minimise consecutive workout days — avoid them entirely if the day count allows it (1–3 days/week), keep them to a minimum if unavoidable (4–5 days/week). The week is cyclic — Sunday and Monday are adjacent
 - Titles describe muscle groups plainly — no jargon
 
 ## Examples
@@ -203,10 +206,10 @@ async function generatePlanStructure(profile, settings) {
 
 ### 4 days/week, start: Saturday, beginner, goal: stay healthy
 { "days": [
-  { "day": "Tuesday", "title": "Full Body" },
-  { "day": "Thursday", "title": "Upper Body" },
+  { "day": "Monday", "title": "Full Body" },
+  { "day": "Wednesday", "title": "Upper Body" },
   { "day": "Saturday", "title": "Lower Body" },
-  { "day": "Sunday", "title": "Full Body" }
+  { "day": "Thursday", "title": "Full Body" }
 ]}`,
     },
   ]
@@ -424,8 +427,8 @@ const EXERCISE_SCHEMA = {
     },
     category: {
       type: 'string',
-      enum: ['free_weight', 'machine', 'warm_up', 'stretch'],
-      description: 'Exercise category: free_weight, machine, warm_up, or stretch.',
+      enum: ['free_weight', 'body_weight', 'machine', 'warm_up', 'stretch'],
+      description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
   },
   required: ['description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],
@@ -468,8 +471,8 @@ const SWAP_SCHEMA = {
     },
     category: {
       type: 'string',
-      enum: ['free_weight', 'machine', 'warm_up', 'stretch'],
-      description: 'Exercise category: free_weight, machine, warm_up, or stretch.',
+      enum: ['free_weight', 'body_weight', 'machine', 'warm_up', 'stretch'],
+      description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
   },
   required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],

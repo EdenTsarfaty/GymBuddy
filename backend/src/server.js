@@ -1,6 +1,7 @@
 const fastify = require('fastify')({ logger: true })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
+const { writeLLMLog } = require('./logger')
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
@@ -194,9 +195,13 @@ fastify.post('/api/plan/structure', async (request, reply) => {
     includeStretch: include_stretch ?? true,
   }
 
+  function onLog(type, content) {
+    try { writeLLMLog(uid, type, content) } catch {}
+  }
+
   let plan
   try {
-    plan = await generatePlanStructure(profile, settings)
+    plan = await generatePlanStructure(profile, settings, onLog)
   } catch (err) {
     request.log.error(err)
     reply.code(502)

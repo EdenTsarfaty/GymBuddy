@@ -5,13 +5,13 @@ import XIcon from './icons/XIcon'
 import TreadmillIcon from './icons/TreadmillIcon'
 import StretchIcon from './icons/StretchIcon'
 
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const WEEKDAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function RegeneratePlanModal({ beginnerMode, onClose, onGenerate }) {
+function RegeneratePlanModal({ beginnerMode, onClose, onGenerate, onBeginnerChange }) {
   const [daysPerWeek, setDaysPerWeek] = useState(3)
   const [beginner, setBeginner] = useState(beginnerMode)
-  const [startDay, setStartDay] = useState('Monday')
+  const [startDay, setStartDay] = useState('Sunday')
   const [includeWarmUp, setIncludeWarmUp] = useState(true)
   const [includeStretch, setIncludeStretch] = useState(true)
   const [confirming, setConfirming] = useState(false)
@@ -54,7 +54,11 @@ function RegeneratePlanModal({ beginnerMode, onClose, onGenerate }) {
                     role="switch"
                     aria-checked={beginner}
                     data-on={String(beginner)}
-                    onClick={() => setBeginner((v) => !v)}
+                    onClick={() => {
+                      const next = !beginner
+                      setBeginner(next)
+                      onBeginnerChange(next)
+                    }}
                   >
                     <div className="theme-toggle-thumb" style={{ transform: `translateX(${beginner ? 100 : 0}%)` }} />
                     <span className={`theme-toggle-option ${!beginner ? 'is-active' : ''}`}>
@@ -90,7 +94,7 @@ function RegeneratePlanModal({ beginnerMode, onClose, onGenerate }) {
                       onChange={() => setIncludeWarmUp((v) => !v)}
                     />
                     <span className="regen-check-box" aria-hidden="true" />
-                    <TreadmillIcon size={18} />
+                    <TreadmillIcon size={24} />
                     <span className="regen-check-label">Warm up</span>
                   </label>
                   <label className={`regen-check ${includeStretch ? 'is-checked' : ''}`}>
@@ -100,7 +104,7 @@ function RegeneratePlanModal({ beginnerMode, onClose, onGenerate }) {
                       onChange={() => setIncludeStretch((v) => !v)}
                     />
                     <span className="regen-check-box" aria-hidden="true" />
-                    <StretchIcon size={18} />
+                    <StretchIcon size={24} />
                     <span className="regen-check-label">Stretch</span>
                   </label>
                 </div>

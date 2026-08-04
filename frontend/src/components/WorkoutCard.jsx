@@ -12,13 +12,15 @@ import PencilIcon from './icons/PencilIcon'
 import StretchIcon from './icons/StretchIcon'
 import SwapIcon from './icons/SwapIcon'
 import TreadmillIcon from './icons/TreadmillIcon'
+import PlankIcon from './icons/PlankIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
 
 const CATEGORY_META = {
-  free_weight: { label: 'Free weight', Icon: DumbbellIcon },
-  machine:     { label: 'Machine',     Icon: MachineIcon },
-  warm_up:     { label: 'Warm up',     Icon: TreadmillIcon },
-  stretch:     { label: 'Stretch',     Icon: StretchIcon },
+  free_weight:  { label: 'Free weight',  Icon: DumbbellIcon },
+  machine:      { label: 'Machine',      Icon: MachineIcon },
+  body_weight:  { label: 'Body weight',  Icon: PlankIcon },
+  warm_up:      { label: 'Warm up',      Icon: TreadmillIcon },
+  stretch:      { label: 'Stretch',      Icon: StretchIcon },
 }
 
 
@@ -200,12 +202,12 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
                   <span className="stat-label">Duration</span>
                   <span className="stat-value">{formatDuration(duration)}</span>
                 </div>
-              ) : (
+              ) : weight != null ? (
                 <div className="stat">
                   <span className="stat-label">Weight</span>
                   <span className="stat-value">{weight} kg</span>
                 </div>
-              )}
+              ) : null}
             </div>
           ) : (
             <div className="workout-card-edit">

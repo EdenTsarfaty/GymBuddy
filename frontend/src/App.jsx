@@ -12,7 +12,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.2.1'
+const APP_VERSION = 'alpha 0.2.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -374,6 +374,7 @@ function App() {
               setBeginnerMode(val)
               localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
             }}
+            onRegenerate={() => setRegenOpen(true)}
             version={APP_VERSION}
             users={users}
             currentUser={currentUser}
@@ -421,20 +422,24 @@ function App() {
         )}
       </div>
 
-      {view !== 'settings' && (
-        <footer className="page-footer">
-          <button className="regen-footer-btn" onClick={() => setRegenOpen(true)}>
-            Regenerate plan
-          </button>
-          <span>{APP_VERSION}</span>
-        </footer>
-      )}
+      <footer className="page-footer">
+        <span>{APP_VERSION}</span>
+      </footer>
 
       {regenOpen && (
         <RegeneratePlanModal
           beginnerMode={beginnerMode}
           onClose={() => setRegenOpen(false)}
           onGenerate={handleGenerate}
+          onBeginnerChange={(val) => {
+            setBeginnerMode(val)
+            localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
+            fetch(`${API_BASE}/api/profile`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_id: currentUser?.id, beginner_mode: val ? 1 : 0 }),
+            }).catch(() => {})
+          }}
         />
       )}
 

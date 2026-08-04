@@ -163,7 +163,7 @@ function BioRow({ label, value, onSave, placeholder }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, version, users, currentUser, onChangeUser }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [] })
   const [goalsOpen, setGoalsOpen] = useState(false)
@@ -269,6 +269,13 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
             <CheckIcon size={14} />
           </span>
         </button>
+      </div>
+
+      <div className="settings-separator" />
+
+      <div className="settings-row">
+        <span className="settings-row-label">Workout plan</span>
+        <button className="bio-edit-btn regen-settings-btn" onClick={onRegenerate}>Regenerate Plan</button>
       </div>
 
       <div className="settings-separator" />
