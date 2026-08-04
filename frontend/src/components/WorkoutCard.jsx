@@ -48,7 +48,9 @@ function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
   return createPortal(
     <div className="modal-overlay">
       {loading ? (
-        <LottiePlayer />
+        <div className="swap-loading">
+          <LottiePlayer />
+        </div>
       ) : (
         <div className="modal-wrap">
           <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
@@ -123,7 +125,7 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
-  const [draftWeight, setDraftWeight] = useState(weight ?? 0)
+  const [draftWeight, setDraftWeight] = useState(Math.round(weight ?? 0))
   const [draftDuration, setDraftDuration] = useState(duration ?? MIN_DURATION)
   const [weightDragPx, setWeightDragPx] = useState(0)
   const [isDraggingWeight, setIsDraggingWeight] = useState(false)
@@ -136,7 +138,7 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
 
   function startEditing() {
     setDraftSets(sets)
-    setDraftWeight(weight ?? 0)
+    setDraftWeight(Math.round(weight ?? 0))
     setDraftDuration(duration ?? MIN_DURATION)
     setEditing(true)
   }
@@ -205,7 +207,7 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
               ) : weight != null ? (
                 <div className="stat">
                   <span className="stat-label">Weight</span>
-                  <span className="stat-value">{weight} kg</span>
+                  <span className="stat-value">{Math.round(weight)} kg</span>
                 </div>
               ) : null}
             </div>

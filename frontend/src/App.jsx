@@ -12,9 +12,10 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.3.0'
+const APP_VERSION = 'beta 0.3.4'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
+const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
@@ -77,7 +78,12 @@ function App() {
   const [planView, setPlanView] = useState('week')
   const [selectedDay, setSelectedDay] = useState(today)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
-  const [dayTitles, setDayTitles] = useState(new Map())
+  const [dayTitles, setDayTitles] = useState(() => {
+    try {
+      const cached = localStorage.getItem('gymbuddy-day-titles')
+      return cached ? new Map(JSON.parse(cached)) : new Map()
+    } catch { return new Map() }
+  })
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const planMenuRef = useRef(null)
 
@@ -107,8 +113,11 @@ function App() {
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         setUsers(data)
-        if (data.length > 0) setCurrentUser(data[0])
-        else setLoading(false)
+        if (data.length > 0) {
+          const savedId = Number(localStorage.getItem(CURRENT_USER_STORAGE_KEY))
+          const saved = savedId && data.find((u) => u.id === savedId)
+          setCurrentUser(saved || data[0])
+        } else setLoading(false)
       })
       .catch(() => {
         setServerDown(true)
@@ -152,7 +161,9 @@ function App() {
       fetch(`${API_BASE}/api/day-plans?user_id=${currentUser.id}`).then((r) => r.ok ? r.json() : []),
     ]).then(([exercises, plans]) => {
       setDaysWithWorkouts(new Set(exercises.map((e) => e.day)))
-      setDayTitles(new Map(plans.map((p) => [p.day, p.title])))
+      const titlesMap = new Map(plans.map((p) => [p.day, p.title]))
+      setDayTitles(titlesMap)
+      try { localStorage.setItem('gymbuddy-day-titles', JSON.stringify([...titlesMap])) } catch {}
     }).catch(() => {})
   }, [currentUser, exercisesRefreshKey])
 
@@ -217,6 +228,7 @@ function App() {
   const [planPhase, setPlanPhase] = useState('thinking')
   const [planStructure, setPlanStructure] = useState(null)
   const [settingsClosing, setSettingsClosing] = useState(false)
+  const [settingsOpening, setSettingsOpening] = useState(false)
 
   async function handleGenerate(settings) {
     setRegenOpen(false)
@@ -272,10 +284,14 @@ function App() {
     }
   }
 
-  function toggleSettings() {
+  function toggleSettings(e) {
     if (view === 'settings') {
+      e.currentTarget.blur()
       setSettingsClosing(true)
       setTimeout(() => setSettingsClosing(false), 400)
+    } else {
+      setSettingsOpening(true)
+      setTimeout(() => setSettingsOpening(false), 350)
     }
     setView((current) => (current === 'settings' ? 'home' : 'settings'))
   }
@@ -362,7 +378,7 @@ function App() {
 
         <button
           type="button"
-          className={`settings-btn ${view === 'settings' ? 'is-active' : ''} ${settingsClosing ? 'is-closing' : ''}`}
+          className={`settings-btn ${view === 'settings' ? 'is-active' : ''} ${settingsClosing ? 'is-closing' : ''} ${settingsOpening ? 'is-opening' : ''}`}
           onClick={toggleSettings}
           aria-label="Settings"
           aria-pressed={view === 'settings'}
@@ -385,7 +401,10 @@ function App() {
             version={APP_VERSION}
             users={users}
             currentUser={currentUser}
-            onChangeUser={setCurrentUser}
+            onChangeUser={(user) => {
+              setCurrentUser(user)
+              localStorage.setItem(CURRENT_USER_STORAGE_KEY, String(user.id))
+            }}
           />
         ) : (
           <main className="card-list">

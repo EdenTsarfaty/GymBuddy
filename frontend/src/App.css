@@ -1,7 +1,12 @@
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .page {
   width: 480px;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
+  margin-left: max(0px, calc(50vw - 240px));
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -48,9 +53,14 @@
   transition: color 0.2s ease;
 }
 
-.settings-btn:hover,
 .settings-btn.is-active {
   color: var(--accent);
+}
+
+@media (hover: hover) {
+  .settings-btn:hover {
+    color: var(--accent);
+  }
 }
 
 @keyframes gear-snap {
@@ -61,8 +71,14 @@
   to { transform: rotate(-300deg); }
 }
 
-.settings-btn:not(.is-active):not(.is-closing):hover svg {
+.settings-btn.is-opening svg {
   animation: gear-snap 0.35s ease-out forwards;
+}
+
+@media (hover: hover) {
+  .settings-btn:not(.is-active):not(.is-closing):not(.is-opening):hover svg {
+    animation: gear-snap 0.35s ease-out forwards;
+  }
 }
 
 .settings-btn.is-closing,
@@ -362,7 +378,13 @@
   padding: 4px;
   cursor: pointer;
   border-radius: 6px;
+  outline: none;
   transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.expand-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .expand-btn:hover {
@@ -476,7 +498,18 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
+  outline: none;
   transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .icon-btn:hover {
@@ -1467,16 +1500,36 @@
   opacity: 0.85;
 }
 
+.swap-loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
 /* Plan generating overlay */
 .regen-generating-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-overlay-in 0.2s ease-out;
 }
 
 .regen-generating {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+}
+
+.regen-generating > div:first-child {
+  margin-bottom: -30px;
 }
 
 .regen-sentence {
@@ -1485,6 +1538,12 @@
   font-weight: 600;
   color: var(--accent);
   font-style: italic;
+  text-align: center;
+  max-width: 260px;
+  height: 3em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
   transform: translateY(6px);
   transition: opacity 0.35s ease, transform 0.35s ease;
@@ -1535,6 +1594,59 @@
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+/* ── Mobile ────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .icon-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+  }
+
+  .icon-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .stepper-btn {
+    height: 30px;
+    width: 28px;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+  }
+
+  .modal-wrap {
+    width: 100%;
+  }
+
+  .modal-close-btn {
+    top: -48px;
+  }
+
+  .modal-box {
+    min-width: unset;
+    max-width: unset;
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    padding: 28px 20px 40px;
+  }
+
+  .regen-modal {
+    min-width: unset;
+    max-width: unset;
+  }
+
+  .regen-day-group {
+    gap: 3px;
+  }
+
+  .regen-day-btn {
+    padding: 7px 7px;
+    font-size: 11px;
+  }
 }
 
 .regen-day-card.is-active .regen-day-card-status,

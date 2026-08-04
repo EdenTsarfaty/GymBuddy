@@ -72,6 +72,25 @@ body {
   margin: 0;
   background: var(--bg);
   transition: background-color 0.15s ease;
+  scrollbar-color: var(--accent) var(--chip-bg);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--chip-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-2);
 }
 
 h1,

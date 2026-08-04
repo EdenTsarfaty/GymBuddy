@@ -36,7 +36,7 @@ function RotatingSentence() {
 
 function PlanGeneratingOverlay({ phase, planStructure }) {
   return createPortal(
-    <div className="modal-overlay regen-generating-overlay">
+    <div className="regen-generating-overlay">
       <div className="regen-generating">
         <LottiePlayer size={210} />
 

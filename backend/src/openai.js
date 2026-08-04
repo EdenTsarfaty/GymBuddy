@@ -410,8 +410,8 @@ const EXERCISE_SCHEMA = {
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {
-      anyOf: [{ type: 'number' }, { type: 'null' }],
-      description: 'Starting weight in kg. Set to null for timed exercises (use duration instead).',
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Starting weight in kg as a whole number (no decimals). Set to null for timed exercises (use duration instead).',
     },
     duration: {
       anyOf: [{ type: 'integer' }, { type: 'null' }],
@@ -454,8 +454,8 @@ const SWAP_SCHEMA = {
       description: 'Three short, imperative-form coaching cues for correct form.',
     },
     weight: {
-      anyOf: [{ type: 'number' }, { type: 'null' }],
-      description: 'Starting weight in kg. Set to null for timed exercises (use duration instead).',
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Starting weight in kg as a whole number (no decimals). Set to null for timed exercises (use duration instead).',
     },
     duration: {
       anyOf: [{ type: 'integer' }, { type: 'null' }],

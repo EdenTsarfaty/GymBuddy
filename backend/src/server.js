@@ -4,7 +4,12 @@ const { generateExerciseData, generateSwapExercise, generatePlanStructure } = re
 const { writeLLMLog } = require('./logger')
 
 const PORT = process.env.PORT || 3001
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://100.106.241.16:5173',
+  'http://100.106.241.16:4173',
+]
 
 fastify.register(require('@fastify/cors'), {
   origin: FRONTEND_ORIGIN,
@@ -240,7 +245,7 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
   return { ...updated, bullets: JSON.parse(updated.bullets) }
 })
 
-fastify.listen({ port: PORT }, (err) => {
+fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   if (err) {
     fastify.log.error(err)
     process.exit(1)
