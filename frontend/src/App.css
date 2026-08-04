@@ -84,6 +84,17 @@
   font-weight: 700;
   letter-spacing: -0.3px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.today-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--fg-muted);
 }
 
 @keyframes plan-menu-in {

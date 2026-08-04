@@ -102,6 +102,11 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   return { ...created, bullets: JSON.parse(created.bullets) }
 })
 
+fastify.get('/api/day-plans', async (request) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  return db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)
+})
+
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
   const row = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)

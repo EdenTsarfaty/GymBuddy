@@ -12,7 +12,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'alpha 0.2.2'
+const APP_VERSION = 'beta 0.3.0'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -77,6 +77,7 @@ function App() {
   const [planView, setPlanView] = useState('week')
   const [selectedDay, setSelectedDay] = useState(today)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
+  const [dayTitles, setDayTitles] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const planMenuRef = useRef(null)
 
@@ -146,10 +147,13 @@ function App() {
 
   useEffect(() => {
     if (!currentUser) return
-    fetch(`${API_BASE}/api/exercises?user_id=${currentUser.id}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((all) => setDaysWithWorkouts(new Set(all.map((item) => item.day))))
-      .catch(() => {})
+    Promise.all([
+      fetch(`${API_BASE}/api/exercises?user_id=${currentUser.id}`).then((r) => r.ok ? r.json() : []),
+      fetch(`${API_BASE}/api/day-plans?user_id=${currentUser.id}`).then((r) => r.ok ? r.json() : []),
+    ]).then(([exercises, plans]) => {
+      setDaysWithWorkouts(new Set(exercises.map((e) => e.day)))
+      setDayTitles(new Map(plans.map((p) => [p.day, p.title])))
+    }).catch(() => {})
   }, [currentUser, exercisesRefreshKey])
 
   useEffect(() => {
@@ -295,6 +299,9 @@ function App() {
               aria-expanded={planMenuOpen}
             >
               {selectedDay}
+              {dayTitles.get(selectedDay) && (
+                <span className="today-subtitle">{dayTitles.get(selectedDay)}</span>
+              )}
             </button>
 
             {planMenuOpen && planMenuScreen === 'root' && (
