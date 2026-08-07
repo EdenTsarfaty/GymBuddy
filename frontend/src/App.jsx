@@ -13,12 +13,17 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.4.4'
+const APP_VERSION = 'beta 0.5.0'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+
+const CATEGORY_ORDER = { warm_up: 0, stretch: 2 }
+function categoryRank(category) {
+  return CATEGORY_ORDER[category] ?? 1
+}
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
 
@@ -139,7 +144,9 @@ function App() {
   }
 
   const exercises = useMemo(
-    () => allExercises.filter((item) => item.day === selectedDay),
+    () => allExercises
+      .filter((item) => item.day === selectedDay)
+      .sort((a, b) => categoryRank(a.category) - categoryRank(b.category)),
     [allExercises, selectedDay],
   )
 

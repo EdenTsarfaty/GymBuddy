@@ -59,7 +59,6 @@ db.exec(`
   )
 `)
 
-db.prepare("INSERT OR IGNORE INTO day_plans (user_id, day, title) VALUES (1, 'Monday', 'Legs and Chest Day')").run()
 
 const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count

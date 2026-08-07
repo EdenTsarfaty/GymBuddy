@@ -52,24 +52,28 @@ function buildSystemPrompt(profile, dayTitle) {
 
   lines.push('')
   lines.push('Use the profile and goals to personalise starting weight and set recommendations where relevant.')
-  lines.push('Always use the search_youtube tool to find the best instructional video for the exercise before responding.')
+  lines.push('Always use the search_youtube tool to find the best instructional video for the exercise before responding. All results are short clips (under a minute) — prefer the one that most clearly demonstrates full, correct form despite the brevity.')
   lines.push('')
   lines.push('## Content guidelines')
   lines.push('- Exercise name: keep it short and common (e.g. "Squat", "Dumbbell Row") — avoid long anatomical or branded names.')
   lines.push('- Description: be concise. Use short sentences, each on its own line. Beginner-friendly. State what muscles it works and why it matters.')
-  lines.push('- Instructions: start with any setup steps (adjust seat, set weight, grip width, foot position, etc.), then describe the movement step by step. Write for someone doing this exercise for the first time.')
+  lines.push('- Instructions: start with any setup steps (adjust seat, set weight, grip width, foot position, etc.), then describe the movement step by step. Write for someone doing this exercise for the first time. Provide 4–7 bullets, thorough enough to actually teach the exercise. For cable or machine exercises with a choice of handle or attachment (straight bar, EZ bar, V-bar, rope, wide-grip bar, single handle, etc.), state which one to use and briefly why. For any exercise that has sets, include one bullet giving the recommended rest time between sets (typically 60–90s for most work, 2–3 min for heavy compound lifts).')
   lines.push('- Category: classify the exercise as one of: free_weight (dumbbells, barbells, kettlebells — requires external weight), body_weight (exercises using only your own bodyweight as resistance: push-ups, pull-ups, dips, plank, dead bug, lunges, bodyweight squat, etc.), machine (strength machines only — cable machines, seated resistance machines, smith machine; never cardio equipment), warm_up (cardio equipment like treadmill, rowing machine, bike, elliptical; also dynamic activation and mobility work at the start of a session), stretch (static or dynamic flexibility work).')
   lines.push('- Weight vs duration: set weight (kg) and duration null for weighted exercises. Set duration (seconds) and weight null for timed exercises. Duration is REQUIRED (never null) for warm_up and stretch exercises — cardio warm-ups are typically 300–600s (5–10 min), stretches are typically 30–60s per side.')
+  lines.push('- Per-hand weight: for any exercise performed with a separate weight in each hand (dumbbells, single-arm cables, kettlebells held one per side, etc.), weight is the load held in ONE hand, not the combined total across both.')
   lines.push('- Sets: must be null for every warm_up and stretch exercise, and for any exercise where duration is set. Only provide sets for weighted free_weight or machine exercises.')
   lines.push('- Reps: required whenever sets is provided (a realistic rep count for the exercise and rep range, typically 6–15). Must be null whenever sets is null.')
   lines.push('')
   lines.push('## Output examples')
   lines.push('')
   lines.push('Weighted exercise — Barbell Row:')
-  lines.push('{ "description": "A compound pulling movement that builds thickness across the entire back and engages the biceps as a secondary mover.", "bullets": ["Hinge at the hips until torso is near parallel to the floor", "Pull the bar to your lower chest, driving elbows back", "Lower under control — do not let the bar drop"], "weight": 60, "duration": null, "sets": 4, "reps": 8, "video_id": "G8l_8chR5BE", "category": "free_weight" }')
+  lines.push('{ "description": "A compound pulling movement that builds thickness across the entire back and engages the biceps as a secondary mover.", "bullets": ["Set up with a loaded barbell on the floor, feet hip-width apart", "Hinge at the hips until your torso is near parallel to the floor", "Grip the bar just outside your knees with an overhand grip", "Pull the bar to your lower chest, driving elbows back and squeezing your shoulder blades", "Lower under control — do not let the bar drop", "Rest 90–120 seconds between sets"], "weight": 60, "duration": null, "sets": 4, "reps": 8, "video_id": "G8l_8chR5BE", "category": "free_weight" }')
+  lines.push('')
+  lines.push('Cable/machine exercise with an attachment choice — Cable Tricep Pushdown:')
+  lines.push('{ "description": "An isolation movement for the triceps using a cable stack, offering controlled, joint-friendly volume.", "bullets": ["Use a rope attachment for a deeper stretch and stronger triceps contraction, or a straight bar for a more controlled, less wrist-intensive path", "Set the cable pulley to the top position and grip the attachment", "Keep your elbows pinned to your sides throughout the movement", "Extend your arms fully, squeezing the triceps at the bottom without flaring your elbows", "Control the return to the top — do not let the weight stack slam", "Rest 60–90 seconds between sets"], "weight": 20, "duration": null, "sets": 3, "reps": 12, "video_id": "SzoOSg-Nv7M", "category": "machine" }')
   lines.push('')
   lines.push('Timed exercise — Hip Flexor Stretch:')
-  lines.push('{ "description": "A static stretch that opens the hip flexors and relieves tightness after heavy squatting or prolonged sitting.", "bullets": ["Kneel on one knee with the other foot forward", "Drive your hips forward until you feel a deep stretch in the front hip", "Keep your torso upright and hold each side for the full duration"], "weight": null, "duration": 45, "sets": null, "reps": null, "video_id": "YQmpO5rFoFY", "category": "stretch" }')
+  lines.push('{ "description": "A static stretch that opens the hip flexors and relieves tightness after heavy squatting or prolonged sitting.", "bullets": ["Kneel on one knee with the other foot forward, front knee stacked over the ankle", "Keep your torso upright and core braced", "Drive your hips forward until you feel a deep stretch in the front of the hip", "Breathe slowly and avoid bouncing — hold the stretch steady", "Hold for the full duration, then switch sides"], "weight": null, "duration": 45, "sets": null, "reps": null, "video_id": "YQmpO5rFoFY", "category": "stretch" }')
 
   return lines.join('\n')
 }
@@ -102,6 +106,7 @@ function buildPlanningSystemPrompt(profile, settings) {
       lines.push('')
       lines.push('## Experience level: Beginner')
       lines.push('The user is new to the gym. Favour compound movements, full-body or upper/lower splits, and simpler progressions. Avoid exercises that require significant technique (e.g. Olympic lifts).')
+      lines.push('Give a slight preference to machine-based exercises over free-weight equivalents where a reasonable machine alternative exists — machines guide the movement path, leaving less room for form errors and injury. This is a mild preference, not a hard rule: still include free-weight and body-weight staples where they fit best.')
     } else {
       lines.push('')
       lines.push('## Experience level: Intermediate / Advanced')
@@ -229,11 +234,12 @@ async function generatePlanStructure(profile, settings, onLog) {
     {
       role: 'user',
       content: `Now expand each day with the specific exercise names in order.
-${settings.includeWarmUp ? '- First exercise each day: one cardio or mobility warm-up (e.g. "Treadmill Jog", "Rowing Machine", "Jumping Jacks")' : ''}
+${settings.includeWarmUp ? '- The warm-up MUST be the very first exercise in the list, position 1, before any main exercise — one cardio or mobility warm-up (e.g. "Treadmill Jog", "Rowing Machine", "Jumping Jacks")' : ''}
 - Main exercises targeting that day's muscle groups
-${settings.includeStretch ? '- Last 2–3 exercises each day: stretches for the muscles worked (e.g. "Hip Flexor Stretch", "Lat Stretch", "Quad Stretch")' : ''}
+${settings.includeStretch ? '- The stretches MUST be the very last exercises in the list, after every main exercise, never interleaved among them — 2–3 stretches for the muscles worked (e.g. "Hip Flexor Stretch", "Lat Stretch", "Quad Stretch")' : ''}
 - Use common, recognisable names ("Bench Press", "Squat", "Lat Pulldown")
 - Do not repeat the same exercise across different days
+- Order matters: a muscle needs a breather before it's worked again within the same session, so don't stack consecutive exercises for the same muscle back to back — space them out with exercises for a different muscle in between. On a day focused on one major muscle group (e.g. a dedicated Legs day), apply the same idea one level down, at the sub-muscle level (quads, hamstrings, calves, glutes), so consecutive exercises don't repeatedly hit the same sub-muscle.
 
 ## Examples
 
@@ -241,7 +247,10 @@ ${settings.includeStretch ? '- Last 2–3 exercises each day: stretches for the 
 ["Rowing Machine", "Barbell Row", "Lat Pulldown", "Seated Cable Row", "Face Pull", "Hammer Curl", "Bicep Curl", "Lat Stretch", "Bicep Stretch"]
 
 ### Full Body (beginner, warm-up, stretch)
-["Treadmill Jog", "Goblet Squat", "Dumbbell Bench Press", "Dumbbell Row", "Shoulder Press", "Romanian Deadlift", "Plank", "Hip Flexor Stretch", "Hamstring Stretch"]`,
+["Treadmill Jog", "Goblet Squat", "Dumbbell Bench Press", "Dumbbell Row", "Shoulder Press", "Romanian Deadlift", "Plank", "Hip Flexor Stretch", "Hamstring Stretch"]
+
+### Legs (intermediate, warm-up, stretch) — sub-muscles alternated
+["Treadmill Jog", "Squat", "Hamstring Curl", "Leg Press", "Romanian Deadlift", "Calf Raise", "Walking Lunge", "Quad Stretch", "Hamstring Stretch"]`,
     },
   ]
 
@@ -286,6 +295,18 @@ function parseDuration(iso) {
   return `${h}${min}${s}`.trim()
 }
 
+function parseDurationSeconds(iso) {
+  if (!iso) return null
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!m) return null
+  const h = parseInt(m[1] || '0', 10)
+  const min = parseInt(m[2] || '0', 10)
+  const s = parseInt(m[3] || '0', 10)
+  return h * 3600 + min * 60 + s
+}
+
+const MAX_VIDEO_SECONDS = 60
+
 async function searchYouTube(query) {
   const key = process.env.YOUTUBE_API_KEY
   if (!key) return []
@@ -294,8 +315,9 @@ async function searchYouTube(query) {
     part: 'snippet',
     q: query,
     type: 'video',
-    maxResults: 8,
+    maxResults: 15,
     order: 'relevance',
+    videoDuration: 'short', // YouTube's own bucket: <4 min — narrows the pool before our stricter cutoff below
     key,
   })
   const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`)
@@ -313,21 +335,26 @@ async function searchYouTube(query) {
     statsMap[item.id] = {
       views: parseInt(item.statistics?.viewCount || '0', 10),
       duration: parseDuration(item.contentDetails?.duration || ''),
+      seconds: parseDurationSeconds(item.contentDetails?.duration || ''),
     }
   }
 
-  return items.map((item) => {
-    const videoId = item.id.videoId
-    const stats = statsMap[videoId] || {}
-    return {
-      video_id: videoId,
-      title: item.snippet.title,
-      channel: item.snippet.channelTitle,
-      description: (item.snippet.description || '').slice(0, 150),
-      views: stats.views || 0,
-      duration: stats.duration || '',
-    }
-  })
+  return items
+    .map((item) => {
+      const videoId = item.id.videoId
+      const stats = statsMap[videoId] || {}
+      return {
+        video_id: videoId,
+        title: item.snippet.title,
+        channel: item.snippet.channelTitle,
+        description: (item.snippet.description || '').slice(0, 150),
+        views: stats.views || 0,
+        duration: stats.duration || '',
+        seconds: stats.seconds,
+      }
+    })
+    // Hard rule: never show the model a video 1 minute or longer.
+    .filter((r) => r.seconds != null && r.seconds < MAX_VIDEO_SECONDS)
 }
 
 function formatYouTubeResults(results) {
@@ -406,9 +433,9 @@ const EXERCISE_SCHEMA = {
     bullets: {
       type: 'array',
       items: { type: 'string' },
-      minItems: 3,
-      maxItems: 5,
-      description: 'Three short, imperative-form coaching cues for correct form.',
+      minItems: 4,
+      maxItems: 7,
+      description: 'Short, imperative-form coaching cues covering setup and execution. When the exercise offers a choice of handle/attachment (cable or machine exercises), one bullet must state which to use and why. When the exercise has sets, one bullet must state the recommended rest time between sets.',
     },
     weight: {
       anyOf: [{ type: 'integer' }, { type: 'null' }],
@@ -454,9 +481,9 @@ const SWAP_SCHEMA = {
     bullets: {
       type: 'array',
       items: { type: 'string' },
-      minItems: 3,
-      maxItems: 5,
-      description: 'Three short, imperative-form coaching cues for correct form.',
+      minItems: 4,
+      maxItems: 7,
+      description: 'Short, imperative-form coaching cues covering setup and execution. When the exercise offers a choice of handle/attachment (cable or machine exercises), one bullet must state which to use and why. When the exercise has sets, one bullet must state the recommended rest time between sets.',
     },
     weight: {
       anyOf: [{ type: 'integer' }, { type: 'null' }],
