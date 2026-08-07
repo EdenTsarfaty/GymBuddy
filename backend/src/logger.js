@@ -124,6 +124,12 @@ function logError(context, err) {
   ])
 }
 
+function logInfo(message) {
+  const ts = timestamp()
+  appendServerLog(`[${ts}] [INFO] ${message}`)
+  writeLines([`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.green}${COLOR.bold}[INFO]${COLOR.reset} ${message}`])
+}
+
 function logCli(message) {
   const ts = timestamp()
   appendServerLog(`[${ts}] [CLI] ${message}`)
@@ -149,4 +155,4 @@ function logStartup(port) {
   ])
 }
 
-module.exports = { writeLLMLog, logRequest, logError, logCli, logCliBlock, logStartup, cli }
+module.exports = { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli }

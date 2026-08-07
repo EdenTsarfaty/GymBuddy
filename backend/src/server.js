@@ -2,12 +2,16 @@ const fastify = require('fastify')({ logger: false })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
 const { writeLLMLog, logRequest, logError, logCli, logCliBlock, logStartup, cli } = require('./logger')
+const { maybeBackupDatabase } = require('./backup')
+
+maybeBackupDatabase()
 
 const CLI_COMMANDS = [
   'add user <name>',
   'remove user <name>',
   'rename user <old> <new>',
   'restart',
+  'exit',
   'help',
 ]
 
@@ -37,7 +41,14 @@ cli.on('line', (line) => {
 
   if (/^restart$/i.test(trimmed)) {
     logCli('Restarting server...')
-    process.exit(0)
+    fastify.close(() => process.exit(0))
+    return
+  }
+
+  if (/^exit$/i.test(trimmed)) {
+    logCli('Shutting down...')
+    fastify.close(() => process.exit(0))
+    return
   }
 
   const addMatch = trimmed.match(/^add user (.+)$/i)
