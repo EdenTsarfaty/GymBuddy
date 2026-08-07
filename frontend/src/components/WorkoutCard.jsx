@@ -118,7 +118,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, weight, duration, description, bullets, videoId, category, onSave, onSwap }) {
+function WorkoutCard({ exercise, sets, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], onSave, onSwap }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const [expanded, setExpanded] = useState(false)
@@ -144,10 +144,15 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
   }
 
   function confirmEditing() {
-    onSave(hasDuration
+    const updates = hasDuration
       ? { sets: draftSets, weight: null, duration: draftDuration }
       : { sets: draftSets, weight: draftWeight, duration: null }
-    )
+    const changedFields = []
+    if (draftSets !== sets) changedFields.push('sets')
+    if (hasDuration ? draftDuration !== duration : draftWeight !== weight) {
+      changedFields.push(hasDuration ? 'duration' : 'weight')
+    }
+    onSave(updates, changedFields)
     setEditing(false)
   }
 
@@ -196,18 +201,18 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
               {hasSets && (
                 <div className="stat">
                   <span className="stat-label">Sets</span>
-                  <span className="stat-value">{sets}</span>
+                  <span className={`stat-value ${pendingFields.includes('sets') ? 'is-pending' : ''}`} title={pendingFields.includes('sets') ? 'Pending sync' : undefined}>{sets}</span>
                 </div>
               )}
               {hasDuration ? (
                 <div className="stat">
                   <span className="stat-label">Duration</span>
-                  <span className="stat-value">{formatDuration(duration)}</span>
+                  <span className={`stat-value ${pendingFields.includes('duration') ? 'is-pending' : ''}`} title={pendingFields.includes('duration') ? 'Pending sync' : undefined}>{formatDuration(duration)}</span>
                 </div>
               ) : weight != null ? (
                 <div className="stat">
                   <span className="stat-label">Weight</span>
-                  <span className="stat-value">{Math.round(weight)} kg</span>
+                  <span className={`stat-value ${pendingFields.includes('weight') ? 'is-pending' : ''}`} title={pendingFields.includes('weight') ? 'Pending sync' : undefined}>{Math.round(weight)} kg</span>
                 </div>
               ) : null}
             </div>
@@ -354,13 +359,21 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
                   type="button"
                   className="icon-btn swap-btn"
                   aria-label="Ask AI to swap this exercise"
+                  disabled={isOffline}
+                  title={isOffline ? 'Unavailable offline' : undefined}
                   onClick={() => setSwapOpen(true)}
                 >
                   <SwapIcon size={16} />
                 </button>
               ) : (
                 <>
-                  <button type="button" className="icon-btn" aria-label="Chat about this exercise">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Chat about this exercise"
+                    disabled={isOffline}
+                    title={isOffline ? 'Unavailable offline' : undefined}
+                  >
                     <ChatIcon size={16} />
                   </button>
                   <button

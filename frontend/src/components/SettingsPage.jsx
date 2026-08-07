@@ -4,13 +4,14 @@ import CheckIcon from './icons/CheckIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
+import OfflineIcon from './icons/OfflineIcon'
 import SunIcon from './icons/SunIcon'
 import XIcon from './icons/XIcon'
 
 const THEME_MODES = ['light', 'dark', 'system']
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
-function UserPicker({ users, currentUser, onChangeUser }) {
+function UserPicker({ users, currentUser, onChangeUser, disabled }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -27,13 +28,14 @@ function UserPicker({ users, currentUser, onChangeUser }) {
 
   return (
     <div className="settings-row">
-      <span className="settings-row-label">User</span>
+      <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>User</span>
       <div className="user-picker" ref={ref}>
         <button
           className={`user-picker-pill ${open ? 'is-open' : ''}`}
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
+          disabled={disabled}
         >
           <span>{currentUser.name}</span>
           <span className={`user-picker-chevron ${open ? 'is-open' : ''}`}>
@@ -116,7 +118,7 @@ function GoalsModal({ initialGoals, onSave, onClose }) {
   )
 }
 
-function BioRow({ label, value, onSave, placeholder }) {
+function BioRow({ label, value, onSave, placeholder, disabled }) {
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
 
@@ -136,7 +138,7 @@ function BioRow({ label, value, onSave, placeholder }) {
 
   return (
     <div className="settings-row">
-      <span className="settings-row-label">{label}</span>
+      <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>{label}</span>
       <div className="bio-row-right">
         {editing && (
           <button className="bio-cancel-btn" onClick={handleCancel} aria-label="Cancel">
@@ -155,7 +157,7 @@ function BioRow({ label, value, onSave, placeholder }) {
             if (e.key === 'Escape') handleCancel()
           }}
         />
-        <button className="bio-edit-btn" onClick={editing ? handleSave : handleEdit}>
+        <button className="bio-edit-btn" disabled={disabled} onClick={editing ? handleSave : handleEdit}>
           {editing ? 'Save' : 'Edit'}
         </button>
       </div>
@@ -163,7 +165,7 @@ function BioRow({ label, value, onSave, placeholder }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, users, currentUser, onChangeUser }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [] })
   const [goalsOpen, setGoalsOpen] = useState(false)
@@ -194,7 +196,17 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
 
   return (
     <div className="settings-list">
-      <UserPicker users={users} currentUser={currentUser} onChangeUser={onChangeUser} />
+      {isOffline && (
+        <>
+          <div className="settings-offline-banner">
+            <OfflineIcon size={32} />
+            <span>Offline mode — showing a cached version of your workout. Edits will sync once the app is open again with the server reachable.</span>
+          </div>
+          <div className="settings-separator" />
+        </>
+      )}
+
+      <UserPicker users={users} currentUser={currentUser} onChangeUser={onChangeUser} disabled={isOffline} />
 
       <div className="settings-separator" />
 
@@ -242,8 +254,8 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
 
       <div className="settings-row">
         <div className="settings-row-label-group">
-          <span className="settings-row-label">Beginner mode</span>
-          <span className="settings-row-sublabel">Lets the AI know you're new to the gym</span>
+          <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Beginner mode</span>
+          <span className={`settings-row-sublabel ${isOffline ? 'is-disabled' : ''}`}>Lets the AI know you're new to the gym</span>
         </div>
         <button
           type="button"
@@ -252,6 +264,7 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
           aria-checked={beginnerMode}
           aria-label="Beginner mode"
           data-on={String(beginnerMode)}
+          disabled={isOffline}
           onClick={() => {
             const next = !beginnerMode
             onChangeBeginnerMode(next)
@@ -274,8 +287,8 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
       <div className="settings-separator" />
 
       <div className="settings-row">
-        <span className="settings-row-label">Workout plan</span>
-        <button className="bio-edit-btn regen-settings-btn" onClick={onRegenerate}>Regenerate Plan</button>
+        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Workout plan</span>
+        <button className="bio-edit-btn regen-settings-btn" disabled={isOffline} onClick={onRegenerate}>Regenerate Plan</button>
       </div>
 
       <div className="settings-separator" />
@@ -285,25 +298,28 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
         value={profile.age != null ? String(profile.age) : ''}
         onSave={(v) => saveField('age', v)}
         placeholder="years"
+        disabled={isOffline}
       />
       <BioRow
         label="Height"
         value={profile.height != null ? String(profile.height) : ''}
         onSave={(v) => saveField('height', v)}
         placeholder="cm"
+        disabled={isOffline}
       />
       <BioRow
         label="Weight"
         value={profile.weight != null ? String(profile.weight) : ''}
         onSave={(v) => saveField('weight', v)}
         placeholder="kg"
+        disabled={isOffline}
       />
 
       <div className="settings-separator" />
 
       <div className="settings-row">
-        <span className="settings-row-label">Goals</span>
-        <button className="bio-edit-btn" onClick={() => setGoalsOpen(true)}>Edit</button>
+        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Goals</span>
+        <button className="bio-edit-btn" disabled={isOffline} onClick={() => setGoalsOpen(true)}>Edit</button>
       </div>
 
       {goalsOpen && (

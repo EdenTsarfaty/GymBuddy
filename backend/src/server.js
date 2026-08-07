@@ -9,6 +9,8 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || [
   'http://localhost:4173',
   'http://100.106.241.16:5173',
   'http://100.106.241.16:4173',
+  'https://asus-laptop.tailed3faf.ts.net',
+  'https://gymbuddy.eden-tsarfaty.workers.dev',
 ]
 
 fastify.register(require('@fastify/cors'), {

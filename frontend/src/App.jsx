@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import WorkoutCard from './components/WorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
 import CalendarIcon from './components/icons/CalendarIcon'
+import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import PlugOffIcon from './components/icons/PlugOffIcon'
@@ -12,10 +13,11 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.3.4'
+const APP_VERSION = 'beta 0.4.0'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
+const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
@@ -69,23 +71,102 @@ function App() {
   const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(getInitialThemeMode()))
   const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
-  const [exercises, setExercises] = useState([])
+  const [allExercises, setAllExercises] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [serverDown, setServerDown] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
   const [planView, setPlanView] = useState('week')
   const [selectedDay, setSelectedDay] = useState(today)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
-  const [dayTitles, setDayTitles] = useState(() => {
+  const [dayTitles, setDayTitles] = useState(new Map())
+  const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
+  const [pendingEdits, setPendingEdits] = useState(() => {
     try {
-      const cached = localStorage.getItem('gymbuddy-day-titles')
+      const uid = Number(localStorage.getItem(CURRENT_USER_STORAGE_KEY))
+      if (!uid) return new Map()
+      const cached = localStorage.getItem(`${PENDING_EDITS_STORAGE_KEY}-${uid}`)
       return cached ? new Map(JSON.parse(cached)) : new Map()
     } catch { return new Map() }
   })
-  const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
+  const pendingEditsRef = useRef(pendingEdits)
+  const currentUserRef = useRef(currentUser)
   const planMenuRef = useRef(null)
+
+  useEffect(() => {
+    pendingEditsRef.current = pendingEdits
+  }, [pendingEdits])
+
+  useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
+
+  useEffect(() => {
+    if (!currentUser) return
+    try {
+      const cachedPending = localStorage.getItem(`${PENDING_EDITS_STORAGE_KEY}-${currentUser.id}`)
+      setPendingEdits(cachedPending ? new Map(JSON.parse(cachedPending)) : new Map())
+    } catch {}
+  }, [currentUser?.id])
+
+  function persistPending(map) {
+    const uid = currentUserRef.current?.id
+    if (!uid) return
+    try { localStorage.setItem(`${PENDING_EDITS_STORAGE_KEY}-${uid}`, JSON.stringify([...map])) } catch {}
+  }
+
+  function flushPendingEdits() {
+    for (const [id, { updates }] of pendingEditsRef.current) {
+      fetch(`${API_BASE}/api/exercises/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to save')
+          setPendingEdits((current) => {
+            if (!current.has(id)) return current
+            const next = new Map(current)
+            next.delete(id)
+            persistPending(next)
+            return next
+          })
+        })
+        .catch(() => {})
+    }
+  }
+
+  const exercises = useMemo(
+    () => allExercises.filter((item) => item.day === selectedDay),
+    [allExercises, selectedDay],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    function checkHealth() {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 3000)
+
+      fetch(`${API_BASE}/api/health`, { signal: controller.signal, cache: 'no-store' })
+        .then((res) => {
+          if (cancelled) return
+          setIsOffline(!res.ok)
+          if (res.ok && pendingEditsRef.current.size > 0) flushPendingEdits()
+        })
+        .catch(() => { if (!cancelled) setIsOffline(true) })
+        .finally(() => clearTimeout(timeout))
+    }
+
+    checkHealth()
+    const interval = setInterval(checkHealth, 15000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme
@@ -107,7 +188,9 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
+    // Longer than the service worker's own 4s networkTimeoutSeconds, so it
+    // always gets a chance to fall back to cache before we abort the request.
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
     fetch(`${API_BASE}/api/users`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : []))
@@ -133,14 +216,29 @@ function App() {
     setServerDown(false)
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
+    // Longer than the service worker's own 4s networkTimeoutSeconds, so it
+    // always gets a chance to fall back to cache before we abort the request.
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
-    fetch(`${API_BASE}/api/exercises?day=${encodeURIComponent(selectedDay)}&user_id=${currentUser.id}`, { signal: controller.signal })
-      .then((res) => {
+    Promise.all([
+      fetch(`${API_BASE}/api/exercises?user_id=${currentUser.id}`, { signal: controller.signal }).then((res) => {
         if (!res.ok) throw new Error('Failed to load exercises')
         return res.json()
+      }),
+      fetch(`${API_BASE}/api/day-plans?user_id=${currentUser.id}`, { signal: controller.signal }).then((r) => r.ok ? r.json() : []),
+    ])
+      .then(([exercisesData, plans]) => {
+        // Reapply any still-unsent edits on top of the fetched data — if we're
+        // offline, this response may be a stale cached one predating the edit.
+        const merged = exercisesData.map((item) => {
+          const pending = pendingEditsRef.current.get(item.id)
+          return pending ? { ...item, ...pending.updates } : item
+        })
+        setAllExercises(merged)
+        setDaysWithWorkouts(new Set(merged.map((e) => e.day)))
+        const titlesMap = new Map(plans.map((p) => [p.day, p.title]))
+        setDayTitles(titlesMap)
       })
-      .then(setExercises)
       .catch((err) => {
         if (err.name === 'AbortError' || err.name === 'TypeError') {
           setServerDown(true)
@@ -152,19 +250,6 @@ function App() {
         clearTimeout(timeout)
         setLoading(false)
       })
-  }, [selectedDay, currentUser, exercisesRefreshKey])
-
-  useEffect(() => {
-    if (!currentUser) return
-    Promise.all([
-      fetch(`${API_BASE}/api/exercises?user_id=${currentUser.id}`).then((r) => r.ok ? r.json() : []),
-      fetch(`${API_BASE}/api/day-plans?user_id=${currentUser.id}`).then((r) => r.ok ? r.json() : []),
-    ]).then(([exercises, plans]) => {
-      setDaysWithWorkouts(new Set(exercises.map((e) => e.day)))
-      const titlesMap = new Map(plans.map((p) => [p.day, p.title]))
-      setDayTitles(titlesMap)
-      try { localStorage.setItem('gymbuddy-day-titles', JSON.stringify([...titlesMap])) } catch {}
-    }).catch(() => {})
   }, [currentUser, exercisesRefreshKey])
 
   useEffect(() => {
@@ -195,16 +280,52 @@ function App() {
     closePlanMenu()
   }
 
-  function updateExercise(id, updates) {
-    setExercises((current) =>
+  function markEditPending(id, updates, changedFields) {
+    setPendingEdits((current) => {
+      const next = new Map(current)
+      const existing = current.get(id)
+      const mergedFields = existing
+        ? Array.from(new Set([...existing.changedFields, ...changedFields]))
+        : changedFields
+      next.set(id, { updates, changedFields: mergedFields })
+      persistPending(next)
+      return next
+    })
+  }
+
+  function updateExercise(id, updates, changedFields = []) {
+    setAllExercises((current) =>
       current.map((item) => (item.id === id ? { ...item, ...updates } : item)),
     )
+
+    if (isOffline) {
+      markEditPending(id, updates, changedFields)
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
 
     fetch(`${API_BASE}/api/exercises/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+      signal: controller.signal,
     })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to save')
+        setPendingEdits((current) => {
+          if (!current.has(id)) return current
+          const next = new Map(current)
+          next.delete(id)
+          persistPending(next)
+          return next
+        })
+      })
+      .catch(() => {
+        markEditPending(id, updates, changedFields)
+      })
+      .finally(() => clearTimeout(timeout))
   }
 
   function swapExercise(id, reason, otherText) {
@@ -216,7 +337,7 @@ function App() {
       .then((res) => (res.ok ? res.json() : null))
       .then((updated) => {
         if (!updated) return
-        setExercises((current) =>
+        setAllExercises((current) =>
           current.map((item) => (item.id === id ? updated : item)),
         )
       })
@@ -307,6 +428,11 @@ function App() {
           </div>
         ) : (
           <div className="plan-picker" ref={planMenuRef}>
+            {isOffline && !serverDown && (
+              <span className="offline-indicator" title="Offline — showing cached data">
+                <OfflineIcon size={30} />
+              </span>
+            )}
             <button
               type="button"
               className="today"
@@ -314,7 +440,9 @@ function App() {
               aria-haspopup="menu"
               aria-expanded={planMenuOpen}
             >
-              {selectedDay}
+              <span className="today-main">
+                {selectedDay}
+              </span>
               {dayTitles.get(selectedDay) && (
                 <span className="today-subtitle">{dayTitles.get(selectedDay)}</span>
               )}
@@ -399,6 +527,7 @@ function App() {
             }}
             onRegenerate={() => setRegenOpen(true)}
             version={APP_VERSION}
+            isOffline={isOffline}
             users={users}
             currentUser={currentUser}
             onChangeUser={(user) => {
@@ -440,7 +569,9 @@ function App() {
                   videoId={item.video_id}
                   duration={item.duration}
                   category={item.category}
-                  onSave={(updates) => updateExercise(item.id, updates)}
+                  isOffline={isOffline}
+                  pendingFields={pendingEdits.get(item.id)?.changedFields ?? []}
+                  onSave={(updates, changedFields) => updateExercise(item.id, updates, changedFields)}
                   onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
                 />
               ))}

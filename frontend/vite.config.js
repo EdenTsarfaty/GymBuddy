@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   server: { host: true },
+  preview: { host: true, allowedHosts: ['asus-laptop.tailed3faf.ts.net'] },
   plugins: [
     react(),
     VitePWA({
@@ -12,7 +13,8 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Cache all API responses — network-first, fall back to cache
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            // (excludes /api/health, used as an uncached reachability probe)
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/') && url.pathname !== '/api/health',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

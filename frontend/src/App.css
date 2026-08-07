@@ -23,6 +23,15 @@
   margin-bottom: 48px;
 }
 
+.offline-indicator {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  color: var(--accent);
+}
+
 .page-logo {
   position: absolute;
   left: 0;
@@ -104,6 +113,11 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
+}
+
+.today-main {
+  position: relative;
+  display: inline-block;
 }
 
 .today-subtitle {
@@ -359,6 +373,7 @@
 }
 
 .stat-value {
+  position: relative;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-h);
@@ -366,6 +381,27 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1px 10px;
+}
+
+.stat-value.is-pending::after,
+.stat-value.is-pending::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff9800;
+}
+
+.stat-value.is-pending::before {
+  animation: pending-sonar 1.6s ease-out infinite;
+}
+
+@keyframes pending-sonar {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.8); opacity: 0; }
 }
 
 .expand-btn {
@@ -681,6 +717,30 @@
   color: var(--text-h);
 }
 
+.settings-row-label.is-disabled,
+.settings-row-sublabel.is-disabled {
+  opacity: 0.4;
+}
+
+.settings-offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  color: var(--accent);
+}
+
+.settings-offline-banner svg {
+  flex-shrink: 0;
+}
+
+.settings-offline-banner span {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+}
+
 .settings-separator {
   height: 1px;
   background: var(--border);
@@ -801,6 +861,15 @@
   border-color: var(--accent);
 }
 
+.user-picker-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.user-picker-pill:disabled:hover {
+  border-color: var(--accent-border-light);
+}
+
 .user-picker-chevron {
   display: inline-flex;
   color: var(--text-muted);
@@ -902,6 +971,16 @@
 
 .bio-edit-btn:hover {
   opacity: 0.85;
+}
+
+.bio-edit-btn:disabled,
+.theme-toggle-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bio-edit-btn:disabled:hover {
+  opacity: 0.4;
 }
 
 .regen-settings-btn {
