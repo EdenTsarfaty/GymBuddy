@@ -20,4 +20,96 @@ function writeLLMLog(userId, type, content) {
   trimLLMLog()
 }
 
-module.exports = { writeLLMLog }
+const SERVER_LOG_PATH = path.join(__dirname, '..', 'data', 'server.log')
+const SERVER_LOG_MAX_LINES = 5000
+
+const COLOR = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+}
+
+function trimServerLog() {
+  try {
+    const content = fs.readFileSync(SERVER_LOG_PATH, 'utf8')
+    const lines = content.split('\n')
+    if (lines.length <= SERVER_LOG_MAX_LINES) return
+    fs.writeFileSync(SERVER_LOG_PATH, lines.slice(lines.length - SERVER_LOG_MAX_LINES).join('\n'), 'utf8')
+  } catch {}
+}
+
+function timestamp() {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false })
+}
+
+function methodColor(method) {
+  switch (method) {
+    case 'GET': return COLOR.blue
+    case 'POST': return COLOR.cyan
+    case 'PATCH': return COLOR.yellow
+    case 'PUT': return COLOR.magenta
+    case 'DELETE': return COLOR.red
+    default: return COLOR.reset
+  }
+}
+
+function statusColor(status) {
+  if (status >= 500) return COLOR.red
+  if (status >= 400) return COLOR.yellow
+  if (status >= 300) return COLOR.cyan
+  return COLOR.green
+}
+
+function appendServerLog(line) {
+  try { fs.appendFileSync(SERVER_LOG_PATH, line + '\n', 'utf8') } catch {}
+  trimServerLog()
+}
+
+function levelForStatus(status) {
+  if (status >= 500) return 'ERROR'
+  if (status >= 400) return 'WARN'
+  return 'INFO'
+}
+
+function logRequest({ method, url, statusCode, responseTime }) {
+  const ts = timestamp()
+  const ms = Math.round(responseTime)
+  const level = levelForStatus(statusCode)
+
+  appendServerLog(`[${ts}] [${level}] ${method.padEnd(7)} ${url}  ${statusCode}  ${ms}ms`)
+
+  console.log(
+    `${COLOR.dim}[${ts}]${COLOR.reset} ` +
+    `${statusColor(statusCode)}[${level}]${COLOR.reset} ` +
+    `${methodColor(method)}${COLOR.bold}${method.padEnd(7)}${COLOR.reset}` +
+    `${url}  ` +
+    `${statusColor(statusCode)}${statusCode}${COLOR.reset}  ` +
+    `${COLOR.dim}${ms}ms${COLOR.reset}`,
+  )
+}
+
+function logError(context, err) {
+  const ts = timestamp()
+  const message = err?.stack || err?.message || String(err)
+
+  appendServerLog(`[${ts}] [ERROR] ${context}\n${message}`)
+
+  console.log(`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.red}${COLOR.bold}[ERROR]${COLOR.reset} ${COLOR.red}${context}${COLOR.reset}`)
+  console.log(`${COLOR.dim}${message}${COLOR.reset}`)
+}
+
+function logStartup(port) {
+  console.log('')
+  console.log(`  ${COLOR.cyan}${COLOR.bold}GymBuddy${COLOR.reset}${COLOR.dim} backend${COLOR.reset}`)
+  console.log(`  ${COLOR.green}${COLOR.bold}➜${COLOR.reset}  http://localhost:${port}`)
+  console.log(`  ${COLOR.dim}Logs: backend/data/server.log${COLOR.reset}`)
+  console.log('')
+}
+
+module.exports = { writeLLMLog, logRequest, logError, logStartup }

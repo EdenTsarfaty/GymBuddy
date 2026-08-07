@@ -1,7 +1,20 @@
-const fastify = require('fastify')({ logger: true })
+const fastify = require('fastify')({ logger: false })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
-const { writeLLMLog } = require('./logger')
+const { writeLLMLog, logRequest, logError, logStartup } = require('./logger')
+
+fastify.addHook('onResponse', (request, reply, done) => {
+  const isNoise = (request.method === 'GET' || request.method === 'OPTIONS') && reply.statusCode < 400
+  if (!isNoise) {
+    logRequest({
+      method: request.method,
+      url: request.raw.url,
+      statusCode: reply.statusCode,
+      responseTime: reply.elapsedTime,
+    })
+  }
+  done()
+})
 
 const PORT = process.env.PORT || 3001
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || [
@@ -83,7 +96,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   try {
     generated = await generateExerciseData(title.trim(), profile, dayTitle)
   } catch (err) {
-    request.log.error(err)
+    logError('POST /api/exercises/generate', err)
     reply.code(502)
     return { error: 'Failed to generate exercise data' }
   }
@@ -172,7 +185,7 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   try {
     generated = await generateSwapExercise(exercise, reason, other_text || '', profile, swapDayTitle)
   } catch (err) {
-    request.log.error(err)
+    logError('POST /api/exercises/:id/swap', err)
     reply.code(502)
     return { error: 'Failed to generate replacement exercise' }
   }
@@ -215,7 +228,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
   try {
     plan = await generatePlanStructure(profile, settings, onLog)
   } catch (err) {
-    request.log.error(err)
+    logError('POST /api/plan/structure', err)
     reply.code(502)
     return { error: 'Failed to generate plan structure' }
   }
@@ -249,7 +262,8 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   if (err) {
-    fastify.log.error(err)
+    logError('startup', err)
     process.exit(1)
   }
+  logStartup(PORT)
 })
