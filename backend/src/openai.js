@@ -61,14 +61,15 @@ function buildSystemPrompt(profile, dayTitle) {
   lines.push('- Category: classify the exercise as one of: free_weight (dumbbells, barbells, kettlebells — requires external weight), body_weight (exercises using only your own bodyweight as resistance: push-ups, pull-ups, dips, plank, dead bug, lunges, bodyweight squat, etc.), machine (strength machines only — cable machines, seated resistance machines, smith machine; never cardio equipment), warm_up (cardio equipment like treadmill, rowing machine, bike, elliptical; also dynamic activation and mobility work at the start of a session), stretch (static or dynamic flexibility work).')
   lines.push('- Weight vs duration: set weight (kg) and duration null for weighted exercises. Set duration (seconds) and weight null for timed exercises. Duration is REQUIRED (never null) for warm_up and stretch exercises — cardio warm-ups are typically 300–600s (5–10 min), stretches are typically 30–60s per side.')
   lines.push('- Sets: must be null for every warm_up and stretch exercise, and for any exercise where duration is set. Only provide sets for weighted free_weight or machine exercises.')
+  lines.push('- Reps: required whenever sets is provided (a realistic rep count for the exercise and rep range, typically 6–15). Must be null whenever sets is null.')
   lines.push('')
   lines.push('## Output examples')
   lines.push('')
   lines.push('Weighted exercise — Barbell Row:')
-  lines.push('{ "description": "A compound pulling movement that builds thickness across the entire back and engages the biceps as a secondary mover.", "bullets": ["Hinge at the hips until torso is near parallel to the floor", "Pull the bar to your lower chest, driving elbows back", "Lower under control — do not let the bar drop"], "weight": 60, "duration": null, "sets": 4, "video_id": "G8l_8chR5BE", "category": "free_weight" }')
+  lines.push('{ "description": "A compound pulling movement that builds thickness across the entire back and engages the biceps as a secondary mover.", "bullets": ["Hinge at the hips until torso is near parallel to the floor", "Pull the bar to your lower chest, driving elbows back", "Lower under control — do not let the bar drop"], "weight": 60, "duration": null, "sets": 4, "reps": 8, "video_id": "G8l_8chR5BE", "category": "free_weight" }')
   lines.push('')
   lines.push('Timed exercise — Hip Flexor Stretch:')
-  lines.push('{ "description": "A static stretch that opens the hip flexors and relieves tightness after heavy squatting or prolonged sitting.", "bullets": ["Kneel on one knee with the other foot forward", "Drive your hips forward until you feel a deep stretch in the front hip", "Keep your torso upright and hold each side for the full duration"], "weight": null, "duration": 45, "sets": null, "video_id": "YQmpO5rFoFY", "category": "stretch" }')
+  lines.push('{ "description": "A static stretch that opens the hip flexors and relieves tightness after heavy squatting or prolonged sitting.", "bullets": ["Kneel on one knee with the other foot forward", "Drive your hips forward until you feel a deep stretch in the front hip", "Keep your torso upright and hold each side for the full duration"], "weight": null, "duration": 45, "sets": null, "reps": null, "video_id": "YQmpO5rFoFY", "category": "stretch" }')
 
   return lines.join('\n')
 }
@@ -421,6 +422,10 @@ const EXERCISE_SCHEMA = {
       anyOf: [{ type: 'integer' }, { type: 'null' }],
       description: 'Number of working sets. Must be null for any warm_up or stretch category exercise, and for any exercise that uses duration instead of weight. Only provide a value for weighted free_weight or machine exercises.',
     },
+    reps: {
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Number of reps per set, typically 6-15. Required whenever sets is provided; must be null whenever sets is null.',
+    },
     video_id: {
       anyOf: [{ type: 'string' }, { type: 'null' }],
       description: 'YouTube video ID of the best instructional video found via search_youtube.',
@@ -431,7 +436,7 @@ const EXERCISE_SCHEMA = {
       description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
   },
-  required: ['description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],
+  required: ['description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category'],
   additionalProperties: false,
 }
 
@@ -465,6 +470,10 @@ const SWAP_SCHEMA = {
       anyOf: [{ type: 'integer' }, { type: 'null' }],
       description: 'Number of working sets. Must be null for any warm_up or stretch category exercise, and for any exercise that uses duration instead of weight. Only provide a value for weighted free_weight or machine exercises.',
     },
+    reps: {
+      anyOf: [{ type: 'integer' }, { type: 'null' }],
+      description: 'Number of reps per set, typically 6-15. Required whenever sets is provided; must be null whenever sets is null.',
+    },
     video_id: {
       anyOf: [{ type: 'string' }, { type: 'null' }],
       description: 'YouTube video ID of the best instructional video found via search_youtube.',
@@ -475,7 +484,7 @@ const SWAP_SCHEMA = {
       description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
   },
-  required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'video_id', 'category'],
+  required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category'],
   additionalProperties: false,
 }
 

@@ -198,13 +198,14 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   }
 
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, weight, duration, description, bullets, video_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
     uid,
     title.trim(),
     effectiveDay,
     generated.sets ?? null,
+    generated.reps ?? null,
     generated.weight ?? null,
     generated.duration ?? null,
     generated.description,
@@ -287,8 +288,8 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   }
 
   db.prepare(
-    'UPDATE exercises SET name = ?, sets = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
-  ).run(generated.name, generated.sets ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
+    'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
+  ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }
@@ -342,7 +343,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {
   const { id } = request.params
-  const { sets, weight, duration } = request.body
+  const { sets, reps, weight, duration } = request.body
 
   const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   if (!existing) {
@@ -350,7 +351,7 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
     return { error: 'Exercise not found' }
   }
 
-  db.prepare('UPDATE exercises SET sets = ?, weight = ?, duration = ? WHERE id = ?').run(sets ?? null, weight ?? null, duration ?? null, id)
+  db.prepare('UPDATE exercises SET sets = ?, reps = ?, weight = ?, duration = ? WHERE id = ?').run(sets ?? null, reps ?? null, weight ?? null, duration ?? null, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }

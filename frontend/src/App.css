@@ -383,6 +383,12 @@
   padding: 1px 10px;
 }
 
+.stat-value.reps-value {
+  display: inline-block;
+  min-width: 2ch;
+  text-align: center;
+}
+
 .stat-value.is-pending::after,
 .stat-value.is-pending::before {
   content: '';

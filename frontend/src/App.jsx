@@ -13,7 +13,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.4.3'
+const APP_VERSION = 'beta 0.4.4'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -563,6 +563,7 @@ function App() {
                   key={item.id}
                   exercise={item.name}
                   sets={item.sets}
+                  reps={item.reps}
                   weight={item.weight}
                   description={item.description}
                   bullets={item.bullets}

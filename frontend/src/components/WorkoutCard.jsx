@@ -104,6 +104,8 @@ function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
 
 const MIN_SETS = 1
 const MAX_SETS = 10
+const MIN_REPS = 1
+const MAX_REPS = 50
 const MIN_WEIGHT = 0
 const MAX_WEIGHT = 200
 const WEIGHT_PX_PER_UNIT = 22
@@ -118,13 +120,15 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], onSave, onSwap }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], onSave, onSwap }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
+  const hasReps = reps > 0
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
+  const [draftReps, setDraftReps] = useState(reps ?? MIN_REPS)
   const [draftWeight, setDraftWeight] = useState(Math.round(weight ?? 0))
   const [draftDuration, setDraftDuration] = useState(duration ?? MIN_DURATION)
   const [weightDragPx, setWeightDragPx] = useState(0)
@@ -138,6 +142,7 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
 
   function startEditing() {
     setDraftSets(sets)
+    setDraftReps(reps ?? MIN_REPS)
     setDraftWeight(Math.round(weight ?? 0))
     setDraftDuration(duration ?? MIN_DURATION)
     setEditing(true)
@@ -145,10 +150,11 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
 
   function confirmEditing() {
     const updates = hasDuration
-      ? { sets: draftSets, weight: null, duration: draftDuration }
-      : { sets: draftSets, weight: draftWeight, duration: null }
+      ? { sets: draftSets, reps: null, weight: null, duration: draftDuration }
+      : { sets: draftSets, reps: draftReps, weight: draftWeight, duration: null }
     const changedFields = []
     if (draftSets !== sets) changedFields.push('sets')
+    if (!hasDuration && draftReps !== reps) changedFields.push('reps')
     if (hasDuration ? draftDuration !== duration : draftWeight !== weight) {
       changedFields.push(hasDuration ? 'duration' : 'weight')
     }
@@ -204,6 +210,12 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
                   <span className={`stat-value ${pendingFields.includes('sets') ? 'is-pending' : ''}`} title={pendingFields.includes('sets') ? 'Pending sync' : undefined}>{sets}</span>
                 </div>
               )}
+              {hasReps && (
+                <div className="stat">
+                  <span className="stat-label">Reps</span>
+                  <span className={`stat-value reps-value ${pendingFields.includes('reps') ? 'is-pending' : ''}`} title={pendingFields.includes('reps') ? 'Pending sync' : undefined}>{reps}</span>
+                </div>
+              )}
               {hasDuration ? (
                 <div className="stat">
                   <span className="stat-label">Duration</span>
@@ -236,6 +248,31 @@ function WorkoutCard({ exercise, sets, weight, duration, description, bullets, v
                       className="stepper-btn"
                       onClick={() => setDraftSets((current) => Math.min(MAX_SETS, current + 1))}
                       aria-label="Increase sets"
+                    >
+                      <ChevronUpIcon size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!hasDuration && (
+                <div className="edit-field">
+                  <span className="stat-label">Reps</span>
+                  <div className="sets-stepper">
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftReps((current) => Math.max(MIN_REPS, current - 1))}
+                      aria-label="Decrease reps"
+                    >
+                      <ChevronDownIcon size={14} />
+                    </button>
+                    <span className="stepper-value">{draftReps}</span>
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setDraftReps((current) => Math.min(MAX_REPS, current + 1))}
+                      aria-label="Increase reps"
                     >
                       <ChevronUpIcon size={14} />
                     </button>

@@ -25,6 +25,7 @@ db.exec(`
     name        TEXT NOT NULL,
     day         TEXT NOT NULL,
     sets        INTEGER,
+    reps        INTEGER,
     weight      REAL,
     duration    INTEGER,
     description TEXT,
@@ -33,6 +34,7 @@ db.exec(`
     category    TEXT
   )
 `)
+try { db.exec('ALTER TABLE exercises ADD COLUMN reps INTEGER') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_profile (
@@ -63,36 +65,36 @@ const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count
   if (count > 0) return
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, weight, duration, description, bullets, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
   for (const ex of exercises) {
-    insert.run(userId, ex.name, ex.day, ex.sets ?? null, ex.weight ?? null, ex.duration ?? null, ex.description, JSON.stringify(ex.bullets), ex.category ?? null)
+    insert.run(userId, ex.name, ex.day, ex.sets ?? null, ex.reps ?? null, ex.weight ?? null, ex.duration ?? null, ex.description, JSON.stringify(ex.bullets), ex.category ?? null)
   }
 }
 
 seedUser(1, [
   {
-    name: 'Treadmill Jog', day: 'Monday', sets: null, weight: null, duration: 600, category: 'warm_up',
+    name: 'Treadmill Jog', day: 'Monday', sets: null, reps: null, weight: null, duration: 600, category: 'warm_up',
     description: 'A light cardio warm-up that raises your heart rate and loosens the legs before lifting.',
     bullets: ['Start at a comfortable walking pace', 'Increase to a light jog after 1–2 minutes', 'Keep shoulders relaxed and arms loose'],
   },
   {
-    name: 'Squat', day: 'Monday', sets: 3, weight: 60, duration: null, category: 'free_weight',
+    name: 'Squat', day: 'Monday', sets: 3, reps: 10, weight: 60, duration: null, category: 'free_weight',
     description: 'A compound lower-body lift that builds strength through the quads, glutes, and core.',
     bullets: ['Feet shoulder-width apart', 'Keep chest up', 'Drive through your heels'],
   },
   {
-    name: 'Bench Press', day: 'Monday', sets: 4, weight: 40, duration: null, category: 'free_weight',
+    name: 'Bench Press', day: 'Monday', sets: 4, reps: 8, weight: 40, duration: null, category: 'free_weight',
     description: 'A pressing movement that targets the chest, shoulders, and triceps.',
     bullets: ['Shoulder blades retracted', 'Bar path over the chest', 'Control the descent'],
   },
   {
-    name: 'Leg Press', day: 'Monday', sets: 3, weight: 80, duration: null, category: 'machine',
+    name: 'Leg Press', day: 'Monday', sets: 3, reps: 12, weight: 80, duration: null, category: 'machine',
     description: 'A machine-based lower body press targeting the quads, glutes, and hamstrings with less spinal load than squats.',
     bullets: ['Feet shoulder-width on the platform', 'Lower until knees reach 90°', 'Push through the full foot, avoid locking knees'],
   },
   {
-    name: 'Hip Flexor Stretch', day: 'Monday', sets: null, weight: null, duration: 30, category: 'stretch',
+    name: 'Hip Flexor Stretch', day: 'Monday', sets: null, reps: null, weight: null, duration: 30, category: 'stretch',
     description: 'A static stretch that opens the hip flexors and reduces tightness from sitting or heavy leg days.',
     bullets: ['Kneel on one knee, other foot forward', 'Shift hips forward until you feel a pull in the front hip', 'Hold 20–30 seconds each side'],
   },
