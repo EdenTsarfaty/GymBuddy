@@ -1,5 +1,14 @@
 const fs = require('fs')
 const path = require('path')
+const readline = require('node:readline')
+
+// Owns terminal echo/redraw so log lines never garble in-progress CLI input.
+const cli = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: '',
+})
+cli.prompt()
 
 const LOG_PATH = path.join(__dirname, '..', 'data', 'llm.log')
 const LOG_MAX_LINES = 2000
@@ -71,6 +80,15 @@ function appendServerLog(line) {
   trimServerLog()
 }
 
+// Clears any in-progress CLI input, prints the given lines, then redraws
+// whatever the user had typed so far — so log output never garbles it.
+function writeLines(lines) {
+  readline.clearLine(process.stdout, 0)
+  readline.cursorTo(process.stdout, 0)
+  for (const line of lines) console.log(line)
+  cli.prompt(true)
+}
+
 function levelForStatus(status) {
   if (status >= 500) return 'ERROR'
   if (status >= 400) return 'WARN'
@@ -84,14 +102,14 @@ function logRequest({ method, url, statusCode, responseTime }) {
 
   appendServerLog(`[${ts}] [${level}] ${method.padEnd(7)} ${url}  ${statusCode}  ${ms}ms`)
 
-  console.log(
+  writeLines([
     `${COLOR.dim}[${ts}]${COLOR.reset} ` +
     `${statusColor(statusCode)}[${level}]${COLOR.reset} ` +
     `${methodColor(method)}${COLOR.bold}${method.padEnd(7)}${COLOR.reset}` +
     `${url}  ` +
     `${statusColor(statusCode)}${statusCode}${COLOR.reset}  ` +
     `${COLOR.dim}${ms}ms${COLOR.reset}`,
-  )
+  ])
 }
 
 function logError(context, err) {
@@ -100,16 +118,35 @@ function logError(context, err) {
 
   appendServerLog(`[${ts}] [ERROR] ${context}\n${message}`)
 
-  console.log(`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.red}${COLOR.bold}[ERROR]${COLOR.reset} ${COLOR.red}${context}${COLOR.reset}`)
-  console.log(`${COLOR.dim}${message}${COLOR.reset}`)
+  writeLines([
+    `${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.red}${COLOR.bold}[ERROR]${COLOR.reset} ${COLOR.red}${context}${COLOR.reset}`,
+    `${COLOR.dim}${message}${COLOR.reset}`,
+  ])
+}
+
+function logCli(message) {
+  const ts = timestamp()
+  appendServerLog(`[${ts}] [CLI] ${message}`)
+  writeLines([`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.magenta}${COLOR.bold}[CLI]${COLOR.reset} ${message}`])
+}
+
+function logCliBlock(title, items) {
+  const ts = timestamp()
+  appendServerLog(`[${ts}] [CLI] ${title}\n${items.map((i) => `  ${i}`).join('\n')}`)
+  writeLines([
+    `${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.magenta}${COLOR.bold}[CLI]${COLOR.reset} ${title}`,
+    ...items.map((i) => `  ${COLOR.dim}${i}${COLOR.reset}`),
+  ])
 }
 
 function logStartup(port) {
-  console.log('')
-  console.log(`  ${COLOR.cyan}${COLOR.bold}GymBuddy${COLOR.reset}${COLOR.dim} backend${COLOR.reset}`)
-  console.log(`  ${COLOR.green}${COLOR.bold}➜${COLOR.reset}  http://localhost:${port}`)
-  console.log(`  ${COLOR.dim}Logs: backend/data/server.log${COLOR.reset}`)
-  console.log('')
+  writeLines([
+    '',
+    `  ${COLOR.cyan}${COLOR.bold}GymBuddy${COLOR.reset}${COLOR.dim} backend${COLOR.reset}`,
+    `  ${COLOR.green}${COLOR.bold}➜${COLOR.reset}  http://localhost:${port}`,
+    `  ${COLOR.dim}Logs: backend/data/server.log${COLOR.reset}`,
+    '',
+  ])
 }
 
-module.exports = { writeLLMLog, logRequest, logError, logStartup }
+module.exports = { writeLLMLog, logRequest, logError, logCli, logCliBlock, logStartup, cli }

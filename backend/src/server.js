@@ -1,7 +1,92 @@
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
-const { writeLLMLog, logRequest, logError, logStartup } = require('./logger')
+const { writeLLMLog, logRequest, logError, logCli, logCliBlock, logStartup, cli } = require('./logger')
+
+const CLI_COMMANDS = [
+  'add user <name>',
+  'remove user <name>',
+  'rename user <old> <new>',
+  'restart',
+  'help',
+]
+
+let pendingConfirm = null
+
+cli.on('line', (line) => {
+  const trimmed = line.trim()
+
+  if (pendingConfirm) {
+    const answer = trimmed.toLowerCase()
+    const onConfirm = pendingConfirm
+    pendingConfirm = null
+    if (answer === 'y' || answer === 'yes') {
+      onConfirm()
+    } else {
+      logCli('Cancelled.')
+    }
+    return
+  }
+
+  if (!trimmed) return
+
+  if (/^help$/i.test(trimmed)) {
+    logCliBlock('Available commands:', CLI_COMMANDS)
+    return
+  }
+
+  if (/^restart$/i.test(trimmed)) {
+    logCli('Restarting server...')
+    process.exit(0)
+  }
+
+  const addMatch = trimmed.match(/^add user (.+)$/i)
+  if (addMatch) {
+    const name = addMatch[1].trim()
+    if (!name) {
+      logCli('Usage: add user <name>')
+      return
+    }
+    const result = db.prepare('INSERT INTO users (name) VALUES (?)').run(name)
+    db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (?)').run(result.lastInsertRowid)
+    logCli(`Added user "${name}" (id ${result.lastInsertRowid})`)
+    return
+  }
+
+  const removeMatch = trimmed.match(/^remove user (.+)$/i)
+  if (removeMatch) {
+    const name = removeMatch[1].trim()
+    const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(name)
+    if (!user) {
+      logCli(`No user named "${name}"`)
+      return
+    }
+    logCli(`Remove user "${user.name}" (id ${user.id}) and all their data? (y/n)`)
+    pendingConfirm = () => {
+      db.prepare('DELETE FROM exercises WHERE user_id = ?').run(user.id)
+      db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(user.id)
+      db.prepare('DELETE FROM user_profile WHERE id = ?').run(user.id)
+      db.prepare('DELETE FROM users WHERE id = ?').run(user.id)
+      logCli(`Removed user "${user.name}" (id ${user.id}) and all their data`)
+    }
+    return
+  }
+
+  const renameMatch = trimmed.match(/^rename user (\S+) (\S+)$/i)
+  if (renameMatch) {
+    const [, oldName, newName] = renameMatch
+    const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(oldName)
+    if (!user) {
+      logCli(`No user named "${oldName}"`)
+      return
+    }
+    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(newName, user.id)
+    logCli(`Renamed user "${user.name}" to "${newName}" (id ${user.id})`)
+    return
+  }
+
+  logCli(`Unknown command: "${trimmed}". Type "help" for a list of commands.`)
+})
 
 fastify.addHook('onResponse', (request, reply, done) => {
   const isNoise = (request.method === 'GET' || request.method === 'OPTIONS') && reply.statusCode < 400
