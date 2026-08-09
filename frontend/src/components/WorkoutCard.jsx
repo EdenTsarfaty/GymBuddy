@@ -120,11 +120,11 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], onSave, onSwap }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded)
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
@@ -410,6 +410,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                     aria-label="Chat about this exercise"
                     disabled={isOffline}
                     title={isOffline ? 'Unavailable offline' : undefined}
+                    onClick={() => onChat?.()}
                   >
                     <ChatIcon size={16} />
                   </button>

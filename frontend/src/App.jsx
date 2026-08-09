@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import ChatView from './components/ChatView'
 import WorkoutCard from './components/WorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
@@ -13,7 +14,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.5.0'
+const APP_VERSION = 'beta 0.5.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -357,6 +358,27 @@ function App() {
   const [planStructure, setPlanStructure] = useState(null)
   const [settingsClosing, setSettingsClosing] = useState(false)
   const [settingsOpening, setSettingsOpening] = useState(false)
+  const [chatExercise, setChatExercise] = useState(null)
+  const [chatReturnExerciseId, setChatReturnExerciseId] = useState(null)
+  const chatScrollYRef = useRef(0)
+
+  function openChat(exercise) {
+    chatScrollYRef.current = window.scrollY
+    setChatExercise(exercise)
+    setView('chat')
+  }
+
+  function closeChat() {
+    setChatReturnExerciseId(chatExercise?.id ?? null)
+    setView('home')
+    setChatExercise(null)
+  }
+
+  useEffect(() => {
+    if (view !== 'home' || chatReturnExerciseId == null) return
+    window.scrollTo(0, chatScrollYRef.current)
+    setChatReturnExerciseId(null)
+  }, [view, chatReturnExerciseId])
 
   async function handleGenerate(settings) {
     setRegenOpen(false)
@@ -425,8 +447,24 @@ function App() {
   }
 
   return (
-    <div className="page">
+    <div className={`page ${view === 'chat' ? 'is-chat' : ''}`}>
       <header className="page-header">
+        {view === 'chat' ? (
+          <>
+            <button
+              type="button"
+              className="chat-back-btn"
+              onClick={closeChat}
+              aria-label="Back to workout"
+            >
+              <ChevronLeftIcon size={20} />
+            </button>
+            <div className="plan-picker">
+              <span className="today is-static">{chatExercise?.name}</span>
+            </div>
+          </>
+        ) : (
+          <>
         <Logo height={64} className="page-logo" />
 
         {view === 'settings' ? (
@@ -520,10 +558,14 @@ function App() {
         >
           <GearIcon size={28} />
         </button>
+          </>
+        )}
       </header>
 
       <div key={view} className="view-content">
-        {view === 'settings' ? (
+        {view === 'chat' ? (
+          <ChatView exercise={chatExercise} />
+        ) : view === 'settings' ? (
           <SettingsPage
             themeMode={themeMode}
             onChangeThemeMode={setThemeMode}
@@ -579,8 +621,10 @@ function App() {
                   category={item.category}
                   isOffline={isOffline}
                   pendingFields={pendingEdits.get(item.id)?.changedFields ?? []}
+                  initiallyExpanded={item.id === chatReturnExerciseId}
                   onSave={(updates, changedFields) => updateExercise(item.id, updates, changedFields)}
                   onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
+                  onChat={() => openChat(item)}
                 />
               ))}
           </main>

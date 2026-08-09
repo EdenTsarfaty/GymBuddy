@@ -72,8 +72,8 @@ body {
   margin: 0;
   background: var(--bg);
   transition: background-color 0.15s ease;
-  scrollbar-color: var(--accent) var(--chip-bg);
-  scrollbar-width: thin;
+  scrollbar-color: auto;
+  scrollbar-width: auto;
 }
 
 ::-webkit-scrollbar {
@@ -81,7 +81,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--chip-bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -91,6 +91,17 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-2);
+}
+
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:vertical:start,
+::-webkit-scrollbar-button:vertical:end,
+::-webkit-scrollbar-button:horizontal:start,
+::-webkit-scrollbar-button:horizontal:end {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 h1,
