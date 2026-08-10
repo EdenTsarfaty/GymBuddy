@@ -379,9 +379,36 @@ async function callOpenAI(body) {
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`OpenAI request failed (${res.status}): ${text}`)
+    const err = new Error(`OpenAI request failed (${res.status}): ${text}`)
+    err.status = res.status
+    err.body = text
+    throw err
   }
   return res.json()
+}
+
+function describeOpenAIError(err) {
+  if (err?.status === 401) return 'Invalid or missing OpenAI API key'
+  if (err?.status === 429) {
+    if (err.body?.includes('insufficient_quota')) return 'OpenAI quota exceeded — check billing at platform.openai.com'
+    return 'OpenAI rate limited — too many requests'
+  }
+  if (err?.status >= 500) return `OpenAI server error (${err.status}) — try again later`
+  if (err?.name === 'TypeError') return 'Could not reach OpenAI — network error'
+  return `OpenAI error: ${err?.message || err}`
+}
+
+async function checkOpenAIHealth() {
+  try {
+    await callOpenAI({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: 'ping' }],
+      max_completion_tokens: 16,
+    })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, message: describeOpenAIError(err) }
+  }
 }
 
 async function runWithTools(messages, schema, schemaName) {
@@ -555,4 +582,4 @@ async function generateSwapExercise(exercise, reason, otherText, profile, dayTit
   )
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure }
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, checkOpenAIHealth, describeOpenAIError }

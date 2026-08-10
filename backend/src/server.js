@@ -1,10 +1,18 @@
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure } = require('./openai')
-const { writeLLMLog, logRequest, logError, logCli, logCliBlock, logStartup, cli } = require('./logger')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, checkOpenAIHealth, describeOpenAIError } = require('./openai')
+const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 
 maybeBackupDatabase()
+
+checkOpenAIHealth().then((result) => {
+  if (result.ok) {
+    logInfo('OpenAI: API key valid, credits balance positive')
+  } else {
+    logInfo(`OpenAI: ${result.message}`)
+  }
+})
 
 const CLI_COMMANDS = [
   'add user <name>',
@@ -192,7 +200,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   try {
     generated = await generateExerciseData(title.trim(), profile, dayTitle)
   } catch (err) {
-    logError('POST /api/exercises/generate', err)
+    logError('POST /api/exercises/generate', new Error(describeOpenAIError(err)))
     reply.code(502)
     return { error: 'Failed to generate exercise data' }
   }
@@ -282,7 +290,7 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   try {
     generated = await generateSwapExercise(exercise, reason, other_text || '', profile, swapDayTitle)
   } catch (err) {
-    logError('POST /api/exercises/:id/swap', err)
+    logError('POST /api/exercises/:id/swap', new Error(describeOpenAIError(err)))
     reply.code(502)
     return { error: 'Failed to generate replacement exercise' }
   }
@@ -325,7 +333,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
   try {
     plan = await generatePlanStructure(profile, settings, onLog)
   } catch (err) {
-    logError('POST /api/plan/structure', err)
+    logError('POST /api/plan/structure', new Error(describeOpenAIError(err)))
     reply.code(502)
     return { error: 'Failed to generate plan structure' }
   }
