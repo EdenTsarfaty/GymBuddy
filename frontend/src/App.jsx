@@ -3,6 +3,7 @@ import ChatView from './components/ChatView'
 import WorkoutCard from './components/WorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
+import BugIcon from './components/icons/BugIcon'
 import CalendarIcon from './components/icons/CalendarIcon'
 import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
@@ -14,12 +15,13 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.5.2.1'
+const APP_VERSION = 'beta 0.5.2.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+const REPORT_BUG_URL = `https://t.me/Azsper?text=${encodeURIComponent('Hey! I found a bug in GymBuddy — ')}`
 
 const CATEGORY_ORDER = { warm_up: 0, stretch: 2 }
 function categoryRank(category) {
@@ -633,6 +635,16 @@ function App() {
 
       <footer className="page-footer">
         <span>{APP_VERSION}</span>
+        <a
+          className="report-bug-link"
+          href={REPORT_BUG_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Report a bug"
+        >
+          <BugIcon size={21} />
+          Report bug
+        </a>
       </footer>
 
       {regenOpen && (
