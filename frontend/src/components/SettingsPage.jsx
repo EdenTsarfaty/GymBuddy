@@ -200,7 +200,7 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
         <>
           <div className="settings-offline-banner">
             <OfflineIcon size={32} />
-            <span>Offline mode — showing a cached version of your workout. Edits will sync once the app is open again with the server reachable.</span>
+            <span>Offline mode — showing a cached version of your workout. Edits will sync once the app is open again with the server reachable. Check - are both nodes powered on Tailscale?</span>
           </div>
           <div className="settings-separator" />
         </>

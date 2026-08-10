@@ -1,6 +1,6 @@
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, checkOpenAIHealth, describeOpenAIError } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, checkOpenAIHealth, describeOpenAIError } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 
@@ -299,6 +299,9 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
     'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
   ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
 
+  // The exercise identity effectively changed — old chat history no longer applies.
+  db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
+
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }
 })
@@ -339,6 +342,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
   }
 
   // Clear existing data and write new day titles
+  db.prepare('DELETE FROM chat_messages WHERE exercise_id IN (SELECT id FROM exercises WHERE user_id = ?)').run(uid)
   db.prepare('DELETE FROM exercises WHERE user_id = ?').run(uid)
   db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(uid)
   const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title) VALUES (?, ?, ?)')
@@ -363,6 +367,52 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return { ...updated, bullets: JSON.parse(updated.bullets) }
+})
+
+fastify.get('/api/exercises/:id/chat', async (request) => {
+  const { id } = request.params
+  const selectAll = db.prepare('SELECT id, role, text, created_at FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC')
+
+  const existing = selectAll.all(id)
+  if (existing.length > 0) return existing
+
+  const exercise = db.prepare('SELECT name FROM exercises WHERE id = ?').get(id)
+  if (!exercise) return []
+
+  const greeting = `Ask me anything about ${exercise.name} — form cues, alternatives, or why it's in your plan.`
+  db.prepare('INSERT INTO chat_messages (exercise_id, role, text) VALUES (?, ?, ?)').run(id, 'assistant', greeting)
+  return selectAll.all(id)
+})
+
+fastify.post('/api/exercises/:id/chat', async (request, reply) => {
+  const { id } = request.params
+  const { text } = request.body || {}
+
+  if (!text || !text.trim()) {
+    reply.code(400)
+    return { error: 'text is required' }
+  }
+
+  const exercise = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!exercise) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  const insert = db.prepare('INSERT INTO chat_messages (exercise_id, role, text) VALUES (?, ?, ?)')
+  const selectById = db.prepare('SELECT id, role, text, created_at FROM chat_messages WHERE id = ?')
+
+  const userResult = insert.run(id, 'user', text.trim())
+  const userMessage = selectById.get(userResult.lastInsertRowid)
+
+  const history = db.prepare('SELECT role, text FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC').all(id)
+  const replyText = await generateChatReply(exercise, history, text.trim())
+
+  const assistantResult = insert.run(id, 'assistant', replyText)
+  const assistantMessage = selectById.get(assistantResult.lastInsertRowid)
+
+  reply.code(201)
+  return { userMessage, assistantMessage }
 })
 
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {

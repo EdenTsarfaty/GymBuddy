@@ -582,4 +582,17 @@ async function generateSwapExercise(exercise, reason, otherText, profile, dayTit
   )
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, checkOpenAIHealth, describeOpenAIError }
+// ── Exercise chat (mocked for now — replace with a real call once wired up) ──
+
+const MOCK_CHAT_REPLIES = [
+  "Good question — focus on keeping the movement controlled rather than rushing through reps. Form matters more than speed here.",
+  "That depends on how it feels for you. If you're not feeling it in the target muscle, double-check your setup and range of motion first.",
+  "A common mistake is letting momentum take over. Slow down the eccentric (lowering) part of the movement for better results.",
+  "You could try a lighter weight for a few sessions to really nail the form before adding load back on.",
+]
+
+async function generateChatReply(exercise, history, userText) {
+  return MOCK_CHAT_REPLIES[Math.floor(Math.random() * MOCK_CHAT_REPLIES.length)]
+}
+
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, checkOpenAIHealth, describeOpenAIError }

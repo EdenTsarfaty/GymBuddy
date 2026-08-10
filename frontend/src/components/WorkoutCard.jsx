@@ -408,8 +408,6 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                     type="button"
                     className="icon-btn"
                     aria-label="Chat about this exercise"
-                    disabled={isOffline}
-                    title={isOffline ? 'Unavailable offline' : undefined}
                     onClick={() => onChat?.()}
                   >
                     <ChatIcon size={16} />

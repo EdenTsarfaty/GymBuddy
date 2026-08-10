@@ -59,6 +59,17 @@ db.exec(`
   )
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    exercise_id INTEGER NOT NULL,
+    role        TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`)
+db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_exercise ON chat_messages(exercise_id)')
+
 
 const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count

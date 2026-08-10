@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import SendIcon from './icons/SendIcon'
 
-const MOCK_REPLIES = [
-  "Good question — focus on keeping the movement controlled rather than rushing through reps. Form matters more than speed here.",
-  "That depends on how it feels for you. If you're not feeling it in the target muscle, double-check your setup and range of motion first.",
-  "A common mistake is letting momentum take over. Slow down the eccentric (lowering) part of the movement for better results.",
-  "You could try a lighter weight for a few sessions to really nail the form before adding load back on.",
-]
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 const SUGGESTED_QUESTIONS = [
   'Which muscles should I feel this in?',
@@ -21,11 +16,7 @@ const SUGGESTED_QUESTIONS = [
   "What's a good warm-up for this?",
 ]
 
-function makeMockReply() {
-  return MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)]
-}
-
-function ChatView({ exercise }) {
+function ChatView({ exercise, isOffline }) {
   const [messages, setMessages] = useState(() => [
     {
       id: 'seed-1',
@@ -48,22 +39,51 @@ function ChatView({ exercise }) {
   }
 
   useEffect(() => {
+    if (!exercise?.id) return
+    fetch(`${API_BASE}/api/exercises/${exercise.id}/chat`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((history) => {
+        if (history.length > 0) {
+          setMessages(history.map((m) => ({ id: m.id, role: m.role, text: m.text })))
+        }
+      })
+      .catch(() => {})
+  }, [exercise?.id])
+
+  useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
     updateScrollUI()
   }, [messages, thinking])
 
   function sendMessage(text) {
     const trimmed = (text ?? draft).trim()
-    if (!trimmed || thinking) return
+    if (!trimmed || thinking || isOffline || !exercise?.id) return
 
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', text: trimmed }])
     setDraft('')
     setThinking(true)
 
-    setTimeout(() => {
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', text: makeMockReply() }])
-      setThinking(false)
-    }, 900)
+    const minDelay = new Promise((resolve) => setTimeout(resolve, 600))
+    const request = fetch(`${API_BASE}/api/exercises/${exercise.id}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: trimmed }),
+    }).then((res) => (res.ok ? res.json() : null))
+
+    Promise.all([request, minDelay])
+      .then(([data]) => {
+        if (data?.assistantMessage) {
+          setMessages((current) => [
+            ...current,
+            { id: data.assistantMessage.id, role: 'assistant', text: data.assistantMessage.text },
+          ])
+          // Refresh the cached GET history so it's up to date for offline viewing later —
+          // the POST response alone doesn't update the service worker's cached copy of it.
+          fetch(`${API_BASE}/api/exercises/${exercise.id}/chat`).catch(() => {})
+        }
+      })
+      .catch(() => {})
+      .finally(() => setThinking(false))
   }
 
   return (
@@ -92,7 +112,8 @@ function ChatView({ exercise }) {
           className="chat-input"
           type="text"
           value={draft}
-          placeholder={placeholder}
+          placeholder={isOffline ? 'Unavailable offline' : placeholder}
+          disabled={isOffline}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') sendMessage()
@@ -102,7 +123,7 @@ function ChatView({ exercise }) {
           type="button"
           className="icon-btn chat-send-btn"
           onClick={() => sendMessage()}
-          disabled={!draft.trim() || thinking}
+          disabled={isOffline || !draft.trim() || thinking}
           aria-label="Send message"
         >
           <SendIcon size={20} />
