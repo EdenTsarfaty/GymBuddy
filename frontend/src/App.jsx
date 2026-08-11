@@ -354,6 +354,12 @@ function App() {
       .catch(() => {})
   }
 
+  function updateExerciseFromChat(updated) {
+    setAllExercises((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
+    )
+  }
+
   const [regenOpen, setRegenOpen] = useState(false)
   const [planGenerating, setPlanGenerating] = useState(false)
   const [planPhase, setPlanPhase] = useState('thinking')
@@ -566,7 +572,7 @@ function App() {
 
       <div key={view} className="view-content">
         {view === 'chat' ? (
-          <ChatView exercise={chatExercise} isOffline={isOffline} />
+          <ChatView exercise={chatExercise} isOffline={isOffline} onExerciseUpdated={updateExerciseFromChat} />
         ) : view === 'settings' ? (
           <SettingsPage
             themeMode={themeMode}

@@ -366,6 +366,103 @@ function formatYouTubeResults(results) {
     .join('\n\n')
 }
 
+// ── Chat proposal tools ────────────────────────────────────────────────────────
+
+const PROPOSE_STAT_CHANGE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'propose_stat_change',
+    description: 'Propose new sets/reps/weight/duration values for this exercise. Provide the full target state, not just the fields that change — weight+sets+reps and duration are mutually exclusive, exactly one group must be non-null, matching whichever this exercise already uses.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sets: { anyOf: [{ type: 'integer' }, { type: 'null' }], description: 'Target number of working sets, or null for a timed exercise.' },
+        reps: { anyOf: [{ type: 'integer' }, { type: 'null' }], description: 'Target reps per set, or null for a timed exercise.' },
+        weight: { anyOf: [{ type: 'integer' }, { type: 'null' }], description: 'Target weight in kg, or null for a timed exercise.' },
+        duration: { anyOf: [{ type: 'integer' }, { type: 'null' }], description: 'Target duration in seconds, or null for a weighted/rep-based exercise.' },
+      },
+      required: ['sets', 'reps', 'weight', 'duration'],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+}
+
+const PROPOSE_SWAP_TOOL = {
+  type: 'function',
+  function: {
+    name: 'propose_swap_exercise',
+    description: 'Propose replacing this exercise entirely with a different one better suited to the user, e.g. because it hurts, is unavailable, or they want something new.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', enum: ['hurts', 'new', 'unavailable', 'other'], description: 'Why the exercise should be swapped.' },
+        other_text: { type: 'string', description: 'Free-text explanation when reason is "other" (or extra context for any reason). Empty string if not needed.' },
+      },
+      required: ['reason', 'other_text'],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+}
+
+const PROPOSE_VIDEO_CHANGE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'propose_video_change',
+    description: 'Propose swapping this exercise\'s demonstration video for a different one, e.g. because the current video is unclear or does not match the user\'s question.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Short reason a different video would help.' },
+      },
+      required: ['reason'],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+}
+
+const CHAT_TOOLS = [PROPOSE_STAT_CHANGE_TOOL, PROPOSE_SWAP_TOOL, PROPOSE_VIDEO_CHANGE_TOOL]
+const MAX_CHAT_TOOL_ROUNDS = 4
+
+const PROPOSAL_TYPE_BY_TOOL = {
+  propose_stat_change: 'stat_change',
+  propose_swap_exercise: 'swap',
+  propose_video_change: 'video_change',
+}
+
+async function runChatWithTools(messages) {
+  const proposals = []
+
+  for (let round = 0; round < MAX_CHAT_TOOL_ROUNDS; round++) {
+    const data = await callOpenAI({
+      model: PLAN_MODEL,
+      messages,
+      tools: CHAT_TOOLS,
+      tool_choice: 'auto',
+    })
+
+    const choice = data.choices[0]
+    messages.push(choice.message)
+
+    if (choice.finish_reason !== 'tool_calls') {
+      return { text: choice.message.content, proposals }
+    }
+
+    for (const toolCall of choice.message.tool_calls) {
+      proposals.push({
+        id: crypto.randomUUID(),
+        type: PROPOSAL_TYPE_BY_TOOL[toolCall.function.name],
+        payload: JSON.parse(toolCall.function.arguments),
+      })
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, content: 'ok' })
+    }
+  }
+
+  return { text: messages[messages.length - 1]?.content || '', proposals }
+}
+
 // ── Shared OpenAI caller ──────────────────────────────────────────────────────
 
 async function callOpenAI(body) {
@@ -597,6 +694,13 @@ function buildChatSystemPrompt(exercise, profile) {
     "- If the user reports pain, take it seriously: distinguish normal muscle fatigue from sharp or joint pain, advise stopping if something feels wrong.",
     '- Stay focused on this exercise and the user\'s fitness question. Do not wander into unrelated topics. Reject any non-topic subjects.',
     '',
+    '## Proposing changes',
+    'You have tools to propose concrete changes to this exercise: propose_stat_change (adjust sets/reps/weight/duration), propose_swap_exercise (replace this exercise entirely), propose_video_change (swap the demonstration video). The user sees each as a button and applies it themselves — you never apply it yourself.',
+    '- Only call a tool when the conversation clearly warrants it (e.g. they say it\'s too easy/hard, report pain, ask for heavier/lighter weight, want a different exercise, or the video is unclear). Do not propose changes speculatively or on every message.',
+    '- Still give your normal short reply alongside the tool call — that\'s where you explain your reasoning. The button only shows the resulting numbers.',
+    '- propose_stat_change always takes the complete new sets/reps/weight/duration state, not just the field that changed.',
+    '- Only call more than one tool in the same turn when genuinely proposing distinct kinds of changes at once.',
+    '',
     '## This exercise',
     `Name: ${exercise.name}`,
     `Category: ${exercise.category}`,
@@ -648,8 +752,12 @@ async function generateChatReply(exercise, profile, history) {
     ...history.map((m) => ({ role: m.role, content: m.text })),
   ]
 
-  const data = await callOpenAI({ model: PLAN_MODEL, messages })
-  return data.choices[0].message.content
+  return runChatWithTools(messages)
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, checkOpenAIHealth, describeOpenAIError }
+async function findVideoForExercise(name) {
+  const results = await searchYouTube(`${name} exercise form tutorial`)
+  return results[0]?.video_id || null
+}
+
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError }

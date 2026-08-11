@@ -1,6 +1,6 @@
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, checkOpenAIHealth, describeOpenAIError } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 
@@ -369,19 +369,23 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
   return { ...updated, bullets: JSON.parse(updated.bullets) }
 })
 
+function parseChatMessage(row) {
+  return { ...row, proposals: row.proposals ? JSON.parse(row.proposals) : [] }
+}
+
 fastify.get('/api/exercises/:id/chat', async (request) => {
   const { id } = request.params
-  const selectAll = db.prepare('SELECT id, role, text, created_at FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC')
+  const selectAll = db.prepare('SELECT id, role, text, proposals, created_at FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC')
 
   const existing = selectAll.all(id)
-  if (existing.length > 0) return existing
+  if (existing.length > 0) return existing.map(parseChatMessage)
 
   const exercise = db.prepare('SELECT name FROM exercises WHERE id = ?').get(id)
   if (!exercise) return []
 
   const greeting = `Ask me anything about ${exercise.name} — form cues, alternatives, or why it's in your plan.`
   db.prepare('INSERT INTO chat_messages (exercise_id, role, text) VALUES (?, ?, ?)').run(id, 'assistant', greeting)
-  return selectAll.all(id)
+  return selectAll.all(id).map(parseChatMessage)
 })
 
 fastify.post('/api/exercises/:id/chat', async (request, reply) => {
@@ -399,11 +403,11 @@ fastify.post('/api/exercises/:id/chat', async (request, reply) => {
     return { error: 'Exercise not found' }
   }
 
-  const insert = db.prepare('INSERT INTO chat_messages (exercise_id, role, text) VALUES (?, ?, ?)')
-  const selectById = db.prepare('SELECT id, role, text, created_at FROM chat_messages WHERE id = ?')
+  const insert = db.prepare('INSERT INTO chat_messages (exercise_id, role, text, proposals) VALUES (?, ?, ?, ?)')
+  const selectById = db.prepare('SELECT id, role, text, proposals, created_at FROM chat_messages WHERE id = ?')
 
-  const userResult = insert.run(id, 'user', text.trim())
-  const userMessage = selectById.get(userResult.lastInsertRowid)
+  const userResult = insert.run(id, 'user', text.trim(), null)
+  const userMessage = parseChatMessage(selectById.get(userResult.lastInsertRowid))
 
   const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(exercise.user_id)
   const profile = profileRow
@@ -412,20 +416,132 @@ fastify.post('/api/exercises/:id/chat', async (request, reply) => {
 
   const history = db.prepare('SELECT role, text FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC').all(id)
 
-  let replyText
+  let generated
   try {
-    replyText = await generateChatReply(exercise, profile, history)
+    generated = await generateChatReply(exercise, profile, history)
   } catch (err) {
     logError(`POST /api/exercises/${id}/chat`, new Error(describeOpenAIError(err)))
     reply.code(502)
     return { error: 'Failed to generate reply', userMessage }
   }
 
-  const assistantResult = insert.run(id, 'assistant', replyText)
-  const assistantMessage = selectById.get(assistantResult.lastInsertRowid)
+  const assistantResult = insert.run(id, 'assistant', generated.text || '', generated.proposals.length > 0 ? JSON.stringify(generated.proposals) : null)
+  const assistantMessage = parseChatMessage(selectById.get(assistantResult.lastInsertRowid))
 
   reply.code(201)
   return { userMessage, assistantMessage }
+})
+
+function diffStatChange(existing, payload) {
+  const parts = []
+  const fields = [
+    ['weight', 'weight', (v) => `${v} kg`],
+    ['reps', 'reps', (v) => `${v}`],
+    ['sets', 'sets', (v) => `${v}`],
+    ['duration', 'duration', (v) => `${v}s`],
+  ]
+  for (const [key, label, fmt] of fields) {
+    const before = existing[key]
+    const after = payload[key] ?? null
+    if (before !== after && (before != null || after != null)) {
+      parts.push(`${label} ${before != null ? fmt(before) : '—'} → ${after != null ? fmt(after) : '—'}`)
+    }
+  }
+  return parts
+}
+
+fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
+  const { id } = request.params
+  const { type, payload } = request.body || {}
+
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  const insertMessage = db.prepare('INSERT INTO chat_messages (exercise_id, role, text, proposals) VALUES (?, ?, ?, ?)')
+  const selectMessageById = db.prepare('SELECT id, role, text, proposals, created_at FROM chat_messages WHERE id = ?')
+
+  if (type === 'stat_change') {
+    const { sets, reps, weight, duration } = payload || {}
+    const parts = diffStatChange(existing, payload || {})
+
+    db.prepare('UPDATE exercises SET sets = ?, reps = ?, weight = ?, duration = ? WHERE id = ?')
+      .run(sets ?? null, reps ?? null, weight ?? null, duration ?? null, id)
+
+    const confirmText = parts.length > 0 ? `Updated: ${parts.join(', ')}.` : 'Updated the exercise stats.'
+    const result = insertMessage.run(id, 'assistant', confirmText, null)
+    const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
+
+    const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: false }
+  }
+
+  if (type === 'swap') {
+    const { reason, other_text } = payload || {}
+    if (!VALID_SWAP_REASONS.includes(reason)) {
+      reply.code(400)
+      return { error: 'Invalid reason' }
+    }
+
+    const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
+    const profile = profileRow
+      ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
+      : null
+
+    const swapDayPlan = db.prepare('SELECT title FROM day_plans WHERE user_id = ? AND day = ?').get(existing.user_id, existing.day)
+    const swapDayTitle = swapDayPlan?.title || null
+
+    const exercise = { name: existing.name, description: existing.description, bullets: JSON.parse(existing.bullets) }
+
+    let generated
+    try {
+      generated = await generateSwapExercise(exercise, reason, other_text || '', profile, swapDayTitle)
+    } catch (err) {
+      logError('POST /api/exercises/:id/chat/confirm (swap)', new Error(describeOpenAIError(err)))
+      reply.code(502)
+      return { error: 'Failed to generate replacement exercise' }
+    }
+
+    db.prepare(
+      'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
+    ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
+
+    db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
+
+    const result = insertMessage.run(id, 'assistant', `Swapped to ${generated.name}.`, null)
+    const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
+
+    const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: true }
+  }
+
+  if (type === 'video_change') {
+    let videoId = null
+    try {
+      videoId = await findVideoForExercise(existing.name)
+    } catch (err) {
+      logError('POST /api/exercises/:id/chat/confirm (video)', new Error(describeOpenAIError(err)))
+    }
+
+    let confirmText
+    if (videoId) {
+      db.prepare('UPDATE exercises SET video_id = ? WHERE id = ?').run(videoId, id)
+      confirmText = 'Updated the demo video.'
+    } else {
+      confirmText = "Couldn't find a better video — kept the current one."
+    }
+
+    const result = insertMessage.run(id, 'assistant', confirmText, null)
+    const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
+
+    const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: false }
+  }
+
+  reply.code(400)
+  return { error: 'Invalid proposal type' }
 })
 
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {

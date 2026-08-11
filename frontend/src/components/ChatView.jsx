@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import SendIcon from './icons/SendIcon'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -67,6 +68,20 @@ function FormattedMessage({ text }) {
   })
 }
 
+function proposalLabel(proposal, exercise) {
+  if (proposal.type === 'swap') return 'Swap exercise'
+  if (proposal.type === 'video_change') return 'Change video'
+
+  const { sets, reps, weight, duration } = proposal.payload || {}
+  const parts = []
+  if (weight != null && weight !== exercise?.weight) parts.push(`weight ${exercise?.weight ?? '—'} → ${weight} kg`)
+  if (reps != null && reps !== exercise?.reps) parts.push(`reps ${exercise?.reps ?? '—'} → ${reps}`)
+  if (sets != null && sets !== exercise?.sets) parts.push(`sets ${exercise?.sets ?? '—'} → ${sets}`)
+  if (duration != null && duration !== exercise?.duration) parts.push(`duration ${exercise?.duration ?? '—'} → ${duration}s`)
+
+  return parts.length > 0 ? `Change ${parts.join(', ')}` : 'Update exercise'
+}
+
 const SUGGESTED_QUESTIONS = [
   'Which muscles should I feel this in?',
   'How do I make this harder?',
@@ -80,12 +95,13 @@ const SUGGESTED_QUESTIONS = [
   "What's a good warm-up for this?",
 ]
 
-function ChatView({ exercise, isOffline }) {
+function ChatView({ exercise, isOffline, onExerciseUpdated }) {
   const [messages, setMessages] = useState(() => [
     {
       id: 'seed-1',
       role: 'assistant',
       text: `Ask me anything about ${exercise?.name || 'this exercise'} — form cues, alternatives, or why it's in your plan.`,
+      proposals: [],
     },
   ])
   const [draft, setDraft] = useState('')
@@ -93,6 +109,8 @@ function ChatView({ exercise, isOffline }) {
   const [placeholder] = useState(() => SUGGESTED_QUESTIONS[Math.floor(Math.random() * SUGGESTED_QUESTIONS.length)])
   const [showTopFade, setShowTopFade] = useState(false)
   const [showBottomFade, setShowBottomFade] = useState(false)
+  const [confirmingId, setConfirmingId] = useState(null)
+  const [swapConfirmProposal, setSwapConfirmProposal] = useState(null)
   const listRef = useRef(null)
 
   function updateScrollUI() {
@@ -108,7 +126,7 @@ function ChatView({ exercise, isOffline }) {
       .then((res) => (res.ok ? res.json() : []))
       .then((history) => {
         if (history.length > 0) {
-          setMessages(history.map((m) => ({ id: m.id, role: m.role, text: m.text })))
+          setMessages(history.map((m) => ({ id: m.id, role: m.role, text: m.text, proposals: m.proposals || [] })))
         }
       })
       .catch(() => {})
@@ -123,7 +141,7 @@ function ChatView({ exercise, isOffline }) {
     const trimmed = (text ?? draft).trim()
     if (!trimmed || thinking || isOffline || !exercise?.id) return
 
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', text: trimmed }])
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', text: trimmed, proposals: [] }])
     setDraft('')
     setThinking(true)
 
@@ -139,7 +157,7 @@ function ChatView({ exercise, isOffline }) {
         if (data?.assistantMessage) {
           setMessages((current) => [
             ...current,
-            { id: data.assistantMessage.id, role: 'assistant', text: data.assistantMessage.text },
+            { id: data.assistantMessage.id, role: 'assistant', text: data.assistantMessage.text, proposals: data.assistantMessage.proposals || [] },
           ])
           // Refresh the cached GET history so it's up to date for offline viewing later —
           // the POST response alone doesn't update the service worker's cached copy of it.
@@ -150,13 +168,68 @@ function ChatView({ exercise, isOffline }) {
       .finally(() => setThinking(false))
   }
 
+  function applyProposal(proposal) {
+    if (!exercise?.id || confirmingId) return
+    setConfirmingId(proposal.id)
+    setSwapConfirmProposal(null)
+
+    fetch(`${API_BASE}/api/exercises/${exercise.id}/chat/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: proposal.type, payload: proposal.payload }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return
+        if (data.historyReset) {
+          setMessages([{ id: data.confirmationMessage.id, role: 'assistant', text: data.confirmationMessage.text, proposals: [] }])
+        } else {
+          setMessages((current) => [
+            ...current,
+            { id: data.confirmationMessage.id, role: 'assistant', text: data.confirmationMessage.text, proposals: [] },
+          ])
+        }
+        if (data.updatedExercise) onExerciseUpdated?.(data.updatedExercise)
+        fetch(`${API_BASE}/api/exercises/${exercise.id}/chat`).catch(() => {})
+      })
+      .catch(() => {})
+      .finally(() => setConfirmingId(null))
+  }
+
+  function confirmProposal(proposal) {
+    if (proposal.type === 'swap') {
+      setSwapConfirmProposal(proposal)
+      return
+    }
+    applyProposal(proposal)
+  }
+
+  const lastMessage = messages[messages.length - 1]
+
   return (
     <div className="chat-view">
       <div className="chat-messages-wrap">
         <div className="chat-messages" ref={listRef} onScroll={updateScrollUI}>
           {messages.map((message) => (
-            <div key={message.id} className={`chat-bubble ${message.role === 'user' ? 'is-user' : 'is-assistant'}`}>
-              <FormattedMessage text={message.text} />
+            <div key={message.id} className={`chat-bubble-group ${message.role === 'user' ? 'is-user' : 'is-assistant'}`}>
+              <div className={`chat-bubble ${message.role === 'user' ? 'is-user' : 'is-assistant'}`}>
+                <FormattedMessage text={message.text} />
+              </div>
+              {message === lastMessage && message.proposals?.length > 0 && (
+                <div className="chat-proposal-row">
+                  {message.proposals.map((proposal) => (
+                    <button
+                      key={proposal.id}
+                      type="button"
+                      className="chat-proposal-pill"
+                      disabled={!!confirmingId}
+                      onClick={() => confirmProposal(proposal)}
+                    >
+                      {confirmingId === proposal.id ? 'Applying…' : proposalLabel(proposal, exercise)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {thinking && (
@@ -193,6 +266,28 @@ function ChatView({ exercise, isOffline }) {
           <SendIcon size={20} />
         </button>
       </div>
+
+      {swapConfirmProposal && createPortal(
+        <div className="modal-overlay regen-confirm-overlay" onMouseDown={() => setSwapConfirmProposal(null)}>
+          <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-box regen-confirm-box">
+              <p className="regen-confirm-heading">Swap this exercise?</p>
+              <p className="regen-confirm-body">
+                This will replace the exercise and clear this chat conversation. This cannot be undone.
+              </p>
+              <div className="regen-confirm-actions">
+                <button className="regen-confirm-cancel" onClick={() => setSwapConfirmProposal(null)}>
+                  Cancel
+                </button>
+                <button className="regen-confirm-ok" onClick={() => applyProposal(swapConfirmProposal)}>
+                  Yes, swap it
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
