@@ -582,17 +582,74 @@ async function generateSwapExercise(exercise, reason, otherText, profile, dayTit
   )
 }
 
-// ── Exercise chat (mocked for now — replace with a real call once wired up) ──
+// ── Exercise chat ─────────────────────────────────────────────────────────────
 
-const MOCK_CHAT_REPLIES = [
-  "Good question — focus on keeping the movement controlled rather than rushing through reps. Form matters more than speed here.",
-  "That depends on how it feels for you. If you're not feeling it in the target muscle, double-check your setup and range of motion first.",
-  "A common mistake is letting momentum take over. Slow down the eccentric (lowering) part of the movement for better results.",
-  "You could try a lighter weight for a few sessions to really nail the form before adding load back on.",
-]
+function buildChatSystemPrompt(exercise, profile) {
+  const lines = [
+    "You are the user's personal training assistant, chatting with them about one specific exercise in their workout plan.",
+    '',
+    '## Tone',
+    '- Professional but friendly and encouraging — like a knowledgeable coach pal, not a textbook.',
+    '- Concise by default — keep answers short and to the point, no repeating yourself. If a question genuinely needs a longer answer, give one, using bullets to keep it scannable rather than a wall of text.',
+    '- Structured: Make use of bullets or numbered lists whenever necessary',
+    '- Light on jargon — explain in plain language, only use technical terms the user already used first.',
+    '- Positive attitude, but honest — do not just tell the user what they want to hear.',
+    "- If the user reports pain, take it seriously: distinguish normal muscle fatigue from sharp or joint pain, advise stopping if something feels wrong.",
+    '- Stay focused on this exercise and the user\'s fitness question. Do not wander into unrelated topics. Reject any non-topic subjects.',
+    '',
+    '## This exercise',
+    `Name: ${exercise.name}`,
+    `Category: ${exercise.category}`,
+    `Description: ${exercise.description}`,
+  ]
 
-async function generateChatReply(exercise, history, userText) {
-  return MOCK_CHAT_REPLIES[Math.floor(Math.random() * MOCK_CHAT_REPLIES.length)]
+  const bullets = (() => {
+    try { return JSON.parse(exercise.bullets) } catch { return [] }
+  })()
+  if (bullets.length > 0) {
+    lines.push('Instructions:')
+    for (const b of bullets) lines.push(`- ${b}`)
+  }
+
+  if (exercise.sets != null) lines.push(`Sets: ${exercise.sets}`)
+  if (exercise.reps != null) lines.push(`Reps: ${exercise.reps}`)
+  if (exercise.weight != null) lines.push(`Weight: ${exercise.weight} kg`)
+  if (exercise.duration != null) lines.push(`Duration: ${exercise.duration}s`)
+
+  lines.push('')
+  lines.push('## User profile')
+  if (profile) {
+    if (profile.age != null) lines.push(`Age: ${profile.age}`)
+    if (profile.height != null) lines.push(`Height: ${profile.height} cm`)
+    if (profile.weight != null) lines.push(`Weight: ${profile.weight} kg`)
+
+    const goals = Array.isArray(profile.goals) ? profile.goals : []
+    if (goals.length > 0) {
+      lines.push('Goals:')
+      for (const id of goals) {
+        const label = GOAL_LABELS[id]
+        if (label) lines.push(`- ${label}`)
+      }
+    }
+
+    if (profile.beginner_mode) {
+      lines.push('The user is new to the gym — keep guidance especially clear and beginner-friendly.')
+    }
+  } else {
+    lines.push('No profile on file.')
+  }
+
+  return lines.join('\n')
+}
+
+async function generateChatReply(exercise, profile, history) {
+  const messages = [
+    { role: 'system', content: buildChatSystemPrompt(exercise, profile) },
+    ...history.map((m) => ({ role: m.role, content: m.text })),
+  ]
+
+  const data = await callOpenAI({ model: PLAN_MODEL, messages })
+  return data.choices[0].message.content
 }
 
 module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, checkOpenAIHealth, describeOpenAIError }

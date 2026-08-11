@@ -405,8 +405,21 @@ fastify.post('/api/exercises/:id/chat', async (request, reply) => {
   const userResult = insert.run(id, 'user', text.trim())
   const userMessage = selectById.get(userResult.lastInsertRowid)
 
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(exercise.user_id)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
+    : null
+
   const history = db.prepare('SELECT role, text FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC').all(id)
-  const replyText = await generateChatReply(exercise, history, text.trim())
+
+  let replyText
+  try {
+    replyText = await generateChatReply(exercise, profile, history)
+  } catch (err) {
+    logError(`POST /api/exercises/${id}/chat`, new Error(describeOpenAIError(err)))
+    reply.code(502)
+    return { error: 'Failed to generate reply', userMessage }
+  }
 
   const assistantResult = insert.run(id, 'assistant', replyText)
   const assistantMessage = selectById.get(assistantResult.lastInsertRowid)

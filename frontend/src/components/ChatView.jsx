@@ -3,6 +3,70 @@ import SendIcon from './icons/SendIcon'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
+function renderInline(text) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part,
+  )
+}
+
+function parseFormattedBlocks(text) {
+  const blocks = []
+  let list = null
+
+  function flushList() {
+    if (list) blocks.push(list)
+    list = null
+  }
+
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) { flushList(); continue }
+
+    const bullet = line.match(/^[-*]\s+(.*)$/)
+    const ordered = line.match(/^\d+\.\s+(.*)$/)
+
+    if (bullet) {
+      if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', items: [] } }
+      list.items.push(bullet[1])
+    } else if (ordered) {
+      if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', items: [] } }
+      list.items.push(ordered[1])
+    } else {
+      flushList()
+      blocks.push({ type: 'p', text: line })
+    }
+  }
+  flushList()
+
+  return blocks
+}
+
+function FormattedMessage({ text }) {
+  const blocks = parseFormattedBlocks(text)
+  return blocks.map((block, i) => {
+    if (block.type === 'p') return <p key={i} className="chat-text-block">{renderInline(block.text)}</p>
+    if (block.type === 'ul') {
+      return (
+        <ul key={i} className="chat-list-block instruction-bullets">
+          {block.items.map((item, j) => (
+            <li key={j}>
+              <span className="bullet-marker" aria-hidden="true" />
+              <span>{renderInline(item)}</span>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    return (
+      <ol key={i} className="chat-list-block chat-list-ordered">
+        {block.items.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
+      </ol>
+    )
+  })
+}
+
 const SUGGESTED_QUESTIONS = [
   'Which muscles should I feel this in?',
   'How do I make this harder?',
@@ -92,7 +156,7 @@ function ChatView({ exercise, isOffline }) {
         <div className="chat-messages" ref={listRef} onScroll={updateScrollUI}>
           {messages.map((message) => (
             <div key={message.id} className={`chat-bubble ${message.role === 'user' ? 'is-user' : 'is-assistant'}`}>
-              {message.text}
+              <FormattedMessage text={message.text} />
             </div>
           ))}
           {thinking && (

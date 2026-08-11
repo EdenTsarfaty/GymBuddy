@@ -1816,6 +1816,7 @@
   overflow-y: auto;
   scrollbar-width: auto;
   scrollbar-color: auto;
+  padding-right: 4px;
 }
 
 .chat-fade {
@@ -1861,7 +1862,7 @@
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.4;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .chat-bubble.is-assistant {
@@ -1879,6 +1880,52 @@
   border-bottom-right-radius: 4px;
 }
 
+.chat-text-block,
+.chat-list-block {
+  margin: 0;
+  padding: 0;
+}
+
+.chat-text-block + .chat-text-block,
+.chat-text-block + .chat-list-block,
+.chat-list-block + .chat-text-block,
+.chat-list-block + .chat-list-block {
+  margin-top: 6px;
+}
+
+.chat-list-block.instruction-bullets {
+  padding-left: 4px;
+  font-weight: inherit;
+}
+
+.chat-list-block.instruction-bullets li {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.chat-text-block strong,
+.chat-list-block strong {
+  font-weight: 800;
+}
+
+.chat-list-ordered {
+  list-style: decimal;
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-list-ordered li + li {
+  margin-top: 0;
+}
+
+.chat-bubble.is-user .bullet-marker {
+  background: var(--bg);
+}
+
 .chat-typing {
   display: flex;
   align-items: center;
@@ -1890,7 +1937,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--accent);
   animation: chat-typing-bounce 1.2s ease-in-out infinite;
 }
 
