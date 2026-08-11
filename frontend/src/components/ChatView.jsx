@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import SendIcon from './icons/SendIcon'
+import PencilIcon from './icons/PencilIcon'
+import SwapIcon from './icons/SwapIcon'
+import YouTubeIcon from './icons/YouTubeIcon'
+
+const PROPOSAL_ICON = {
+  stat_change: PencilIcon,
+  swap: SwapIcon,
+  video_change: YouTubeIcon,
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
@@ -112,6 +121,7 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
   const [confirmingId, setConfirmingId] = useState(null)
   const [swapConfirmProposal, setSwapConfirmProposal] = useState(null)
   const listRef = useRef(null)
+  const inputRef = useRef(null)
 
   function updateScrollUI() {
     const el = listRef.current
@@ -136,6 +146,13 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
     updateScrollUI()
   }, [messages, thinking])
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [draft])
 
   function sendMessage(text) {
     const trimmed = (text ?? draft).trim()
@@ -217,26 +234,32 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
               </div>
               {message === lastMessage && message.proposals?.length > 0 && (
                 <div className="chat-proposal-row">
-                  {message.proposals.map((proposal) => (
-                    <button
-                      key={proposal.id}
-                      type="button"
-                      className="chat-proposal-pill"
-                      disabled={!!confirmingId}
-                      onClick={() => confirmProposal(proposal)}
-                    >
-                      {confirmingId === proposal.id ? 'Applying…' : proposalLabel(proposal, exercise)}
-                    </button>
-                  ))}
+                  {message.proposals.map((proposal) => {
+                    const Icon = PROPOSAL_ICON[proposal.type]
+                    return (
+                      <button
+                        key={proposal.id}
+                        type="button"
+                        className="chat-proposal-pill"
+                        disabled={!!confirmingId}
+                        onClick={() => confirmProposal(proposal)}
+                      >
+                        {Icon && <Icon size={14} />}
+                        {confirmingId === proposal.id ? 'Applying…' : proposalLabel(proposal, exercise)}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
           ))}
           {thinking && (
-            <div className="chat-bubble is-assistant chat-typing">
-              <span className="chat-typing-dot" />
-              <span className="chat-typing-dot" />
-              <span className="chat-typing-dot" />
+            <div className="chat-bubble-group is-assistant">
+              <div className="chat-bubble is-assistant chat-typing">
+                <span className="chat-typing-dot" />
+                <span className="chat-typing-dot" />
+                <span className="chat-typing-dot" />
+              </div>
             </div>
           )}
         </div>
@@ -245,15 +268,19 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
       </div>
 
       <div className="chat-input-bar">
-        <input
+        <textarea
+          ref={inputRef}
           className="chat-input"
-          type="text"
+          rows={1}
           value={draft}
           placeholder={isOffline ? 'Unavailable offline' : placeholder}
           disabled={isOffline}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') sendMessage()
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              sendMessage()
+            }
           }}
         />
         <button

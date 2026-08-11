@@ -1902,6 +1902,9 @@
 }
 
 .chat-proposal-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -1912,6 +1915,10 @@
   padding: 7px 16px;
   cursor: pointer;
   transition: opacity 0.15s ease;
+}
+
+.chat-proposal-pill svg {
+  flex-shrink: 0;
 }
 
 .chat-proposal-pill:hover:not(:disabled) {
@@ -1994,7 +2001,7 @@
 
 .chat-input-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   padding-top: 8px;
 }
@@ -2002,17 +2009,26 @@
 .chat-input {
   flex: 1;
   box-sizing: border-box;
-  height: 44px;
+  min-height: 44px;
+  max-height: 140px;
+  resize: none;
+  overflow-y: auto;
   font: inherit;
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.4;
   color: var(--text-h);
   background: var(--chip-bg);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0 16px;
+  border-radius: 22px;
+  padding: 11px 16px;
   outline: none;
   transition: border-color 0.15s ease;
+  scrollbar-width: none;
+}
+
+.chat-input::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-input:disabled {
