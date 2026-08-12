@@ -1,5 +1,14 @@
+const { countTokens } = require('./tokenizer')
+
 const OPENAI_MODEL = 'gpt-5.4-nano'
 const PLAN_MODEL = 'gpt-5.4-mini'
+
+// gpt-5.4-mini: 400k context window, 128k max output. We cap our own output well
+// below that (a coaching reply is never more than a few hundred tokens) so the
+// budget is predictable and a runaway generation can't eat the whole window.
+const CHAT_CONTEXT_WINDOW = 400000
+const CHAT_MAX_COMPLETION_TOKENS = 2000
+const CHAT_SAFETY_MARGIN = 1000
 
 const GOAL_LABELS = {
   lose_weight:   'I want to lose weight',
@@ -424,6 +433,7 @@ const PROPOSE_VIDEO_CHANGE_TOOL = {
 }
 
 const CHAT_TOOLS = [PROPOSE_STAT_CHANGE_TOOL, PROPOSE_SWAP_TOOL, PROPOSE_VIDEO_CHANGE_TOOL]
+const CHAT_TOOLS_TOKENS = countTokens(JSON.stringify(CHAT_TOOLS))
 const MAX_CHAT_TOOL_ROUNDS = 4
 
 const PROPOSAL_TYPE_BY_TOOL = {
@@ -441,6 +451,7 @@ async function runChatWithTools(messages) {
       messages,
       tools: CHAT_TOOLS,
       tool_choice: 'auto',
+      max_completion_tokens: CHAT_MAX_COMPLETION_TOKENS,
     })
 
     const choice = data.choices[0]
@@ -746,10 +757,33 @@ function buildChatSystemPrompt(exercise, profile) {
   return lines.join('\n')
 }
 
+// Keeps only whole messages, newest first, that fit under budget — never cuts a
+// message short. The current (most recent) message is always kept even if it
+// alone were to exceed budget, since dropping it would leave nothing to reply to.
+function trimHistoryToBudget(history, budget) {
+  const kept = []
+  let used = 0
+
+  for (let i = history.length - 1; i >= 0; i--) {
+    const message = history[i]
+    const tokens = message.token_count ?? countTokens(message.text)
+    if (kept.length > 0 && used + tokens > budget) break
+    kept.push(message)
+    used += tokens
+  }
+
+  return kept.reverse()
+}
+
 async function generateChatReply(exercise, profile, history) {
+  const systemPrompt = buildChatSystemPrompt(exercise, profile)
+  const reserved = countTokens(systemPrompt) + CHAT_TOOLS_TOKENS + CHAT_MAX_COMPLETION_TOKENS + CHAT_SAFETY_MARGIN
+  const historyBudget = Math.max(CHAT_CONTEXT_WINDOW - reserved, 0)
+  const trimmedHistory = trimHistoryToBudget(history, historyBudget)
+
   const messages = [
-    { role: 'system', content: buildChatSystemPrompt(exercise, profile) },
-    ...history.map((m) => ({ role: m.role, content: m.text })),
+    { role: 'system', content: systemPrompt },
+    ...trimmedHistory.map((m) => ({ role: m.role, content: m.text })),
   ]
 
   return runChatWithTools(messages)

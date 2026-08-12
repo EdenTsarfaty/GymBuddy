@@ -70,6 +70,7 @@ db.exec(`
 `)
 db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_exercise ON chat_messages(exercise_id)')
 try { db.exec('ALTER TABLE chat_messages ADD COLUMN proposals TEXT') } catch {}
+try { db.exec('ALTER TABLE chat_messages ADD COLUMN token_count INTEGER') } catch {}
 
 
 const seedUser = (userId, exercises) => {
