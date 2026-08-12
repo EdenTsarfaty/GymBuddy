@@ -9,6 +9,7 @@ const PROPOSAL_ICON = {
   stat_change: PencilIcon,
   swap: SwapIcon,
   video_change: YouTubeIcon,
+  watch_video: YouTubeIcon,
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
@@ -80,6 +81,7 @@ function FormattedMessage({ text }) {
 function proposalLabel(proposal, exercise) {
   if (proposal.type === 'swap') return 'Swap exercise'
   if (proposal.type === 'video_change') return 'Change video'
+  if (proposal.type === 'watch_video') return 'Watch video'
 
   const { sets, reps, weight, duration } = proposal.payload || {}
   const parts = []
@@ -198,13 +200,16 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return
+        const confirmationMessage = {
+          id: data.confirmationMessage.id,
+          role: 'assistant',
+          text: data.confirmationMessage.text,
+          proposals: data.confirmationMessage.proposals || [],
+        }
         if (data.historyReset) {
-          setMessages([{ id: data.confirmationMessage.id, role: 'assistant', text: data.confirmationMessage.text, proposals: [] }])
+          setMessages([confirmationMessage])
         } else {
-          setMessages((current) => [
-            ...current,
-            { id: data.confirmationMessage.id, role: 'assistant', text: data.confirmationMessage.text, proposals: [] },
-          ])
+          setMessages((current) => [...current, confirmationMessage])
         }
         if (data.updatedExercise) onExerciseUpdated?.(data.updatedExercise)
         fetch(`${API_BASE}/api/exercises/${exercise.id}/chat`).catch(() => {})
@@ -214,6 +219,10 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
   }
 
   function confirmProposal(proposal) {
+    if (proposal.type === 'watch_video') {
+      window.open(`https://www.youtube.com/watch?v=${proposal.payload.video_id}`, '_blank')
+      return
+    }
     if (proposal.type === 'swap') {
       setSwapConfirmProposal(proposal)
       return

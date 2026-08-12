@@ -526,14 +526,16 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     }
 
     let confirmText
+    let confirmProposals = null
     if (videoId) {
       db.prepare('UPDATE exercises SET video_id = ? WHERE id = ?').run(videoId, id)
       confirmText = 'Updated the demo video.'
+      confirmProposals = JSON.stringify([{ id: crypto.randomUUID(), type: 'watch_video', payload: { video_id: videoId } }])
     } else {
       confirmText = "Couldn't find a better video — kept the current one."
     }
 
-    const result = insertMessage.run(id, 'assistant', confirmText, null)
+    const result = insertMessage.run(id, 'assistant', confirmText, confirmProposals)
     const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
 
     const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
