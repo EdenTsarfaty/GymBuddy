@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import ChatView from './components/ChatView'
+import TimerView from './components/TimerView'
 import WorkoutCard from './components/WorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
@@ -15,7 +16,7 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.0'
+const APP_VERSION = 'beta 0.6.1'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -369,6 +370,9 @@ function App() {
   const [chatExercise, setChatExercise] = useState(null)
   const [chatReturnExerciseId, setChatReturnExerciseId] = useState(null)
   const chatScrollYRef = useRef(0)
+  const [timerExercise, setTimerExercise] = useState(null)
+  const [timerReturnExerciseId, setTimerReturnExerciseId] = useState(null)
+  const timerScrollYRef = useRef(0)
 
   function openChat(exercise) {
     chatScrollYRef.current = window.scrollY
@@ -387,6 +391,24 @@ function App() {
     window.scrollTo(0, chatScrollYRef.current)
     setChatReturnExerciseId(null)
   }, [view, chatReturnExerciseId])
+
+  function openTimer(exercise) {
+    timerScrollYRef.current = window.scrollY
+    setTimerExercise(exercise)
+    setView('timer')
+  }
+
+  function closeTimer() {
+    setTimerReturnExerciseId(timerExercise?.id ?? null)
+    setView('home')
+    setTimerExercise(null)
+  }
+
+  useEffect(() => {
+    if (view !== 'home' || timerReturnExerciseId == null) return
+    window.scrollTo(0, timerScrollYRef.current)
+    setTimerReturnExerciseId(null)
+  }, [view, timerReturnExerciseId])
 
   async function handleGenerate(settings) {
     setRegenOpen(false)
@@ -455,20 +477,20 @@ function App() {
   }
 
   return (
-    <div className={`page ${view === 'chat' ? 'is-chat' : ''}`}>
+    <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''}`}>
       <header className="page-header">
-        {view === 'chat' ? (
+        {view === 'chat' || view === 'timer' ? (
           <>
             <button
               type="button"
               className="chat-back-btn"
-              onClick={closeChat}
+              onClick={view === 'timer' ? closeTimer : closeChat}
               aria-label="Back to workout"
             >
               <ChevronLeftIcon size={20} />
             </button>
             <div className="plan-picker">
-              <span className="today is-static">{chatExercise?.name}</span>
+              <span className="today is-static">{view === 'timer' ? timerExercise?.name : chatExercise?.name}</span>
             </div>
           </>
         ) : (
@@ -573,6 +595,8 @@ function App() {
       <div key={view} className="view-content">
         {view === 'chat' ? (
           <ChatView exercise={chatExercise} isOffline={isOffline} onExerciseUpdated={updateExerciseFromChat} />
+        ) : view === 'timer' ? (
+          <TimerView exercise={timerExercise} />
         ) : view === 'settings' ? (
           <SettingsPage
             themeMode={themeMode}
@@ -633,6 +657,7 @@ function App() {
                   onSave={(updates, changedFields) => updateExercise(item.id, updates, changedFields)}
                   onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
                   onChat={() => openChat(item)}
+                  onOpenTimer={() => openTimer(item)}
                 />
               ))}
           </main>

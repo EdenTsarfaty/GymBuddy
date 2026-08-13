@@ -1800,6 +1800,156 @@
   gap: 16px;
 }
 
+/* Timer view */
+.page.is-timer {
+  height: 100svh;
+  overflow: hidden;
+}
+
+.page.is-timer .view-content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.timer-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.timer-ring-wrap {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  --dim: color-mix(in srgb, var(--accent) 14%, var(--card-bg));
+  --bright: var(--accent);
+}
+
+.timer-ring-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 24px), #000 calc(100% - 22px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 24px), #000 calc(100% - 22px));
+}
+
+/* One shape for the whole run. The head sits at local 360deg, with the trail
+   ramping dim→bright back to it, and the untouched part before the arc starts
+   transparent. --arc grows 0→360deg through the first lap and then stays put,
+   so from lap 2 on this is a rigid full-circle gradient that only rotates:
+   brightest at the head, darkest immediately ahead of it (the part about to be
+   painted over), easing back up to bright the long way round. */
+.timer-ring-sweep {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent calc(360deg - var(--arc)),
+    var(--dim) calc(360deg - var(--arc)),
+    var(--bright) 359.25deg,
+    var(--bright) 360deg
+  );
+}
+
+.timer-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.timer-time {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.timer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.timer-btn svg {
+  display: block;
+}
+
+.timer-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.timer-btn-play {
+  width: 72px;
+  height: 72px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+}
+
+.timer-btn-play:hover {
+  color: var(--bg);
+  opacity: 0.85;
+}
+
+.timer-sets {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.timer-sets-label {
+  font-size: 31px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.timer-sets-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 260px;
+}
+
+.timer-set-square {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.timer-set-square.is-done {
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+}
+
 .chat-messages-wrap {
   position: relative;
   display: flex;

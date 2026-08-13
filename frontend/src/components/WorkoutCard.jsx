@@ -14,6 +14,7 @@ import SwapIcon from './icons/SwapIcon'
 import TreadmillIcon from './icons/TreadmillIcon'
 import PlankIcon from './icons/PlankIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
+import StopwatchIcon from './icons/StopwatchIcon'
 
 const CATEGORY_META = {
   free_weight:  { label: 'Free weight',  Icon: DumbbellIcon },
@@ -120,7 +121,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
@@ -421,6 +422,16 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                   >
                     <YouTubeIcon size={16} />
                   </button>
+                  {hasDuration && (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="Open timer"
+                      onClick={() => onOpenTimer?.()}
+                    >
+                      <StopwatchIcon size={16} />
+                    </button>
+                  )}
                 </>
               )}
             </div>
