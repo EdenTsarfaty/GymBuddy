@@ -72,6 +72,19 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_exercise ON chat_messages(
 try { db.exec('ALTER TABLE chat_messages ADD COLUMN proposals TEXT') } catch {}
 try { db.exec('ALTER TABLE chat_messages ADD COLUMN token_count INTEGER') } catch {}
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS workout_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL,
+    scheduled_date TEXT NOT NULL,
+    performed_date TEXT,
+    UNIQUE(user_id, scheduled_date)
+  )
+`)
+
+try { db.exec('ALTER TABLE user_profile ADD COLUMN current_streak INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN longest_streak INTEGER DEFAULT 0') } catch {}
+
 
 const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count

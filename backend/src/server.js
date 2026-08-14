@@ -4,6 +4,7 @@ const { generateExerciseData, generateSwapExercise, generatePlanStructure, gener
 const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
+const streak = require('./streak')
 
 maybeBackupDatabase()
 
@@ -552,6 +553,35 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
 
   reply.code(400)
   return { error: 'Invalid proposal type' }
+})
+
+fastify.post('/api/workout-log/complete', async (request, reply) => {
+  const { user_id, scheduled_date, performed_date } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!scheduled_date || !/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date)) {
+    reply.code(400)
+    return { error: 'scheduled_date is required (YYYY-MM-DD)' }
+  }
+
+  const scheduledWeekdays = streak.getScheduledWeekdays(uid)
+  if (!scheduledWeekdays.has(streak.weekdayName(scheduled_date))) {
+    reply.code(400)
+    return { error: 'scheduled_date is not one of this user\'s scheduled workout days' }
+  }
+
+  const result = streak.markPerformed(uid, scheduled_date, performed_date)
+  if (!result) {
+    reply.code(404)
+    return { error: 'No scheduled workout found for that date' }
+  }
+
+  return result
+})
+
+fastify.get('/api/workout-log/streak', async (request) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  return streak.recomputeStreak(uid)
 })
 
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
