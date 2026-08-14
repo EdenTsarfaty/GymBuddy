@@ -668,16 +668,20 @@ async function generateSwapExercise(exercise, reason, otherText, profile, dayTit
     hurts:       'This exercise hurts',
     new:         'I want a new exercise',
     unavailable: 'This exercise is unavailable in my gym',
+    dislike:     "I don't like this exercise",
     other:       otherText || 'Other',
   }
 
   const reasonText = REASON_LABELS[reason] || REASON_LABELS.other
+  // otherText already IS the reason text when reason === 'other' — only append
+  // it separately when it's supplementary detail alongside a different reason.
+  const detailsNote = reason !== 'other' && otherText ? ` Additional details: ${otherText}` : ''
   const userMessage = [
     `Exercise: ${exercise.name}`,
     `Description: ${exercise.description}`,
     `Instructions: ${exercise.bullets.join(' | ')}`,
     '',
-    `The user has asked to replace this exercise for the reason: ${reasonText}. Find a replacement exercise addressing his concern, while retaining the same muscle groups focus as the original exercise.`,
+    `The user has asked to replace this exercise for the reason: ${reasonText}.${detailsNote} Find a replacement exercise addressing his concern, while retaining the same muscle groups focus as the original exercise.`,
   ].join('\n')
 
   return runWithTools(

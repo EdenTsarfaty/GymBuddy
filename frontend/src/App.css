@@ -182,6 +182,9 @@
 .plan-menu-option:hover:not(:disabled),
 .plan-menu-option:active:not(:disabled) {
   background: var(--chip-bg);
+}
+
+.plan-menu-option.is-view-toggle {
   color: var(--accent);
 }
 
@@ -899,6 +902,10 @@
   padding: 1px 10px;
 }
 
+.stepper-value-duration {
+  min-width: 78px;
+}
+
 .edit-confirm-actions {
   display: flex;
   gap: 8px;
@@ -1538,6 +1545,46 @@
 
 .swap-radio-option.is-checked .swap-radio-label {
   color: var(--accent);
+}
+
+.swap-details-option {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.swap-checkbox-box {
+  flex-shrink: 0;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.swap-checkbox-box::after {
+  content: '';
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid var(--bg);
+  border-bottom: 2px solid var(--bg);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.swap-details-option.is-checked .swap-checkbox-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.swap-details-option.is-checked .swap-checkbox-box::after {
+  opacity: 1;
 }
 
 .swap-other-textarea {

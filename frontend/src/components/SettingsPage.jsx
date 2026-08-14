@@ -148,6 +148,7 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
         <input
           className="bio-input"
           type="text"
+          inputMode="decimal"
           value={editing ? draft : (value ?? '')}
           disabled={!editing}
           placeholder={editing ? placeholder : '—'}

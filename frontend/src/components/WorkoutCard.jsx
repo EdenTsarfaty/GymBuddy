@@ -30,17 +30,18 @@ const CATEGORY_META = {
 
 const SWAP_REASONS = [
   { id: 'hurts', label: 'This exercise hurts' },
-  { id: 'new', label: 'I want a new exercise' },
   { id: 'unavailable', label: 'This exercise is unavailable in my gym' },
-  { id: 'other', label: 'Other' },
+  { id: 'new', label: 'I want a new exercise' },
+  { id: 'dislike', label: "I don't like this exercise" },
 ]
 
 function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
   const [reason, setReason] = useState(null)
+  const [addDetails, setAddDetails] = useState(false)
   const [otherText, setOtherText] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const canConfirm = reason && (reason !== 'other' || otherText.trim())
+  const canConfirm = reason && (!addDetails || otherText.trim())
 
   async function handleConfirm() {
     if (!canConfirm) return
@@ -78,7 +79,17 @@ function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
                     <span className="swap-radio-label">{label}</span>
                   </label>
                 ))}
-                {reason === 'other' && (
+                <label className={`swap-radio-option swap-details-option ${addDetails ? 'is-checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={addDetails}
+                    onChange={(e) => setAddDetails(e.target.checked)}
+                    className="swap-radio-input"
+                  />
+                  <span className="swap-checkbox-box" />
+                  <span className="swap-radio-label">Add details</span>
+                </label>
+                {addDetails && (
                   <textarea
                     className="swap-other-textarea"
                     placeholder="Describe your reason..."
@@ -114,12 +125,18 @@ const MAX_WEIGHT = 200
 const WEIGHT_PX_PER_UNIT = 22
 const MIN_DURATION = 5
 const MAX_DURATION = 3600
-const DURATION_STEP = 15
 const MAX_REVEAL_PX = 96
 const COMPLETE_THRESHOLD_PX = 80
 const SNAP_NUDGE_PX = 10
 const CASCADE_STAGGER_MS = 70
 const CASCADE_HOLD_MS = 180
+
+function durationStepFor(seconds) {
+  if (seconds < 60) return 5
+  if (seconds < 120) return 10
+  if (seconds < 360) return 15
+  return 30
+}
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -391,16 +408,16 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                     <button
                       type="button"
                       className="stepper-btn"
-                      onClick={() => setDraftDuration((v) => Math.max(MIN_DURATION, v - DURATION_STEP))}
+                      onClick={() => setDraftDuration((v) => Math.max(MIN_DURATION, v - durationStepFor(v)))}
                       aria-label="Decrease duration"
                     >
                       <ChevronDownIcon size={14} />
                     </button>
-                    <span className="stepper-value">{formatDuration(draftDuration)}</span>
+                    <span className="stepper-value stepper-value-duration">{formatDuration(draftDuration)}</span>
                     <button
                       type="button"
                       className="stepper-btn"
-                      onClick={() => setDraftDuration((v) => Math.min(MAX_DURATION, v + DURATION_STEP))}
+                      onClick={() => setDraftDuration((v) => Math.min(MAX_DURATION, v + durationStepFor(v)))}
                       aria-label="Increase duration"
                     >
                       <ChevronUpIcon size={14} />

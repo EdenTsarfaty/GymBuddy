@@ -258,7 +258,7 @@ fastify.put('/api/profile', async (request) => {
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
-const VALID_SWAP_REASONS = ['hurts', 'new', 'unavailable', 'other']
+const VALID_SWAP_REASONS = ['hurts', 'new', 'unavailable', 'dislike', 'other']
 
 fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   const { id } = request.params

@@ -84,10 +84,10 @@ function proposalLabel(proposal, exercise) {
 
   const { sets, reps, weight, duration } = proposal.payload || {}
   const parts = []
-  if (weight != null && weight !== exercise?.weight) parts.push(`weight ${exercise?.weight ?? '—'} → ${weight} kg`)
-  if (reps != null && reps !== exercise?.reps) parts.push(`reps ${exercise?.reps ?? '—'} → ${reps}`)
-  if (sets != null && sets !== exercise?.sets) parts.push(`sets ${exercise?.sets ?? '—'} → ${sets}`)
-  if (duration != null && duration !== exercise?.duration) parts.push(`duration ${exercise?.duration ?? '—'} → ${duration}s`)
+  if (weight != null && weight !== exercise?.weight) parts.push(`weight ${exercise?.weight ?? 0} → ${weight} kg`)
+  if (reps != null && reps !== exercise?.reps) parts.push(`reps ${exercise?.reps ?? 0} → ${reps}`)
+  if (sets != null && sets !== exercise?.sets) parts.push(`sets ${exercise?.sets ?? 0} → ${sets}`)
+  if (duration != null && duration !== exercise?.duration) parts.push(`duration ${exercise?.duration ?? 0} → ${duration}s`)
 
   return parts.length > 0 ? `Change ${parts.join(', ')}` : 'Update exercise'
 }
@@ -285,10 +285,13 @@ function ChatView({ exercise, isOffline, onExerciseUpdated }) {
           disabled={isOffline}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              sendMessage()
-            }
+            if (e.key !== 'Enter') return
+            // Touch devices get a real newline on Enter, matching the native
+            // keyboard's own return key — Enter-to-send is a desktop convention.
+            const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
+            if (isTouchDevice || e.shiftKey) return
+            e.preventDefault()
+            sendMessage()
           }}
         />
         <button

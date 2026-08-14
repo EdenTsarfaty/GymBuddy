@@ -18,7 +18,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.6'
+const APP_VERSION = 'beta 0.6.6.5'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -724,7 +724,7 @@ function App() {
                   type="button"
                   role="menuitemradio"
                   aria-checked={planView === 'week'}
-                  className="plan-menu-option"
+                  className="plan-menu-option is-view-toggle"
                   onClick={openWeekDays}
                 >
                   Week
@@ -735,7 +735,7 @@ function App() {
                   type="button"
                   role="menuitemradio"
                   aria-checked={planView === 'month'}
-                  className="plan-menu-option"
+                  className="plan-menu-option is-view-toggle"
                   onClick={openMonthView}
                 >
                   Month
