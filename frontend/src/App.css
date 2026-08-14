@@ -528,7 +528,11 @@
 }
 
 .workout-card.is-completed {
-  background: color-mix(in srgb, var(--accent) 22%, var(--card-bg));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, black 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 0%,
+    color-mix(in srgb, white 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 100%
+  );
   border-color: color-mix(in srgb, var(--accent) 55%, white);
 }
 
