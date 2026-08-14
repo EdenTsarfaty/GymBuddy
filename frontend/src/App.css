@@ -277,6 +277,16 @@
   border-color: var(--accent);
 }
 
+.month-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.month-nav-btn:disabled:hover {
+  color: var(--text-h);
+  border-color: var(--border);
+}
+
 .month-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

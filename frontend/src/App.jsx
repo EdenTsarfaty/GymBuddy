@@ -270,6 +270,25 @@ function App() {
     [workoutLog, daysWithWorkouts],
   )
 
+  // Earliest month the month-view calendar can navigate back to — the month of
+  // the oldest workout_log row, or the current month if there's no history yet.
+  const earliestCalendarMonth = useMemo(() => {
+    if (workoutLog.length === 0) {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth(), 1)
+    }
+    const earliestDate = workoutLog.reduce(
+      (min, row) => (row.scheduled_date < min ? row.scheduled_date : min),
+      workoutLog[0].scheduled_date,
+    )
+    const [y, m] = earliestDate.split('-').map(Number)
+    return new Date(y, m - 1, 1)
+  }, [workoutLog])
+
+  const isPrevMonthDisabled =
+    calendarMonth.getFullYear() === earliestCalendarMonth.getFullYear() &&
+    calendarMonth.getMonth() === earliestCalendarMonth.getMonth()
+
   useEffect(() => {
     let cancelled = false
 
@@ -433,7 +452,11 @@ function App() {
   }
 
   function shiftMonth(delta) {
-    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1))
+    setCalendarMonth((current) => {
+      const next = new Date(current.getFullYear(), current.getMonth() + delta, 1)
+      if (delta < 0 && next < earliestCalendarMonth) return current
+      return next
+    })
   }
 
   function selectDay(day) {
@@ -715,6 +738,7 @@ function App() {
                     type="button"
                     className="month-nav-btn"
                     onClick={() => shiftMonth(-1)}
+                    disabled={isPrevMonthDisabled}
                     aria-label="Previous month"
                   >
                     <ChevronLeftIcon size={16} />
