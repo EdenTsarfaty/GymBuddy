@@ -1241,6 +1241,34 @@
   color: var(--accent);
 }
 
+.complete-workout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  margin-top: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.complete-workout-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.complete-workout-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .goals-save-btn {
   font: inherit;
   font-size: 14px;

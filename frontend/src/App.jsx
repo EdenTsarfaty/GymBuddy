@@ -14,10 +14,11 @@ import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
+import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.2.2'
+const APP_VERSION = 'beta 0.6.3'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -82,6 +83,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [allExercises, setAllExercises] = useState([])
   const [completedExerciseIds, setCompletedExerciseIds] = useState(() => new Set())
+  const [cascadeToken, setCascadeToken] = useState(0)
 
   function toggleCompleted(id) {
     setCompletedExerciseIds((current) => {
@@ -659,7 +661,7 @@ function App() {
             {!loading &&
               !serverDown &&
               !error &&
-              exercises.map((item) => (
+              exercises.map((item, index) => (
                 <WorkoutCard
                   key={item.id}
                   exercise={item.name}
@@ -680,8 +682,21 @@ function App() {
                   onOpenTimer={() => openTimer(item)}
                   completed={completedExerciseIds.has(item.id)}
                   onToggleComplete={() => toggleCompleted(item.id)}
+                  cascadeToken={cascadeToken}
+                  cascadeIndex={index}
                 />
               ))}
+            {!loading && !serverDown && !error && exercises.length > 0 && (
+              <button
+                type="button"
+                className="complete-workout-btn"
+                onClick={() => setCascadeToken((t) => t + 1)}
+                disabled={exercises.every((item) => completedExerciseIds.has(item.id))}
+              >
+                <CheckAllIcon size={20} />
+                Complete Workout
+              </button>
+            )}
           </main>
         )}
       </div>

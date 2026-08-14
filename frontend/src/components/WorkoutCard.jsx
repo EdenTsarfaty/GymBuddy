@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import LottiePlayer from './LottiePlayer'
 import ChatIcon from './icons/ChatIcon'
@@ -118,6 +118,8 @@ const DURATION_STEP = 15
 const MAX_REVEAL_PX = 96
 const COMPLETE_THRESHOLD_PX = 80
 const SNAP_NUDGE_PX = 10
+const CASCADE_STAGGER_MS = 70
+const CASCADE_HOLD_MS = 180
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -126,7 +128,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0 }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
@@ -253,6 +255,34 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
   }
+
+  // "Complete Workout" replays this card's own swipe-to-complete animation
+  // programmatically — same dragPx/isSwiping state a real swipe drives, just
+  // scripted instead of following a pointer, staggered by list position for the
+  // cascading wave. Skips cards already completed (nothing to animate, and
+  // onToggleComplete would incorrectly un-complete them).
+  useEffect(() => {
+    if (!cascadeToken || completed) return
+
+    let holdTimer
+    const startTimer = setTimeout(() => {
+      setIsSwiping(true)
+      setDragPx(Math.min(COMPLETE_THRESHOLD_PX + SNAP_NUDGE_PX, MAX_REVEAL_PX))
+      navigator.vibrate?.(15)
+      holdTimer = setTimeout(() => {
+        onToggleComplete?.()
+        setDragPx(0)
+        setIsSwiping(false)
+      }, CASCADE_HOLD_MS)
+    }, cascadeIndex * CASCADE_STAGGER_MS)
+
+    return () => {
+      clearTimeout(startTimer)
+      clearTimeout(holdTimer)
+    }
+    // Only a new cascadeToken (a fresh "Complete Workout" press) should start this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cascadeToken])
 
   return (
     <div
