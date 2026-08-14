@@ -738,7 +738,115 @@
   border-radius: 2px;
   background: var(--accent);
   align-self: flex-start;
-  margin-top: 0.55em;
+  margin-top: 0.35em;
+}
+
+.instruction-bullets li.adjustment-bullet {
+  color: var(--accent);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.adjustments-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.adjustment-input-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 14px;
+}
+
+.adjustment-remove-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.adjustment-remove-btn:hover {
+  color: var(--accent);
+}
+
+.adjustment-input {
+  font: inherit;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--accent) 55%, var(--text-h));
+  background: var(--chip-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 0;
+  outline: none;
+}
+
+.adjustment-input::placeholder {
+  color: var(--text-muted);
+}
+
+.adjustment-input-label {
+  flex: 3;
+}
+
+.adjustment-input-value {
+  flex: 2;
+}
+
+.adjustment-add-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: -12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.adjustments-editor:hover .adjustment-add-row,
+.adjustment-add-row:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .adjustment-add-row {
+    opacity: 1;
+  }
+}
+
+.adjustment-pin-icon {
+  flex-shrink: 0;
+}
+
+.adjustment-pin-icon path {
+  fill: var(--accent);
+}
+
+.adjustment-pin-icon line {
+  stroke: var(--card-bg);
+  stroke-width: 2;
+}
+
+.adjustment-add-line {
+  flex: 1;
+  height: 2px;
+  margin-left: -2px;
+  background: var(--accent);
 }
 
 .workout-card-actions {

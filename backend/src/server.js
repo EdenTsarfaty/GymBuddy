@@ -157,6 +157,14 @@ function currentDayName() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' })
 }
 
+function parseExerciseRow(row) {
+  return {
+    ...row,
+    bullets: JSON.parse(row.bullets),
+    adjustments: row.adjustments ? JSON.parse(row.adjustments) : [],
+  }
+}
+
 fastify.get('/api/users', async () => {
   return db.prepare('SELECT id, name FROM users ORDER BY id').all()
 })
@@ -174,7 +182,7 @@ fastify.get('/api/exercises', async (request, reply) => {
     ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ?').all(day, uid)
     : db.prepare('SELECT * FROM exercises WHERE user_id = ?').all(uid)
 
-  return rows.map((row) => ({ ...row, bullets: JSON.parse(row.bullets) }))
+  return rows.map(parseExerciseRow)
 })
 
 fastify.post('/api/exercises/generate', async (request, reply) => {
@@ -228,7 +236,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
 
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
   reply.code(201)
-  return { ...created, bullets: JSON.parse(created.bullets) }
+  return parseExerciseRow(created)
 })
 
 fastify.get('/api/day-plans', async (request) => {
@@ -310,14 +318,15 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   }
 
   db.prepare(
-    'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
-  ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
+    'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ? WHERE id = ?',
+  ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', id)
 
-  // The exercise identity effectively changed — old chat history no longer applies.
+  // The exercise identity effectively changed — old chat history and any
+  // per-exercise adjustment notes no longer apply.
   db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
-  return { ...updated, bullets: JSON.parse(updated.bullets) }
+  return parseExerciseRow(updated)
 })
 
 fastify.post('/api/plan/structure', async (request, reply) => {
@@ -369,7 +378,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
 
 fastify.patch('/api/exercises/:id', async (request, reply) => {
   const { id } = request.params
-  const { sets, reps, weight, duration } = request.body
+  const { sets, reps, weight, duration, adjustments } = request.body
 
   const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   if (!existing) {
@@ -377,10 +386,15 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
     return { error: 'Exercise not found' }
   }
 
-  db.prepare('UPDATE exercises SET sets = ?, reps = ?, weight = ?, duration = ? WHERE id = ?').run(sets ?? null, reps ?? null, weight ?? null, duration ?? null, id)
+  const nextAdjustments = adjustments !== undefined
+    ? JSON.stringify(adjustments)
+    : (existing.adjustments ?? '[]')
+
+  db.prepare('UPDATE exercises SET sets = ?, reps = ?, weight = ?, duration = ?, adjustments = ? WHERE id = ?')
+    .run(sets ?? null, reps ?? null, weight ?? null, duration ?? null, nextAdjustments, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
-  return { ...updated, bullets: JSON.parse(updated.bullets) }
+  return parseExerciseRow(updated)
 })
 
 function parseChatMessage(row) {
@@ -495,7 +509,7 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
 
     const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
-    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: false }
+    return { updatedExercise: parseExerciseRow(updated), confirmationMessage, historyReset: false }
   }
 
   if (type === 'swap') {
@@ -525,8 +539,8 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     }
 
     db.prepare(
-      'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ? WHERE id = ?',
-    ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, id)
+      'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ? WHERE id = ?',
+    ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', id)
 
     db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
 
@@ -534,7 +548,7 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
 
     const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
-    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: true }
+    return { updatedExercise: parseExerciseRow(updated), confirmationMessage, historyReset: true }
   }
 
   if (type === 'video_change') {
@@ -559,7 +573,7 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     const confirmationMessage = parseChatMessage(selectMessageById.get(result.lastInsertRowid))
 
     const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
-    return { updatedExercise: { ...updated, bullets: JSON.parse(updated.bullets) }, confirmationMessage, historyReset: false }
+    return { updatedExercise: parseExerciseRow(updated), confirmationMessage, historyReset: false }
   }
 
   reply.code(400)

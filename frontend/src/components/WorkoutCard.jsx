@@ -17,6 +17,7 @@ import YouTubeIcon from './icons/YouTubeIcon'
 import StopwatchIcon from './icons/StopwatchIcon'
 import CompleteIcon from './icons/CompleteIcon'
 import UncompleteIcon from './icons/UncompleteIcon'
+import XIcon from './icons/XIcon'
 
 const CATEGORY_META = {
   free_weight:  { label: 'Free weight',  Icon: DumbbellIcon },
@@ -116,6 +117,21 @@ function SwapExerciseModal({ exerciseName, onClose, onConfirm }) {
   )
 }
 
+function AdjustmentAddRow({ onClick }) {
+  return (
+    <button type="button" className="adjustment-add-row" onClick={onClick} aria-label="Add adjustment note">
+      <svg width="30" height="30" viewBox="2 7 28 18" className="adjustment-pin-icon" aria-hidden="true">
+        <g transform="rotate(-90 16 16.25)">
+          <path d="m12.15002,20.20996c1.88995,2.97003,2.84998,6.01001,2.84998,9.04004,0,.56.45001,1,1,1s1-.44,1-1c0-3.03003.96002-6.07001,2.84998-9.04004.62-.98999,1.47003-1.81,2.14001-2.41998,1.87-1.69,2.94-4.09998,2.94-6.60999,0-4.91998-4.01001-8.92999-8.92999-8.92999S7.07001,6.26001,7.07001,11.17999c0,2.51001,1.07001,4.91998,2.94,6.60999.66998.60999,1.52002,1.42999,2.14001,2.41998Z" />
+          <line x1="16" y1="8.15" x2="16" y2="14.21" strokeLinecap="round" />
+          <line x1="12.97" y1="11.18" x2="19.03" y2="11.18" strokeLinecap="round" />
+        </g>
+      </svg>
+      <span className="adjustment-add-line" aria-hidden="true" />
+    </button>
+  )
+}
+
 const MIN_SETS = 1
 const MAX_SETS = 10
 const MIN_REPS = 1
@@ -145,7 +161,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0 }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0 }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
@@ -156,16 +172,46 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
   const [draftReps, setDraftReps] = useState(reps ?? MIN_REPS)
   const [draftWeight, setDraftWeight] = useState(Math.round(weight ?? 0))
   const [draftDuration, setDraftDuration] = useState(duration ?? MIN_DURATION)
+  const [draftAdjustments, setDraftAdjustments] = useState(adjustments)
   const [weightDragPx, setWeightDragPx] = useState(0)
   const [isDraggingWeight, setIsDraggingWeight] = useState(false)
   const weightDragRef = useRef(null)
   const [dragPx, setDragPx] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
   const swipeDragRef = useRef(null)
+  const newAdjustmentRef = useRef(null)
+  const justAddedAdjustmentRef = useRef(false)
 
   function toggleExpanded() {
     if (editing) return
     setExpanded((current) => !current)
+  }
+
+  function addAdjustmentField() {
+    justAddedAdjustmentRef.current = true
+    setDraftAdjustments((current) => [...current, { label: '', value: '' }])
+  }
+
+  // Focus the newest pair's label field once it's actually in the DOM —
+  // guarded so entering edit mode (which also changes draftAdjustments.length,
+  // from [] to any existing notes) doesn't itself steal focus.
+  useEffect(() => {
+    if (!justAddedAdjustmentRef.current) return
+    justAddedAdjustmentRef.current = false
+    newAdjustmentRef.current?.focus()
+  }, [draftAdjustments.length])
+
+  function updateAdjustment(index, field, text) {
+    setDraftAdjustments((current) => current.map((a, i) => (i === index ? { ...a, [field]: text } : a)))
+  }
+
+  function removeAdjustment(index) {
+    setDraftAdjustments((current) => {
+      const next = current.filter((_, i) => i !== index)
+      // Never leave the editor with zero visible fields — same reasoning as
+      // starting edit mode with none: an empty pair keeps the feature visible.
+      return next.length > 0 ? next : [{ label: '', value: '' }]
+    })
   }
 
   function startEditing() {
@@ -173,19 +219,26 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
     setDraftReps(reps ?? MIN_REPS)
     setDraftWeight(Math.round(weight ?? 0))
     setDraftDuration(duration ?? MIN_DURATION)
+    // Show one empty pair by default when there are no saved adjustments yet —
+    // makes the feature discoverable instead of hiding behind the + button.
+    setDraftAdjustments(adjustments.length > 0 ? adjustments : [{ label: '', value: '' }])
     setEditing(true)
   }
 
   function confirmEditing() {
+    const cleanedAdjustments = draftAdjustments
+      .map((a) => ({ label: a.label.trim(), value: a.value.trim() }))
+      .filter((a) => a.label && a.value)
     const updates = hasDuration
-      ? { sets: draftSets, reps: null, weight: null, duration: draftDuration }
-      : { sets: draftSets, reps: draftReps, weight: draftWeight, duration: null }
+      ? { sets: draftSets, reps: null, weight: null, duration: draftDuration, adjustments: cleanedAdjustments }
+      : { sets: draftSets, reps: draftReps, weight: draftWeight, duration: null, adjustments: cleanedAdjustments }
     const changedFields = []
     if (draftSets !== sets) changedFields.push('sets')
     if (!hasDuration && draftReps !== reps) changedFields.push('reps')
     if (hasDuration ? draftDuration !== duration : draftWeight !== weight) {
       changedFields.push(hasDuration ? 'duration' : 'weight')
     }
+    if (JSON.stringify(cleanedAdjustments) !== JSON.stringify(adjustments)) changedFields.push('adjustments')
     onSave(updates, changedFields)
     setEditing(false)
   }
@@ -494,7 +547,46 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                     {bullet}
                   </li>
                 ))}
+                {!editing && adjustments.map((note, index) => (
+                  <li key={`adjustment-${index}`} className="adjustment-bullet">
+                    <span className="bullet-marker" aria-hidden="true" />
+                    Adjust {note.label}: {note.value}
+                  </li>
+                ))}
               </ul>
+
+              {editing ? (
+                <div className="adjustments-editor">
+                  {draftAdjustments.map((entry, index) => (
+                    <div key={index} className="adjustment-input-pair">
+                      <input
+                        ref={index === draftAdjustments.length - 1 ? newAdjustmentRef : null}
+                        type="text"
+                        className="adjustment-input adjustment-input-label"
+                        value={entry.label}
+                        placeholder="e.g. Seat height"
+                        onChange={(e) => updateAdjustment(index, 'label', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="adjustment-input adjustment-input-value"
+                        value={entry.value}
+                        placeholder="e.g. 5"
+                        onChange={(e) => updateAdjustment(index, 'value', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="adjustment-remove-btn"
+                        onClick={() => removeAdjustment(index)}
+                        aria-label="Remove adjustment note"
+                      >
+                        <XIcon size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <AdjustmentAddRow onClick={addAdjustmentField} />
+                </div>
+              ) : null}
             </div>
 
             <div className="workout-card-actions">

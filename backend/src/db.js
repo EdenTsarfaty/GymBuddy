@@ -35,6 +35,7 @@ db.exec(`
   )
 `)
 try { db.exec('ALTER TABLE exercises ADD COLUMN reps INTEGER') } catch {}
+try { db.exec('ALTER TABLE exercises ADD COLUMN adjustments TEXT') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_profile (
