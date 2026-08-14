@@ -18,7 +18,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.4'
+const APP_VERSION = 'beta 0.6.4.5'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -56,6 +56,32 @@ function getOrderedWeekdays() {
 }
 
 const weekdays = getOrderedWeekdays()
+
+// Weeks of 7 cells for the given month, padded with `null` for the leading/
+// trailing days that belong to adjacent months (left blank, not rendered as
+// clickable adjacent-month dates — see the month-view plan for why).
+function getMonthGridWeeks(monthDate) {
+  const firstDay = getFirstDayOfWeek() // 1 = Monday ... 7 = Sunday
+  const year = monthDate.getFullYear()
+  const month = monthDate.getMonth()
+  const firstOfMonth = new Date(year, month, 1)
+  const jsWeekday = firstOfMonth.getDay() // 0 = Sunday ... 6 = Saturday
+  const ordinalWeekday = jsWeekday === 0 ? 7 : jsWeekday // 1 = Monday ... 7 = Sunday
+  const leadingBlanks = (ordinalWeekday - firstDay + 7) % 7
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const cells = Array(leadingBlanks).fill(null)
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push({ date: new Date(year, month, day), day })
+  }
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const weeks = []
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7))
+  }
+  return weeks
+}
 
 function getInitialBeginnerMode() {
   return localStorage.getItem(BEGINNER_MODE_STORAGE_KEY) === 'true'
@@ -104,6 +130,7 @@ function App() {
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
   const [planView, setPlanView] = useState('week')
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [selectedDay, setSelectedDay] = useState(today)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
   const [dayTitles, setDayTitles] = useState(new Map())
@@ -300,6 +327,16 @@ function App() {
   function openWeekDays() {
     setPlanView('week')
     setPlanMenuScreen('days')
+  }
+
+  function openMonthView() {
+    setPlanView('month')
+    setCalendarMonth(new Date())
+    setPlanMenuScreen('month')
+  }
+
+  function shiftMonth(delta) {
+    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1))
   }
 
   function selectDay(day) {
@@ -555,14 +592,98 @@ function App() {
                 <button
                   type="button"
                   role="menuitemradio"
-                  aria-checked={false}
-                  className="plan-menu-option"
-                  disabled
-                  title="Coming soon"
+                  aria-checked={planView === 'month'}
+                  className={`plan-menu-option ${planView === 'month' ? 'is-selected' : ''}`}
+                  onClick={openMonthView}
                 >
                   Month
                   <CalendarIcon size={16} />
                 </button>
+              </div>
+            )}
+
+            {planMenuOpen && planMenuScreen === 'month' && (
+              <div className="plan-menu plan-menu-month" role="menu">
+                <button
+                  type="button"
+                  className="plan-menu-back"
+                  onClick={() => setPlanMenuScreen('root')}
+                  aria-label="Back to week/month picker"
+                >
+                  <ChevronLeftIcon size={16} />
+                </button>
+
+                <div className="month-nav-header">
+                  <button
+                    type="button"
+                    className="month-nav-btn"
+                    onClick={() => shiftMonth(-1)}
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeftIcon size={16} />
+                  </button>
+                  <span className="month-nav-label">
+                    {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    type="button"
+                    className="month-nav-btn is-next"
+                    onClick={() => shiftMonth(1)}
+                    aria-label="Next month"
+                  >
+                    <ChevronLeftIcon size={16} />
+                  </button>
+                </div>
+
+                <div className="month-grid">
+                  {(() => {
+                    const weeks = getMonthGridWeeks(calendarMonth)
+                    const lastRowLine = weeks.length + 2
+                    return (
+                      <>
+                        {weekdays.map((day, index) =>
+                          daysWithWorkouts.has(day) ? (
+                            <div
+                              key={`bg-${day}`}
+                              className="month-grid-column-bg"
+                              style={{ gridColumn: index + 1, gridRow: `1 / ${lastRowLine}` }}
+                              aria-hidden="true"
+                            />
+                          ) : null,
+                        )}
+                        {weekdays.map((day, index) => (
+                          <span
+                            key={day}
+                            className={`month-grid-weekday ${daysWithWorkouts.has(day) ? 'has-workout' : ''}`}
+                            style={{ gridColumn: index + 1, gridRow: 1 }}
+                          >
+                            {day.slice(0, 3)}
+                          </span>
+                        ))}
+                        {weeks.flatMap((week, weekIndex) =>
+                          week.map((cell, cellIndex) => {
+                            const gridColumn = cellIndex + 1
+                            const gridRow = weekIndex + 2
+                            if (!cell) return <span key={`${weekIndex}-${cellIndex}`} className="month-grid-day is-blank" style={{ gridColumn, gridRow }} />
+                            const weekdayName = cell.date.toLocaleDateString(undefined, { weekday: 'long' })
+                            const isToday = cell.date.toDateString() === new Date().toDateString()
+                            return (
+                              <button
+                                type="button"
+                                key={`${weekIndex}-${cellIndex}`}
+                                className={`month-grid-day ${isToday ? 'is-today' : ''}`}
+                                style={{ gridColumn, gridRow }}
+                                onClick={() => selectDay(weekdayName)}
+                              >
+                                {cell.day}
+                              </button>
+                            )
+                          }),
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
               </div>
             )}
 
