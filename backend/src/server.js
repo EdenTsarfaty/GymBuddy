@@ -584,6 +584,11 @@ fastify.get('/api/workout-log/streak', async (request) => {
   return streak.recomputeStreak(uid)
 })
 
+fastify.get('/api/workout-log/history', async (request) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  return streak.getHistory(uid)
+})
+
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   if (err) {
     logError('startup', err)

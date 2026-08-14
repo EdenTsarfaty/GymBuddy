@@ -61,6 +61,15 @@ function syncScheduledWorkouts(userId, todayStr) {
   }
 }
 
+// All workout_log rows for this user, synced through today so scheduled dates
+// with no completion still show up (as missed/pending, not just absent).
+function getHistory(userId) {
+  syncScheduledWorkouts(userId, todayISODate())
+  return db.prepare(
+    'SELECT scheduled_date, performed_date FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
+  ).all(userId)
+}
+
 function recomputeStreak(userId) {
   const today = todayISODate()
   syncScheduledWorkouts(userId, today)
@@ -118,6 +127,7 @@ module.exports = {
   nextScheduledDateAfter,
   recomputeStreak,
   markPerformed,
+  getHistory,
   weekdayName,
   todayISODate,
 }

@@ -305,8 +305,10 @@
 
 .month-grid-day {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   aspect-ratio: 1;
   font: inherit;
   font-size: 13px;
@@ -315,6 +317,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
+  padding-bottom: 6px;
 }
 
 .month-grid-day.is-blank {
@@ -323,6 +326,45 @@
 
 .month-grid-day:not(.is-blank):hover {
   background: var(--chip-bg);
+}
+
+.month-grid-day-num {
+  line-height: 1;
+}
+
+.month-grid-day-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.month-grid-day-dot.is-green {
+  background: #52b16b;
+}
+
+.month-grid-day-dot.is-red {
+  background: #d25850;
+}
+
+.month-grid-day-dot.is-orange {
+  background: #da9734;
+}
+
+[data-theme='light'] .month-grid-column-bg {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+[data-theme='light'] .month-grid-day-dot.is-green {
+  background: #46ba64;
+}
+
+[data-theme='light'] .month-grid-day-dot.is-red {
+  background: #e45047;
+}
+
+[data-theme='light'] .month-grid-day-dot.is-orange {
+  background: #e99b23;
 }
 
 /* Comes after .has-workout so today's stronger highlight always wins when a

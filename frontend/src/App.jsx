@@ -18,7 +18,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.4.5'
+const APP_VERSION = 'beta 0.6.5'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -83,6 +83,72 @@ function getMonthGridWeeks(monthDate) {
   return weeks
 }
 
+function toISODate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function addDaysISO(dateStr, days) {
+  const date = new Date(`${dateStr}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return toISODate(date)
+}
+
+function weekdayNameFromISO(dateStr) {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
+}
+
+// Next date after `dateStr` whose weekday is in `scheduledDays` — mirrors the
+// backend's grace-window boundary (backend/src/streak.js) so a missed day only
+// reads as "missed" once its grace window has actually closed.
+function nextScheduledDateAfter(dateStr, scheduledDays) {
+  let cursor = dateStr
+  for (let i = 0; i < 14; i++) {
+    cursor = addDaysISO(cursor, 1)
+    if (scheduledDays.has(weekdayNameFromISO(cursor))) return cursor
+  }
+  return null
+}
+
+// Maps ISO date -> 'green' (performed, on time or late) | 'orange' (grace-period
+// trail between a missed scheduled day and its late completion) | 'red' (missed,
+// grace window closed, never performed). Dates absent from the map get no dot.
+function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr) {
+  const map = new Map()
+
+  for (const row of workoutLog) {
+    if (row.performed_date) map.set(row.performed_date, 'green')
+  }
+
+  for (const row of workoutLog) {
+    if (row.performed_date && row.performed_date !== row.scheduled_date) {
+      let cursor = row.scheduled_date
+      while (cursor < row.performed_date) {
+        if (!map.has(cursor)) map.set(cursor, 'orange')
+        cursor = addDaysISO(cursor, 1)
+      }
+    } else if (!row.performed_date) {
+      const nextDate = nextScheduledDateAfter(row.scheduled_date, scheduledDays)
+      if (nextDate && todayStr >= nextDate) {
+        if (!map.has(row.scheduled_date)) map.set(row.scheduled_date, 'red')
+      } else {
+        // Grace window still open — trail orange from the scheduled day through
+        // yesterday. Today itself stays undecided (no dot) since it could still
+        // be completed before the day is over.
+        let cursor = row.scheduled_date
+        while (cursor < todayStr) {
+          if (!map.has(cursor)) map.set(cursor, 'orange')
+          cursor = addDaysISO(cursor, 1)
+        }
+      }
+    }
+  }
+
+  return map
+}
+
 function getInitialBeginnerMode() {
   return localStorage.getItem(BEGINNER_MODE_STORAGE_KEY) === 'true'
 }
@@ -135,6 +201,8 @@ function App() {
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
   const [dayTitles, setDayTitles] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
+  const [workoutLog, setWorkoutLog] = useState([])
+  const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
   const [pendingEdits, setPendingEdits] = useState(() => {
     try {
       const uid = Number(localStorage.getItem(CURRENT_USER_STORAGE_KEY))
@@ -195,6 +263,11 @@ function App() {
       .filter((item) => item.day === selectedDay)
       .sort((a, b) => categoryRank(a.category) - categoryRank(b.category)),
     [allExercises, selectedDay],
+  )
+
+  const workoutIndicators = useMemo(
+    () => buildWorkoutIndicators(workoutLog, daysWithWorkouts, toISODate(new Date())),
+    [workoutLog, daysWithWorkouts],
   )
 
   useEffect(() => {
@@ -305,6 +378,30 @@ function App() {
         setLoading(false)
       })
   }, [currentUser, exercisesRefreshKey])
+
+  useEffect(() => {
+    if (!currentUser) return
+    const controller = new AbortController()
+    fetch(`${API_BASE}/api/workout-log/history?user_id=${currentUser.id}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setWorkoutLog)
+      .catch(() => {})
+    return () => controller.abort()
+  }, [currentUser, workoutLogRefreshKey])
+
+  useEffect(() => {
+    if (!currentUser || selectedDay !== today || exercises.length === 0) return
+    if (!exercises.every((item) => completedExerciseIds.has(item.id))) return
+
+    const todayISO = toISODate(new Date())
+    fetch(`${API_BASE}/api/workout-log/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: todayISO, performed_date: todayISO }),
+    })
+      .then((res) => (res.ok ? setWorkoutLogRefreshKey((k) => k + 1) : null))
+      .catch(() => {})
+  }, [completedExerciseIds, exercises, selectedDay, currentUser])
 
   useEffect(() => {
     if (!planMenuOpen) return
@@ -667,6 +764,7 @@ function App() {
                             if (!cell) return <span key={`${weekIndex}-${cellIndex}`} className="month-grid-day is-blank" style={{ gridColumn, gridRow }} />
                             const weekdayName = cell.date.toLocaleDateString(undefined, { weekday: 'long' })
                             const isToday = cell.date.toDateString() === new Date().toDateString()
+                            const indicator = workoutIndicators.get(toISODate(cell.date))
                             return (
                               <button
                                 type="button"
@@ -675,7 +773,8 @@ function App() {
                                 style={{ gridColumn, gridRow }}
                                 onClick={() => selectDay(weekdayName)}
                               >
-                                {cell.day}
+                                <span className="month-grid-day-num">{cell.day}</span>
+                                <span className={`month-grid-day-dot ${indicator ? `is-${indicator}` : 'is-empty'}`} aria-hidden="true" />
                               </button>
                             )
                           }),
