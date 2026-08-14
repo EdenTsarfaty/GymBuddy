@@ -17,7 +17,7 @@ import ZzzIcon from './components/icons/ZzzIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.2.1'
+const APP_VERSION = 'beta 0.6.2.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -81,6 +81,20 @@ function App() {
   const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
   const [allExercises, setAllExercises] = useState([])
+  const [completedExerciseIds, setCompletedExerciseIds] = useState(() => new Set())
+
+  function toggleCompleted(id) {
+    setCompletedExerciseIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function markCompleted(id) {
+    setCompletedExerciseIds((current) => (current.has(id) ? current : new Set(current).add(id)))
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [serverDown, setServerDown] = useState(false)
@@ -596,7 +610,13 @@ function App() {
         {view === 'chat' ? (
           <ChatView exercise={chatExercise} isOffline={isOffline} onExerciseUpdated={updateExerciseFromChat} />
         ) : view === 'timer' ? (
-          <TimerView exercise={timerExercise} />
+          <TimerView
+            exercise={timerExercise}
+            onComplete={() => {
+              markCompleted(timerExercise.id)
+              closeTimer()
+            }}
+          />
         ) : view === 'settings' ? (
           <SettingsPage
             themeMode={themeMode}
@@ -658,6 +678,8 @@ function App() {
                   onSwap={(reason, otherText) => swapExercise(item.id, reason, otherText)}
                   onChat={() => openChat(item)}
                   onOpenTimer={() => openTimer(item)}
+                  completed={completedExerciseIds.has(item.id)}
+                  onToggleComplete={() => toggleCompleted(item.id)}
                 />
               ))}
           </main>

@@ -372,6 +372,15 @@
   border-color: color-mix(in srgb, var(--accent) 55%, white);
 }
 
+.workout-card.is-completed .stat-value {
+  background: color-mix(in srgb, var(--accent) 28%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--card-bg));
+}
+
+.workout-card.is-completed .exercise-category {
+  color: color-mix(in srgb, var(--accent) 70%, white);
+}
+
 .workout-card-main {
   display: flex;
   align-items: center;
@@ -1968,11 +1977,14 @@
   opacity: 0.85;
 }
 
+.timer-sets-row + .timer-btn-complete {
+  margin-top: 6px;
+}
+
 .timer-btn-complete {
   display: flex;
   width: 54px;
   height: 54px;
-  margin-top: 20px;
   padding: 0;
   background: none;
   border: none;

@@ -126,7 +126,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
@@ -142,7 +142,6 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
   const weightDragRef = useRef(null)
   const [dragPx, setDragPx] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
-  const [completed, setCompleted] = useState(false)
   const swipeDragRef = useRef(null)
 
   function toggleExpanded() {
@@ -248,7 +247,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
     if (!drag) return
     swipeDragRef.current = null
     setIsSwiping(false)
-    if (drag.captured && drag.committed) setCompleted((c) => !c)
+    if (drag.captured && drag.committed) onToggleComplete?.()
     setDragPx(0)
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)

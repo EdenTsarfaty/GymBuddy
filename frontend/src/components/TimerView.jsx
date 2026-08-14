@@ -10,7 +10,7 @@ function formatMMSS(totalSeconds) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-function TimerView({ exercise }) {
+function TimerView({ exercise, onComplete }) {
   const [running, setRunning] = useState(false)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [completedLaps, setCompletedLaps] = useState(0)
@@ -106,6 +106,11 @@ function TimerView({ exercise }) {
 
   const elapsedSeconds = Math.floor(elapsedMs / 1000)
   const hasSets = exercise.sets != null
+  // A duration-only exercise (no sets) has just the one lap to finish — the ring
+  // completing a full sweep is the whole story, so the checkmark's threshold is
+  // "one lap done" instead of "every set done".
+  const completeThreshold = hasSets ? exercise.sets : 1
+  const canComplete = completedLaps >= completeThreshold
 
   // Brightness at any angle = how recently the head painted it. Just behind the
   // head is freshly painted (brightest); just ahead of it was painted a whole lap
@@ -143,23 +148,27 @@ function TimerView({ exercise }) {
         </div>
       </div>
 
-      {hasSets && (
-        <div className="timer-sets">
-          <div className="timer-sets-label">Sets:</div>
-          <div className="timer-sets-row">
-            {Array.from({ length: exercise.sets }).map((_, i) => (
-              <div key={i} className={`timer-set-square ${i < completedLaps ? 'is-done' : ''}`} />
-            ))}
-          </div>
-          <button
-            type="button"
-            className={`timer-btn-complete ${completedLaps >= exercise.sets ? 'is-visible' : ''}`}
-            aria-label="Mark complete"
-          >
-            <CompleteIcon size={54} />
-          </button>
-        </div>
-      )}
+      <div className="timer-sets">
+        {hasSets && (
+          <>
+            <div className="timer-sets-label">Sets:</div>
+            <div className="timer-sets-row">
+              {Array.from({ length: exercise.sets }).map((_, i) => (
+                <div key={i} className={`timer-set-square ${i < completedLaps ? 'is-done' : ''}`} />
+              ))}
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          className={`timer-btn-complete ${canComplete ? 'is-visible' : ''}`}
+          aria-label="Mark complete"
+          onClick={onComplete}
+        >
+          <CompleteIcon size={54} />
+        </button>
+      </div>
     </div>
   )
 }
