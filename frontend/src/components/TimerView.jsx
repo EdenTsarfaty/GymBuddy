@@ -49,6 +49,44 @@ function TimerView({ exercise }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [running, duration])
 
+  // Keep the screen on while the timer is running. The lock is auto-released by
+  // the browser the moment the tab loses visibility, so it has to be re-acquired
+  // on visibilitychange too, not just once when play is pressed. Unsupported
+  // browsers (no Wake Lock API, or the request is rejected) just no-op — the
+  // timer itself doesn't depend on it.
+  useEffect(() => {
+    if (!running) return
+
+    let cancelled = false
+    let lock = null
+
+    async function acquire() {
+      try {
+        const sentinel = await navigator.wakeLock?.request('screen')
+        if (cancelled) {
+          sentinel?.release().catch(() => {})
+          return
+        }
+        lock = sentinel
+      } catch {
+        // Unsupported or denied — fine, the timer still works without it.
+      }
+    }
+
+    acquire()
+
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') acquire()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibility)
+      lock?.release().catch(() => {})
+    }
+  }, [running])
+
   function handlePlayPause() {
     if (running) {
       setRunning(false)
