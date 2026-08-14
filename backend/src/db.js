@@ -86,6 +86,20 @@ try { db.exec('ALTER TABLE user_profile ADD COLUMN current_streak INTEGER DEFAUL
 try { db.exec('ALTER TABLE user_profile ADD COLUMN longest_streak INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN workout_reminder INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN last_workout_reminder_date TEXT') } catch {}
+try { db.exec("ALTER TABLE user_profile ADD COLUMN workout_reminder_time TEXT DEFAULT '08:00'") } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_delay_minutes INTEGER DEFAULT 60') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_pending_at TEXT') } catch {}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id  INTEGER NOT NULL,
+    endpoint TEXT NOT NULL,
+    keys     TEXT NOT NULL,
+    UNIQUE(user_id, endpoint)
+  )
+`)
 
 
 const seedUser = (userId, exercises) => {

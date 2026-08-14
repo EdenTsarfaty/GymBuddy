@@ -9,7 +9,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Service workers (and therefore push) are otherwise disabled entirely
+      // under `vite dev` — only a production build registers one by default.
+      devOptions: { enabled: true, type: 'module' },
       workbox: {
+        importScripts: ['push-sw.js'],
         runtimeCaching: [
           {
             // Cache all API responses — network-first, fall back to cache
@@ -35,7 +39,12 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        screenshots: [
+          { src: 'screenshots/wide.png', sizes: '1920x945', type: 'image/png', form_factor: 'wide' },
+          { src: 'screenshots/narrow.png', sizes: '1280x2856', type: 'image/png', form_factor: 'narrow' },
         ],
       },
     }),

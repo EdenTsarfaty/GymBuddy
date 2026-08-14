@@ -1417,6 +1417,20 @@
   padding-left: 32px;
 }
 
+.reminder-time-input,
+.reminder-delay-select {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-left: 32px;
+  align-self: flex-start;
+}
+
 .complete-workout-btn {
   display: flex;
   align-items: center;

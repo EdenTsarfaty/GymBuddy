@@ -5,6 +5,7 @@ const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStar
 const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
+const push = require('./push')
 
 maybeBackupDatabase()
 
@@ -235,19 +236,23 @@ fastify.get('/api/day-plans', async (request) => {
   return db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)
 })
 
+const PROFILE_COLUMNS =
+  'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes'
+
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  const row = db.prepare(
-    'SELECT age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder FROM user_profile WHERE id = ?',
-  ).get(uid)
+  const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
 fastify.put('/api/profile', async (request) => {
-  const { user_id, age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder } = request.body || {}
+  const {
+    user_id, age, height, weight, goals, beginner_mode,
+    workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes,
+  } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ? WHERE id = ?',
+    `UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ? WHERE id = ?`,
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
@@ -256,11 +261,11 @@ fastify.put('/api/profile', async (request) => {
     beginner_mode !== undefined ? (beginner_mode ? 1 : 0) : 0,
     workout_reminder !== undefined ? (workout_reminder ? 1 : 0) : 0,
     protein_reminder !== undefined ? (protein_reminder ? 1 : 0) : 0,
+    workout_reminder_time || '08:00',
+    protein_reminder_delay_minutes !== undefined ? protein_reminder_delay_minutes : 60,
     uid,
   )
-  const row = db.prepare(
-    'SELECT age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder FROM user_profile WHERE id = ?',
-  ).get(uid)
+  const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
@@ -582,6 +587,17 @@ fastify.post('/api/workout-log/complete', async (request, reply) => {
     return { error: 'No scheduled workout found for that date' }
   }
 
+  // Only queue the protein reminder for a "just finished" completion (today),
+  // not a backfilled/past performed_date.
+  if ((performed_date || streak.todayISODate()) === streak.todayISODate()) {
+    const profile = db.prepare(
+      'SELECT protein_reminder, protein_reminder_delay_minutes FROM user_profile WHERE id = ?',
+    ).get(uid)
+    if (profile?.protein_reminder) {
+      push.scheduleProteinReminder(uid, profile.protein_reminder_delay_minutes || 60)
+    }
+  }
+
   return result
 })
 
@@ -595,10 +611,41 @@ fastify.get('/api/workout-log/history', async (request) => {
   return streak.getHistory(uid)
 })
 
+fastify.get('/api/push/vapid-public-key', async (request, reply) => {
+  if (!push.pushEnabled) {
+    reply.code(503)
+    return { error: 'Push notifications are not configured' }
+  }
+  return { publicKey: push.VAPID_PUBLIC_KEY }
+})
+
+fastify.post('/api/push/subscribe', async (request, reply) => {
+  const { user_id, subscription } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  if (!subscription?.endpoint || !subscription?.keys) {
+    reply.code(400)
+    return { error: 'Invalid subscription' }
+  }
+  push.saveSubscription(uid, subscription)
+  reply.code(204)
+})
+
+fastify.post('/api/push/unsubscribe', async (request, reply) => {
+  const { user_id, endpoint } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  if (!endpoint) {
+    reply.code(400)
+    return { error: 'endpoint is required' }
+  }
+  push.removeSubscription(uid, endpoint)
+  reply.code(204)
+})
+
 fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   if (err) {
     logError('startup', err)
     process.exit(1)
   }
   logStartup(PORT)
+  push.startScheduler()
 })

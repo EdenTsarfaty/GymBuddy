@@ -11,6 +11,46 @@ import { API_BASE } from '../apiBase'
 
 const THEME_MODES = ['light', 'dark', 'system']
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)))
+}
+
+// Requests notification permission and creates/reuses a push subscription for
+// this device, then registers it with the backend. Returns false (without
+// throwing) on anything that should stop the reminder toggle from turning on —
+// unsupported browser, denied permission, or an unreachable backend.
+async function subscribeToPush(userId) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
+  try {
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return false
+
+    const { publicKey } = await fetch(`${API_BASE}/api/push/vapid-public-key`).then((r) => r.json())
+    if (!publicKey) return false
+
+    const registration = await navigator.serviceWorker.ready
+    let subscription = await registration.pushManager.getSubscription()
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+    }
+
+    await fetch(`${API_BASE}/api/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, subscription }),
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function UserPicker({ users, currentUser, onChangeUser, disabled }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -118,23 +158,27 @@ function GoalsModal({ initialGoals, onSave, onClose }) {
   )
 }
 
-const REMINDERS = [
-  {
-    id: 'workout_reminder',
-    label: 'Workout day',
-    description: "A reminder will be sent in a workout day's morning.",
-  },
-  {
-    id: 'protein_reminder',
-    label: 'Drink protein',
-    description: 'A protein drinking reminder will be sent an hour after a workout has been finished.',
-  },
-]
+const PROTEIN_DELAY_OPTIONS = [15, 30, 45, 60, 90, 120]
+
+function formatDelayLabel(minutes) {
+  if (minutes < 60) return `${minutes} minutes`
+  const hours = minutes / 60
+  return `${hours} hour${hours === 1 ? '' : 's'}`
+}
+
+function formatTimeLabel(time) {
+  const [h, m] = (time || '08:00').split(':').map(Number)
+  const period = h < 12 ? 'AM' : 'PM'
+  const hour12 = h % 12 === 0 ? 12 : h % 12
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`
+}
 
 function ReminderModal({ initialValues, onSave, onClose }) {
   const [values, setValues] = useState({
     workout_reminder: !!initialValues.workout_reminder,
+    workout_reminder_time: initialValues.workout_reminder_time || '08:00',
     protein_reminder: !!initialValues.protein_reminder,
+    protein_reminder_delay_minutes: initialValues.protein_reminder_delay_minutes || 60,
   })
 
   function toggle(id) {
@@ -152,21 +196,56 @@ function ReminderModal({ initialValues, onSave, onClose }) {
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         <div className="modal-box goals-modal reminders-modal">
           <div className="goals-list">
-            {REMINDERS.map(({ id, label, description }) => (
-              <div key={id} className="reminder-option">
-                <label className={`goals-option ${values[id] ? 'is-checked' : ''}`}>
-                  <input
-                    type="checkbox"
-                    className="goals-checkbox"
-                    checked={values[id]}
-                    onChange={() => toggle(id)}
-                  />
-                  <span className="goals-checkbox-box" aria-hidden="true" />
-                  <span className="goals-option-label">{label}</span>
-                </label>
-                <span className="reminder-option-description">{description}</span>
-              </div>
-            ))}
+            <div className="reminder-option">
+              <label className={`goals-option ${values.workout_reminder ? 'is-checked' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="goals-checkbox"
+                  checked={values.workout_reminder}
+                  onChange={() => toggle('workout_reminder')}
+                />
+                <span className="goals-checkbox-box" aria-hidden="true" />
+                <span className="goals-option-label">Workout day</span>
+              </label>
+              <span className="reminder-option-description">
+                A reminder will be sent at {formatTimeLabel(values.workout_reminder_time)} on a workout day's morning.
+              </span>
+              {values.workout_reminder && (
+                <input
+                  type="time"
+                  className="reminder-time-input"
+                  value={values.workout_reminder_time}
+                  onChange={(e) => setValues((prev) => ({ ...prev, workout_reminder_time: e.target.value }))}
+                />
+              )}
+            </div>
+
+            <div className="reminder-option">
+              <label className={`goals-option ${values.protein_reminder ? 'is-checked' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="goals-checkbox"
+                  checked={values.protein_reminder}
+                  onChange={() => toggle('protein_reminder')}
+                />
+                <span className="goals-checkbox-box" aria-hidden="true" />
+                <span className="goals-option-label">Drink protein</span>
+              </label>
+              <span className="reminder-option-description">
+                A protein drinking reminder will be sent {formatDelayLabel(values.protein_reminder_delay_minutes)} after a workout has been finished.
+              </span>
+              {values.protein_reminder && (
+                <select
+                  className="reminder-delay-select"
+                  value={values.protein_reminder_delay_minutes}
+                  onChange={(e) => setValues((prev) => ({ ...prev, protein_reminder_delay_minutes: Number(e.target.value) }))}
+                >
+                  {PROTEIN_DELAY_OPTIONS.map((minutes) => (
+                    <option key={minutes} value={minutes}>{formatDelayLabel(minutes)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
           <button className="goals-save-btn" onClick={handleSave}>Save</button>
         </div>
@@ -226,7 +305,11 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
 
 function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
-  const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [], workout_reminder: 0, protein_reminder: 0 })
+  const [profile, setProfile] = useState({
+    age: null, height: null, weight: null, goals: [],
+    workout_reminder: 0, workout_reminder_time: '08:00',
+    protein_reminder: 0, protein_reminder_delay_minutes: 60,
+  })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
 
@@ -254,8 +337,13 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
     }).catch(() => {})
   }
 
-  function saveReminders(values) {
-    const updated = { ...profile, ...values, user_id: currentUser?.id }
+  async function saveReminders(values) {
+    let nextValues = values
+    if (values.workout_reminder || values.protein_reminder) {
+      const subscribed = await subscribeToPush(currentUser?.id)
+      if (!subscribed) nextValues = { ...values, workout_reminder: false, protein_reminder: false }
+    }
+    const updated = { ...profile, ...nextValues, user_id: currentUser?.id }
     setProfile(updated)
     fetch(`${API_BASE}/api/profile`, {
       method: 'PUT',
