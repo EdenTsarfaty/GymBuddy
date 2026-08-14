@@ -170,6 +170,7 @@
   gap: 8px;
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text-h);
   background: none;
   border: none;
@@ -178,18 +179,15 @@
   cursor: pointer;
 }
 
-.plan-menu-option:hover:not(:disabled) {
+.plan-menu-option:hover:not(:disabled),
+.plan-menu-option:active:not(:disabled) {
   background: var(--chip-bg);
+  color: var(--accent);
 }
 
 .plan-menu-option.is-empty-day {
   color: var(--text-muted);
   opacity: 0.85;
-}
-
-.plan-menu-option.is-selected {
-  color: var(--accent);
-  font-weight: 600;
 }
 
 .plan-menu-option.is-picked-day {
@@ -251,7 +249,7 @@
   font-size: 20px;
   font-weight: 400;
   color: var(--text-h);
-  transform: scaleX(0.82);
+  transform: scaleX(0.95);
 }
 
 .month-nav-btn {
@@ -383,6 +381,10 @@
   background: var(--accent-tint-bg);
   font-weight: 700;
   color: var(--accent);
+}
+
+[data-theme='light'] .month-grid-day.is-today {
+  background: color-mix(in srgb, var(--accent) 26%, white);
 }
 
 @keyframes view-in {
@@ -1409,7 +1411,7 @@
   background: var(--accent);
   border: none;
   border-radius: 999px;
-  padding: 10px 18px;
+  padding: 8px 18px;
   margin-top: 4px;
   cursor: pointer;
   transition: opacity 0.15s ease;
@@ -2197,9 +2199,11 @@
 }
 
 .timer-sets-label {
-  font-size: 31px;
+  display: inline-block;
+  font-size: 34px;
   font-weight: 400;
   color: var(--text-muted);
+  transform: scaleX(0.9);
 }
 
 .timer-sets-row {

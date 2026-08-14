@@ -18,7 +18,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.5'
+const APP_VERSION = 'beta 0.6.6'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -551,6 +551,7 @@ function App() {
     chatScrollYRef.current = window.scrollY
     setChatExercise(exercise)
     setView('chat')
+    window.history.pushState({ view: 'chat' }, '')
   }
 
   function closeChat() {
@@ -569,6 +570,7 @@ function App() {
     timerScrollYRef.current = window.scrollY
     setTimerExercise(exercise)
     setView('timer')
+    window.history.pushState({ view: 'timer' }, '')
   }
 
   function closeTimer() {
@@ -582,6 +584,20 @@ function App() {
     window.scrollTo(0, timerScrollYRef.current)
     setTimerReturnExerciseId(null)
   }, [view, timerReturnExerciseId])
+
+  // Lets the Android back button (and back gesture) close whichever full-screen
+  // view is open instead of exiting the app — the open* functions above push a
+  // history entry, and the close buttons below go through history.back() so
+  // both paths converge here.
+  useEffect(() => {
+    function handlePopState() {
+      if (view === 'chat') closeChat()
+      else if (view === 'timer') closeTimer()
+      else if (view === 'settings') closeSettings()
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [view, chatExercise, timerExercise])
 
   async function handleGenerate(settings) {
     setRegenOpen(false)
@@ -637,16 +653,22 @@ function App() {
     }
   }
 
+  function closeSettings() {
+    setSettingsClosing(true)
+    setTimeout(() => setSettingsClosing(false), 400)
+    setView('home')
+  }
+
   function toggleSettings(e) {
     if (view === 'settings') {
       e.currentTarget.blur()
-      setSettingsClosing(true)
-      setTimeout(() => setSettingsClosing(false), 400)
+      window.history.back()
     } else {
       setSettingsOpening(true)
       setTimeout(() => setSettingsOpening(false), 350)
+      setView('settings')
+      window.history.pushState({ view: 'settings' }, '')
     }
-    setView((current) => (current === 'settings' ? 'home' : 'settings'))
   }
 
   return (
@@ -657,7 +679,7 @@ function App() {
             <button
               type="button"
               className="chat-back-btn"
-              onClick={view === 'timer' ? closeTimer : closeChat}
+              onClick={() => window.history.back()}
               aria-label="Back to workout"
             >
               <ChevronLeftIcon size={20} />
@@ -702,22 +724,22 @@ function App() {
                   type="button"
                   role="menuitemradio"
                   aria-checked={planView === 'week'}
-                  className={`plan-menu-option ${planView === 'week' ? 'is-selected' : ''}`}
+                  className="plan-menu-option"
                   onClick={openWeekDays}
                 >
                   Week
-                  <TableIcon size={16} />
+                  <TableIcon size={18} />
                 </button>
                 <div className="plan-menu-separator" />
                 <button
                   type="button"
                   role="menuitemradio"
                   aria-checked={planView === 'month'}
-                  className={`plan-menu-option ${planView === 'month' ? 'is-selected' : ''}`}
+                  className="plan-menu-option"
                   onClick={openMonthView}
                 >
                   Month
-                  <CalendarIcon size={16} />
+                  <CalendarIcon size={18} />
                 </button>
               </div>
             )}
@@ -860,7 +882,7 @@ function App() {
             exercise={timerExercise}
             onComplete={() => {
               markCompleted(timerExercise.id)
-              closeTimer()
+              window.history.back()
             }}
           />
         ) : view === 'settings' ? (
