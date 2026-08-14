@@ -18,7 +18,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.7'
+const APP_VERSION = 'beta 0.6.8'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -291,26 +291,59 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    let retryTimeout = null
+    let checking = false
 
-    function checkHealth() {
+    function pingOnce() {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 3000)
-
-      fetch(`${API_BASE}/api/health`, { signal: controller.signal, cache: 'no-store' })
-        .then((res) => {
-          if (cancelled) return
-          setIsOffline(!res.ok)
-          if (res.ok && pendingEditsRef.current.size > 0) flushPendingEdits()
-        })
-        .catch(() => { if (!cancelled) setIsOffline(true) })
+      return fetch(`${API_BASE}/api/health`, { signal: controller.signal, cache: 'no-store' })
+        .then((res) => res.ok)
+        .catch(() => false)
         .finally(() => clearTimeout(timeout))
+    }
+
+    // Android throttles/suspends background tabs — the first ping right after
+    // resuming from multitasking often races the network stack waking back up
+    // and times out even though the server is fine. Rather than flip the
+    // offline banner on a single failed ping, retry a few times quickly before
+    // believing it.
+    async function checkHealth() {
+      if (checking) return
+      checking = true
+      if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null }
+
+      let ok = await pingOnce()
+      if (!cancelled && !ok) {
+        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+          await new Promise((resolve) => { retryTimeout = setTimeout(resolve, 1200) })
+          if (cancelled) break
+          ok = await pingOnce()
+        }
+      }
+
+      if (!cancelled) {
+        setIsOffline(!ok)
+        if (ok && pendingEditsRef.current.size > 0) flushPendingEdits()
+      }
+      checking = false
     }
 
     checkHealth()
     const interval = setInterval(checkHealth, 15000)
+
+    // Also re-check immediately when the app comes back to the foreground,
+    // instead of waiting for the next (possibly delayed) interval tick.
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') checkHealth()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       cancelled = true
+      if (retryTimeout) clearTimeout(retryTimeout)
       clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 
