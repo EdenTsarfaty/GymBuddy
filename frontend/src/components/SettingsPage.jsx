@@ -118,6 +118,64 @@ function GoalsModal({ initialGoals, onSave, onClose }) {
   )
 }
 
+const REMINDERS = [
+  {
+    id: 'workout_reminder',
+    label: 'Workout day',
+    description: "A reminder will be sent in a workout day's morning.",
+  },
+  {
+    id: 'protein_reminder',
+    label: 'Drink protein',
+    description: 'A protein drinking reminder will be sent an hour after a workout has been finished.',
+  },
+]
+
+function ReminderModal({ initialValues, onSave, onClose }) {
+  const [values, setValues] = useState({
+    workout_reminder: !!initialValues.workout_reminder,
+    protein_reminder: !!initialValues.protein_reminder,
+  })
+
+  function toggle(id) {
+    setValues((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function handleSave() {
+    onSave(values)
+    onClose()
+  }
+
+  return createPortal(
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        <div className="modal-box goals-modal reminders-modal">
+          <div className="goals-list">
+            {REMINDERS.map(({ id, label, description }) => (
+              <div key={id} className="reminder-option">
+                <label className={`goals-option ${values[id] ? 'is-checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    className="goals-checkbox"
+                    checked={values[id]}
+                    onChange={() => toggle(id)}
+                  />
+                  <span className="goals-checkbox-box" aria-hidden="true" />
+                  <span className="goals-option-label">{label}</span>
+                </label>
+                <span className="reminder-option-description">{description}</span>
+              </div>
+            ))}
+          </div>
+          <button className="goals-save-btn" onClick={handleSave}>Save</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function BioRow({ label, value, onSave, placeholder, disabled }) {
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
@@ -168,8 +226,9 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
 
 function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
-  const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [] })
+  const [profile, setProfile] = useState({ age: null, height: null, weight: null, goals: [], workout_reminder: 0, protein_reminder: 0 })
   const [goalsOpen, setGoalsOpen] = useState(false)
+  const [remindersOpen, setRemindersOpen] = useState(false)
 
   useEffect(() => {
     if (!currentUser) return
@@ -187,6 +246,16 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
   function saveField(field, raw) {
     const value = Array.isArray(raw) ? raw : (raw === '' ? null : Number(raw))
     const updated = { ...profile, [field]: value, user_id: currentUser?.id }
+    setProfile(updated)
+    fetch(`${API_BASE}/api/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
+  }
+
+  function saveReminders(values) {
+    const updated = { ...profile, ...values, user_id: currentUser?.id }
     setProfile(updated)
     fetch(`${API_BASE}/api/profile`, {
       method: 'PUT',
@@ -291,6 +360,21 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
         <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Workout plan</span>
         <button className="bio-edit-btn regen-settings-btn" disabled={isOffline} onClick={onRegenerate}>Regenerate Plan</button>
       </div>
+
+      <div className="settings-separator" />
+
+      <div className="settings-row">
+        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Reminders</span>
+        <button className="bio-edit-btn" disabled={isOffline} onClick={() => setRemindersOpen(true)}>Edit</button>
+      </div>
+
+      {remindersOpen && (
+        <ReminderModal
+          initialValues={profile}
+          onSave={saveReminders}
+          onClose={() => setRemindersOpen(false)}
+        />
+      )}
 
       <div className="settings-separator" />
 

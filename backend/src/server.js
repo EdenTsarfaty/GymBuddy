@@ -237,24 +237,30 @@ fastify.get('/api/day-plans', async (request) => {
 
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  const row = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare(
+    'SELECT age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder FROM user_profile WHERE id = ?',
+  ).get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 
 fastify.put('/api/profile', async (request) => {
-  const { user_id, age, height, weight, goals, beginner_mode } = request.body || {}
+  const { user_id, age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ? WHERE id = ?',
+    'UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ? WHERE id = ?',
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
     weight !== undefined ? weight : null,
     goals !== undefined ? JSON.stringify(goals) : null,
     beginner_mode !== undefined ? (beginner_mode ? 1 : 0) : 0,
+    workout_reminder !== undefined ? (workout_reminder ? 1 : 0) : 0,
+    protein_reminder !== undefined ? (protein_reminder ? 1 : 0) : 0,
     uid,
   )
-  const row = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const row = db.prepare(
+    'SELECT age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder FROM user_profile WHERE id = ?',
+  ).get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })
 

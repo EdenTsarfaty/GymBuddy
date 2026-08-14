@@ -1405,6 +1405,18 @@
   color: var(--accent);
 }
 
+.reminder-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reminder-option-description {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding-left: 32px;
+}
+
 .complete-workout-btn {
   display: flex;
   align-items: center;

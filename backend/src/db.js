@@ -84,6 +84,8 @@ db.exec(`
 
 try { db.exec('ALTER TABLE user_profile ADD COLUMN current_streak INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN longest_streak INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN workout_reminder INTEGER DEFAULT 0') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder INTEGER DEFAULT 0') } catch {}
 
 
 const seedUser = (userId, exercises) => {
