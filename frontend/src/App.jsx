@@ -14,14 +14,14 @@ import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
+import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.1'
+const APP_VERSION = 'beta 0.6.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 const REPORT_BUG_URL = `https://t.me/Azsper?text=${encodeURIComponent('Hey! I found a bug in GymBuddy — ')}`
 
 const CATEGORY_ORDER = { warm_up: 0, stretch: 2 }

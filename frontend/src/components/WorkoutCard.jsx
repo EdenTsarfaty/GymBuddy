@@ -15,6 +15,8 @@ import TreadmillIcon from './icons/TreadmillIcon'
 import PlankIcon from './icons/PlankIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
 import StopwatchIcon from './icons/StopwatchIcon'
+import CompleteIcon from './icons/CompleteIcon'
+import UncompleteIcon from './icons/UncompleteIcon'
 
 const CATEGORY_META = {
   free_weight:  { label: 'Free weight',  Icon: DumbbellIcon },
@@ -113,6 +115,9 @@ const WEIGHT_PX_PER_UNIT = 22
 const MIN_DURATION = 5
 const MAX_DURATION = 3600
 const DURATION_STEP = 15
+const MAX_REVEAL_PX = 96
+const COMPLETE_THRESHOLD_PX = 80
+const SNAP_NUDGE_PX = 10
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -135,6 +140,10 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
   const [weightDragPx, setWeightDragPx] = useState(0)
   const [isDraggingWeight, setIsDraggingWeight] = useState(false)
   const weightDragRef = useRef(null)
+  const [dragPx, setDragPx] = useState(0)
+  const [isSwiping, setIsSwiping] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const swipeDragRef = useRef(null)
 
   function toggleExpanded() {
     if (editing) return
@@ -194,8 +203,73 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
     }
   }
 
+  function handleSwipePointerDown(e) {
+    if (editing) return
+    // Not captured yet — just watching. Capturing immediately would retarget the
+    // click event to this wrapper on every plain tap (e.g. the expand button),
+    // since that's how setPointerCapture works, silently swallowing the click.
+    swipeDragRef.current = { startX: e.clientX, captured: false, committed: false, pointerId: e.pointerId }
+  }
+
+  function handleSwipePointerMove(e) {
+    const drag = swipeDragRef.current
+    if (!drag) return
+    const delta = e.clientX - drag.startX
+
+    if (!drag.captured) {
+      // Only commit to a swipe (and start stealing the gesture) once the drag
+      // is clearly horizontal — a plain tap never crosses this and passes
+      // through to whatever was tapped, untouched.
+      if (Math.abs(delta) < 8) return
+      drag.captured = true
+      setIsSwiping(true)
+      e.currentTarget.setPointerCapture(drag.pointerId)
+    }
+
+    // Only rightward drag does anything for now — a future left-swipe action
+    // would extend this to a negative range plus its own reveal panel.
+    const raw = Math.max(0, Math.min(delta, MAX_REVEAL_PX))
+    const pastThreshold = raw >= COMPLETE_THRESHOLD_PX
+
+    // A small detent, not a full lock: crossing the threshold nudges it forward
+    // a few extra pixels (a quick "caught" bump) rather than snapping all the way
+    // open — dragging further still keeps working normally from there, up to the
+    // cap. Crossing back the other way un-nudges. Either transition buzzes once.
+    if (pastThreshold !== drag.committed) {
+      drag.committed = pastThreshold
+      navigator.vibrate?.(15)
+    }
+    const nudged = drag.committed ? Math.min(raw + SNAP_NUDGE_PX, MAX_REVEAL_PX) : raw
+    setDragPx(nudged)
+  }
+
+  function handleSwipePointerUp(e) {
+    const drag = swipeDragRef.current
+    if (!drag) return
+    swipeDragRef.current = null
+    setIsSwiping(false)
+    if (drag.captured && drag.committed) setCompleted((c) => !c)
+    setDragPx(0)
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }
+
   return (
-    <div className="workout-card">
+    <div
+      className="workout-card-swipe"
+      onPointerDown={handleSwipePointerDown}
+      onPointerMove={handleSwipePointerMove}
+      onPointerUp={handleSwipePointerUp}
+      onPointerCancel={handleSwipePointerUp}
+    >
+      <div className="workout-card-swipe-reveal" style={{ opacity: dragPx / MAX_REVEAL_PX }}>
+        {completed ? <UncompleteIcon size={28} /> : <CompleteIcon size={28} />}
+      </div>
+      <div
+        className={`workout-card ${completed ? 'is-completed' : ''} ${isSwiping ? 'is-dragging' : ''}`}
+        style={{ '--drag-x': `${dragPx}px` }}
+      >
       <div className="workout-card-main">
         <h3
           className="workout-card-title"
@@ -450,6 +524,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
           }}
         />
       )}
+      </div>
     </div>
   )
 }

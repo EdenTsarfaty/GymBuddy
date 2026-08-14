@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import PlayIcon from './icons/PlayIcon'
 import PauseIcon from './icons/PauseIcon'
 import ResetIcon from './icons/ResetIcon'
+import CompleteIcon from './icons/CompleteIcon'
 
 function formatMMSS(totalSeconds) {
   const m = Math.floor(totalSeconds / 60)
@@ -112,6 +113,13 @@ function TimerView({ exercise }) {
               <div key={i} className={`timer-set-square ${i < completedLaps ? 'is-done' : ''}`} />
             ))}
           </div>
+          <button
+            type="button"
+            className={`timer-btn-complete ${completedLaps >= exercise.sets ? 'is-visible' : ''}`}
+            aria-label="Mark complete"
+          >
+            <CompleteIcon size={54} />
+          </button>
         </div>
       )}
     </div>

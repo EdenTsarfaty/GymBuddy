@@ -7,9 +7,9 @@ import MoonIcon from './icons/MoonIcon'
 import OfflineIcon from './icons/OfflineIcon'
 import SunIcon from './icons/SunIcon'
 import XIcon from './icons/XIcon'
+import { API_BASE } from '../apiBase'
 
 const THEME_MODES = ['light', 'dark', 'system']
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 function UserPicker({ users, currentUser, onChangeUser, disabled }) {
   const [open, setOpen] = useState(false)

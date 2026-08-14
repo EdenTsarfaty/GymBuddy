@@ -309,7 +309,36 @@
   line-height: 1.4;
 }
 
+.workout-card-swipe {
+  position: relative;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/* The hover shadow reaches further down than the 16px gap between cards, so
+   without this the next card paints over its bottom edge and clips the glow. */
+.workout-card-swipe:hover {
+  z-index: 1;
+}
+
+/* Spans the whole card (not just the reveal width) so the card's rounded
+   corners always have panel behind them — a narrower panel leaves see-through
+   notches at full pull. The icon is offset to sit centred within the revealed
+   strip rather than centred in the panel. */
+.workout-card-swipe-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 34px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--bg);
+}
+
 .workout-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--card-bg);
@@ -318,12 +347,29 @@
   box-shadow: var(--shadow);
   padding: 9px 16px;
   line-height: 1.2;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  --drag-x: 0px;
+  transform: translateX(var(--drag-x));
+  /* Released: eases back with a touch of overshoot — a "snap back" rather than a
+     plain glide. */
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.workout-card.is-dragging {
+  /* Short and snappy rather than instant (transition: none) — this is what makes
+     the threshold-commit jump (in WorkoutCard.jsx) read as a fast snap into place
+     instead of a hard teleport, while staying responsive enough to still feel like
+     it's following your finger the rest of the time. */
+  transition: transform 0.10s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.15s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
 .workout-card:hover {
-  transform: scale(1.02);
+  transform: translateX(var(--drag-x)) scale(1.02);
   box-shadow: var(--shadow-hover);
+}
+
+.workout-card.is-completed {
+  background: color-mix(in srgb, var(--accent) 22%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--accent) 55%, white);
 }
 
 .workout-card-main {
@@ -342,6 +388,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow-wrap: break-word;
+  user-select: text;
 }
 
 .workout-card-main-right {
@@ -493,6 +540,7 @@
   font-weight: 400;
   line-height: 1.4;
   color: var(--text);
+  user-select: text;
 }
 
 .instruction-bullets {
@@ -511,6 +559,7 @@
   gap: 8px;
   font-size: 13px;
   color: var(--text);
+  user-select: text;
 }
 
 .bullet-marker {
@@ -1770,16 +1819,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
   color: var(--text-muted);
-  background: none;
-  border: none;
-  padding: 4px;
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
 .chat-back-btn:hover {
   color: var(--accent);
+  border-color: var(--accent);
 }
 
 .page.is-chat {
@@ -1913,6 +1965,32 @@
 
 .timer-btn-play:hover {
   color: var(--bg);
+  opacity: 0.85;
+}
+
+.timer-btn-complete {
+  display: flex;
+  width: 54px;
+  height: 54px;
+  margin-top: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.timer-btn-complete.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.timer-btn-complete:hover {
   opacity: 0.85;
 }
 

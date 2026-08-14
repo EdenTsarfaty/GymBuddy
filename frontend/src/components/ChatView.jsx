@@ -4,6 +4,7 @@ import SendIcon from './icons/SendIcon'
 import PencilIcon from './icons/PencilIcon'
 import SwapIcon from './icons/SwapIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
+import { API_BASE } from '../apiBase'
 
 const PROPOSAL_ICON = {
   stat_change: PencilIcon,
@@ -11,8 +12,6 @@ const PROPOSAL_ICON = {
   video_change: YouTubeIcon,
   watch_video: YouTubeIcon,
 }
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
 
 function renderInline(text) {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
