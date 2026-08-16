@@ -145,12 +145,6 @@
   animation: flame-flare 1s ease-out;
 }
 
-@media (hover: hover) {
-  .streak-badge:hover .streak-flame {
-    animation: flame-flare 1s ease-out;
-  }
-}
-
 @keyframes gear-snap {
   to { transform: rotate(300deg); }
 }
@@ -196,7 +190,9 @@
 
 .today-main {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .today-subtitle {
@@ -204,6 +200,27 @@
   font-weight: 500;
   letter-spacing: 0;
   color: var(--fg-muted);
+}
+
+.catchup-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #da9734;
+  cursor: pointer;
+}
+
+.catchup-mobile-label {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .catchup-mobile-label {
+    display: inline;
+    color: #da9734;
+    font-weight: 700;
+  }
 }
 
 @keyframes plan-menu-in {

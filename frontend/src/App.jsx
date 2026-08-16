@@ -19,7 +19,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.9.3'
+const APP_VERSION = 'beta 0.7.0'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -207,6 +207,7 @@ function App() {
   const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0 })
   const [flameAnimating, setFlameAnimating] = useState(false)
   const prevStreakRef = useRef(0)
+  const flameTimeoutRef = useRef(null)
   const [pendingEdits, setPendingEdits] = useState(() => {
     try {
       const uid = Number(localStorage.getItem(CURRENT_USER_STORAGE_KEY))
@@ -262,11 +263,32 @@ function App() {
     }
   }
 
+  // A still-open missed workout — scheduled in the past, not performed, and its
+  // grace window (up through the day before the next scheduled occurrence)
+  // hasn't closed yet. Only relevant when today itself has nothing scheduled,
+  // so there's an empty slot to surface it in instead of a blank "no workout".
+  const pendingCatchUp = useMemo(() => {
+    if (daysWithWorkouts.has(today)) return null
+    const todayISO = toISODate(new Date())
+    return workoutLog.find((row) => {
+      if (row.performed_date || row.scheduled_date >= todayISO) return false
+      const nextDate = nextScheduledDateAfter(row.scheduled_date, daysWithWorkouts)
+      return nextDate && todayISO < nextDate
+    }) ?? null
+  }, [workoutLog, daysWithWorkouts])
+
+  const catchUpWeekday = pendingCatchUp ? weekdayNameFromISO(pendingCatchUp.scheduled_date) : null
+  const isShowingCatchUp = selectedDay === today && !!catchUpWeekday
+  const effectiveDay = isShowingCatchUp ? catchUpWeekday : selectedDay
+  const catchUpTooltipText = catchUpWeekday
+    ? `Catching up: ${catchUpWeekday}${dayTitles.get(catchUpWeekday) ? ` — ${dayTitles.get(catchUpWeekday)}` : ''}`
+    : ''
+
   const exercises = useMemo(
     () => allExercises
-      .filter((item) => item.day === selectedDay)
+      .filter((item) => item.day === effectiveDay)
       .sort((a, b) => categoryRank(a.category) - categoryRank(b.category)),
-    [allExercises, selectedDay],
+    [allExercises, effectiveDay],
   )
 
   const workoutIndicators = useMemo(
@@ -462,6 +484,18 @@ function App() {
     return () => controller.abort()
   }, [currentUser, workoutLogRefreshKey])
 
+  // Runs the flare for a fixed 1s regardless of what happens afterward — once
+  // started (by a streak tick-up or a hover), it always plays out in full;
+  // hover is just a trigger, not something that can cut it short by leaving.
+  function triggerFlameFlare() {
+    if (flameTimeoutRef.current) clearTimeout(flameTimeoutRef.current)
+    setFlameAnimating(true)
+    flameTimeoutRef.current = setTimeout(() => {
+      setFlameAnimating(false)
+      flameTimeoutRef.current = null
+    }, 1000)
+  }
+
   // "Rekindle" flare: fires once, briefly, whenever the streak ticks up while
   // sitting at (or just reaching) its all-time best — not continuous, not on
   // every load, only on that specific upward tick.
@@ -469,9 +503,7 @@ function App() {
     const prev = prevStreakRef.current
     prevStreakRef.current = streak.current_streak
     if (streak.current_streak > prev && streak.current_streak === streak.longest_streak) {
-      setFlameAnimating(true)
-      const timeout = setTimeout(() => setFlameAnimating(false), 1000)
-      return () => clearTimeout(timeout)
+      triggerFlameFlare()
     }
   }, [streak.current_streak, streak.longest_streak])
 
@@ -480,14 +512,18 @@ function App() {
     if (!exercises.every((item) => completedExerciseIds.has(item.id))) return
 
     const todayISO = toISODate(new Date())
+    // Completing a surfaced catch-up workout resolves *its* original scheduled
+    // date (marked performed today, i.e. late) rather than today's date — today
+    // was never actually scheduled in this case.
+    const scheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : todayISO
     fetch(`${API_BASE}/api/workout-log/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: todayISO, performed_date: todayISO }),
+      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: scheduledDate, performed_date: todayISO }),
     })
       .then((res) => (res.ok ? setWorkoutLogRefreshKey((k) => k + 1) : null))
       .catch(() => {})
-  }, [completedExerciseIds, exercises, selectedDay, currentUser])
+  }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp])
 
   useEffect(() => {
     if (!planMenuOpen) return
@@ -779,8 +815,13 @@ function App() {
             >
               <span className="today-main">
                 {selectedDay}
+                {isShowingCatchUp && (
+                  <span className="catchup-dot" title={catchUpTooltipText} aria-label={catchUpTooltipText} />
+                )}
               </span>
-              {dayTitles.get(selectedDay) && (
+              {isShowingCatchUp ? (
+                <span className="today-subtitle catchup-mobile-label">{catchUpTooltipText}</span>
+              ) : dayTitles.get(selectedDay) && (
                 <span className="today-subtitle">{dayTitles.get(selectedDay)}</span>
               )}
             </button>
@@ -930,7 +971,11 @@ function App() {
 
         <div className="header-actions">
           {streak.current_streak > 0 && view !== 'settings' && (
-            <div className="streak-badge" title={`${streak.current_streak}-day streak`}>
+            <div
+              className="streak-badge"
+              title={`${streak.current_streak}-day streak`}
+              onMouseEnter={triggerFlameFlare}
+            >
               <span className="streak-number">{streak.current_streak}</span>
               <FlameIcon size={26} className={`streak-flame ${flameAnimating ? 'is-flaring' : ''}`} />
             </div>
