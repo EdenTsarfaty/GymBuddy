@@ -9,6 +9,7 @@ import CalendarIcon from './components/icons/CalendarIcon'
 import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
+import FlameIcon from './components/icons/FlameIcon'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
@@ -18,7 +19,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.6.9'
+const APP_VERSION = 'beta 0.6.9.3'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -203,6 +204,9 @@ function App() {
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
   const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
+  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0 })
+  const [flameAnimating, setFlameAnimating] = useState(false)
+  const prevStreakRef = useRef(0)
   const [pendingEdits, setPendingEdits] = useState(() => {
     try {
       const uid = Number(localStorage.getItem(CURRENT_USER_STORAGE_KEY))
@@ -292,6 +296,7 @@ function App() {
   useEffect(() => {
     let cancelled = false
     let retryTimeout = null
+    let nextCheckTimeout = null
     let checking = false
 
     function pingOnce() {
@@ -312,6 +317,7 @@ function App() {
       if (checking) return
       checking = true
       if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null }
+      if (nextCheckTimeout) { clearTimeout(nextCheckTimeout); nextCheckTimeout = null }
 
       let ok = await pingOnce()
       if (!cancelled && !ok) {
@@ -327,13 +333,18 @@ function App() {
         if (ok && pendingEditsRef.current.size > 0) flushPendingEdits()
       }
       checking = false
+
+      // Poll faster while offline so recovery is noticed sooner, back to the
+      // normal cadence once healthy again.
+      if (!cancelled) {
+        nextCheckTimeout = setTimeout(checkHealth, ok ? 15000 : 5000)
+      }
     }
 
     checkHealth()
-    const interval = setInterval(checkHealth, 15000)
 
     // Also re-check immediately when the app comes back to the foreground,
-    // instead of waiting for the next (possibly delayed) interval tick.
+    // instead of waiting for the next (possibly delayed) scheduled check.
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') checkHealth()
     }
@@ -342,7 +353,7 @@ function App() {
     return () => {
       cancelled = true
       if (retryTimeout) clearTimeout(retryTimeout)
-      clearInterval(interval)
+      if (nextCheckTimeout) clearTimeout(nextCheckTimeout)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
@@ -440,6 +451,29 @@ function App() {
       .catch(() => {})
     return () => controller.abort()
   }, [currentUser, workoutLogRefreshKey])
+
+  useEffect(() => {
+    if (!currentUser) return
+    const controller = new AbortController()
+    fetch(`${API_BASE}/api/workout-log/streak?user_id=${currentUser.id}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setStreak(data) })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [currentUser, workoutLogRefreshKey])
+
+  // "Rekindle" flare: fires once, briefly, whenever the streak ticks up while
+  // sitting at (or just reaching) its all-time best — not continuous, not on
+  // every load, only on that specific upward tick.
+  useEffect(() => {
+    const prev = prevStreakRef.current
+    prevStreakRef.current = streak.current_streak
+    if (streak.current_streak > prev && streak.current_streak === streak.longest_streak) {
+      setFlameAnimating(true)
+      const timeout = setTimeout(() => setFlameAnimating(false), 1000)
+      return () => clearTimeout(timeout)
+    }
+  }, [streak.current_streak, streak.longest_streak])
 
   useEffect(() => {
     if (!currentUser || selectedDay !== today || exercises.length === 0) return
@@ -894,15 +928,24 @@ function App() {
           </div>
         )}
 
-        <button
-          type="button"
-          className={`settings-btn ${view === 'settings' ? 'is-active' : ''} ${settingsClosing ? 'is-closing' : ''} ${settingsOpening ? 'is-opening' : ''}`}
-          onClick={toggleSettings}
-          aria-label="Settings"
-          aria-pressed={view === 'settings'}
-        >
-          <GearIcon size={28} />
-        </button>
+        <div className="header-actions">
+          {streak.current_streak > 0 && view !== 'settings' && (
+            <div className="streak-badge" title={`${streak.current_streak}-day streak`}>
+              <span className="streak-number">{streak.current_streak}</span>
+              <FlameIcon size={26} className={`streak-flame ${flameAnimating ? 'is-flaring' : ''}`} />
+            </div>
+          )}
+
+          <button
+            type="button"
+            className={`settings-btn ${view === 'settings' ? 'is-active' : ''} ${settingsClosing ? 'is-closing' : ''} ${settingsOpening ? 'is-opening' : ''}`}
+            onClick={toggleSettings}
+            aria-label="Settings"
+            aria-pressed={view === 'settings'}
+          >
+            <GearIcon size={28} />
+          </button>
+        </div>
           </>
         )}
       </header>

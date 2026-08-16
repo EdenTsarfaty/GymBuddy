@@ -158,20 +158,8 @@ function GoalsModal({ initialGoals, onSave, onClose }) {
   )
 }
 
-const PROTEIN_DELAY_OPTIONS = [15, 30, 45, 60, 90, 120]
-
-function formatDelayLabel(minutes) {
-  if (minutes < 60) return `${minutes} minutes`
-  const hours = minutes / 60
-  return `${hours} hour${hours === 1 ? '' : 's'}`
-}
-
-function formatTimeLabel(time) {
-  const [h, m] = (time || '08:00').split(':').map(Number)
-  const period = h < 12 ? 'AM' : 'PM'
-  const hour12 = h % 12 === 0 ? 12 : h % 12
-  return `${hour12}:${String(m).padStart(2, '0')} ${period}`
-}
+const MINUTE_OPTIONS = ['00', '15', '30', '45']
+const PROTEIN_HOUR_OPTIONS = [0, 1, 2, 3]
 
 function ReminderModal({ initialValues, onSave, onClose }) {
   const [values, setValues] = useState({
@@ -188,6 +176,13 @@ function ReminderModal({ initialValues, onSave, onClose }) {
   function handleSave() {
     onSave(values)
     onClose()
+  }
+
+  const proteinHours = Math.floor(values.protein_reminder_delay_minutes / 60)
+  const proteinMinutes = values.protein_reminder_delay_minutes % 60
+
+  function setProteinDelay(hours, minutes) {
+    setValues((prev) => ({ ...prev, protein_reminder_delay_minutes: hours * 60 + minutes }))
   }
 
   return createPortal(
@@ -208,7 +203,7 @@ function ReminderModal({ initialValues, onSave, onClose }) {
                 <span className="goals-option-label">Workout day</span>
               </label>
               <span className="reminder-option-description">
-                A reminder will be sent at {formatTimeLabel(values.workout_reminder_time)} on a workout day's morning.
+                A reminder will be sent on a workout day, at the time set below.
               </span>
               {values.workout_reminder && (
                 <input
@@ -232,18 +227,29 @@ function ReminderModal({ initialValues, onSave, onClose }) {
                 <span className="goals-option-label">Drink protein</span>
               </label>
               <span className="reminder-option-description">
-                A protein drinking reminder will be sent {formatDelayLabel(values.protein_reminder_delay_minutes)} after a workout has been finished.
+                A protein drinking reminder will be sent after a workout has been finished, using the delay set below.
               </span>
               {values.protein_reminder && (
-                <select
-                  className="reminder-delay-select"
-                  value={values.protein_reminder_delay_minutes}
-                  onChange={(e) => setValues((prev) => ({ ...prev, protein_reminder_delay_minutes: Number(e.target.value) }))}
-                >
-                  {PROTEIN_DELAY_OPTIONS.map((minutes) => (
-                    <option key={minutes} value={minutes}>{formatDelayLabel(minutes)}</option>
-                  ))}
-                </select>
+                <div className="reminder-time-row">
+                  <select
+                    className="reminder-time-select"
+                    value={proteinHours}
+                    onChange={(e) => setProteinDelay(Number(e.target.value), proteinMinutes)}
+                  >
+                    {PROTEIN_HOUR_OPTIONS.map((h) => (
+                      <option key={h} value={h}>{h}h</option>
+                    ))}
+                  </select>
+                  <select
+                    className="reminder-time-select"
+                    value={String(proteinMinutes).padStart(2, '0')}
+                    onChange={(e) => setProteinDelay(proteinHours, Number(e.target.value))}
+                  >
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={m}>{m}m</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
           </div>

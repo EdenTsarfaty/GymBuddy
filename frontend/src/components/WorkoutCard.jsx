@@ -557,6 +557,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
 
               {editing ? (
                 <div className="adjustments-editor">
+                  <span className="stat-label adjustments-title">Adjustments</span>
                   {draftAdjustments.map((entry, index) => (
                     <div key={index} className="adjustment-input-pair">
                       <input

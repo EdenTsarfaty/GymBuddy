@@ -48,9 +48,15 @@
   align-items: center;
 }
 
-.settings-btn {
+.header-actions {
   grid-column: 3;
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,6 +75,79 @@
 @media (hover: hover) {
   .settings-btn:hover {
     color: var(--accent);
+  }
+}
+
+.streak-badge {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.streak-number {
+  display: inline-block;
+  font-size: 26px;
+  font-weight: 700;
+  -webkit-text-stroke: 0.6px currentColor;
+  color: var(--accent);
+  transform: scaleX(0.72);
+  transform-origin: right center;
+  user-select: none;
+}
+
+.streak-flame {
+  color: var(--accent);
+  transform-origin: bottom center;
+}
+
+@keyframes flame-flare {
+  0% {
+    transform: scale(1, 1) rotate(0deg);
+    filter: none;
+  }
+  7% {
+    transform: scale(1.02, 1.08) rotate(-3deg);
+    filter: brightness(1.08) drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 30%, transparent))
+            drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 15%, transparent));
+  }
+  15% {
+    transform: scale(1.08, 1.3) rotate(-9deg);
+    filter: brightness(1.35) drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 90%, transparent))
+            drop-shadow(0 0 16px color-mix(in srgb, var(--accent) 60%, transparent));
+  }
+  35% {
+    transform: scale(1.06, 1.18) rotate(7deg);
+    filter: brightness(1.22) drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 75%, transparent))
+            drop-shadow(0 0 13px color-mix(in srgb, var(--accent) 48%, transparent));
+  }
+  55% {
+    transform: scale(1.03, 1.1) rotate(-4deg);
+    filter: brightness(1.12) drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 55%, transparent))
+            drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 32%, transparent));
+  }
+  75% {
+    transform: scale(1.01, 1.04) rotate(2deg);
+    filter: brightness(1.05) drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 35%, transparent))
+            drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 18%, transparent));
+  }
+  90% {
+    transform: scale(1.002, 1.01) rotate(-1deg);
+    filter: brightness(1.01) drop-shadow(0 0 1px color-mix(in srgb, var(--accent) 15%, transparent))
+            drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 8%, transparent));
+  }
+  100% {
+    transform: scale(1, 1) rotate(0deg);
+    filter: none;
+  }
+}
+
+.streak-flame.is-flaring {
+  animation: flame-flare 1s ease-out;
+}
+
+@media (hover: hover) {
+  .streak-badge:hover .streak-flame {
+    animation: flame-flare 1s ease-out;
   }
 }
 
@@ -756,6 +835,10 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 6px;
+}
+
+.adjustments-title {
+  font-size: 11px;
 }
 
 .adjustment-input-pair {
@@ -1529,8 +1612,15 @@
   padding-left: 32px;
 }
 
-.reminder-time-input,
-.reminder-delay-select {
+.reminder-time-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 32px;
+}
+
+.reminder-time-select,
+.reminder-time-input {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -1539,6 +1629,9 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 10px;
+}
+
+.reminder-time-input {
   margin-left: 32px;
   align-self: flex-start;
 }
