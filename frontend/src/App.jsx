@@ -10,6 +10,7 @@ import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import FlameIcon from './components/icons/FlameIcon'
+import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
@@ -19,7 +20,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.0.2'
+const APP_VERSION = 'beta 0.7.1'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -32,6 +33,16 @@ function categoryRank(category) {
 }
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
+
+const WORKOUT_COMPLETE_MESSAGES = [
+  'What a king!',
+  'Good job!',
+  'Nicely done!',
+  'Crushed it!',
+  'Beast mode!',
+  'You showed up!',
+  'Locked in!',
+]
 
 function getFirstDayOfWeek() {
   try {
@@ -205,6 +216,7 @@ function App() {
   const [workoutLog, setWorkoutLog] = useState([])
   const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
   const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0 })
+  const [celebration, setCelebration] = useState(null)
   const [flameAnimating, setFlameAnimating] = useState(false)
   const prevStreakRef = useRef(0)
   const flameTimeoutRef = useRef(null)
@@ -516,13 +528,27 @@ function App() {
     // date (marked performed today, i.e. late) rather than today's date — today
     // was never actually scheduled in this case.
     const scheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : todayISO
+    const oldStreak = streak.current_streak
     fetch(`${API_BASE}/api/workout-log/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: currentUser.id, scheduled_date: scheduledDate, performed_date: todayISO }),
     })
-      .then((res) => (res.ok ? setWorkoutLogRefreshKey((k) => k + 1) : null))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result) => {
+        if (!result) return
+        setWorkoutLogRefreshKey((k) => k + 1)
+        setCelebration({
+          message: WORKOUT_COMPLETE_MESSAGES[Math.floor(Math.random() * WORKOUT_COMPLETE_MESSAGES.length)],
+          oldStreak,
+          newStreak: result.current_streak,
+          isNewBest: result.current_streak === result.longest_streak,
+        })
+      })
       .catch(() => {})
+    // Deliberately excludes `streak` — it's only read to snapshot the
+    // pre-completion value at the moment this fires, not to react to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp])
 
   useEffect(() => {
@@ -1126,6 +1152,16 @@ function App() {
         <PlanGeneratingOverlay
           phase={planPhase}
           planStructure={planStructure}
+        />
+      )}
+
+      {celebration && (
+        <WorkoutCompleteCelebration
+          message={celebration.message}
+          oldStreak={celebration.oldStreak}
+          newStreak={celebration.newStreak}
+          isNewBest={celebration.isNewBest}
+          onDone={() => setCelebration(null)}
         />
       )}
     </div>

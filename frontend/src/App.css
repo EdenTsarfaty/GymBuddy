@@ -150,6 +150,110 @@
   animation: flame-flare 1s ease-out;
 }
 
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  opacity: 0;
+  animation: celebration-fade 3s ease forwards;
+}
+
+@keyframes celebration-fade {
+  0% { opacity: 0; }
+  5% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes celebration-fly-in-left {
+  0% { opacity: 0; transform: translateX(-120%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.celebration-message {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+  text-align: center;
+  opacity: 0;
+  transform: translateX(-120%);
+  animation: celebration-fly-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+
+.celebration-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.celebration-coins {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateX(-120%);
+  animation: celebration-fly-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.7s forwards;
+}
+
+@keyframes celebration-rise-in {
+  0% { opacity: 0; transform: translateY(60px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.celebration-streak {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(60px);
+  animation: celebration-rise-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) 1.05s forwards;
+}
+
+.celebration-streak-number {
+  display: inline-block;
+  height: 44px;
+  overflow: hidden;
+  font-size: 40px;
+  font-weight: 800;
+  -webkit-text-stroke: 0.6px currentColor;
+  color: var(--accent);
+}
+
+@keyframes celebration-roll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-44px); }
+}
+
+.celebration-streak-roll {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(0);
+  animation: celebration-roll 0.4s cubic-bezier(0.3, 0, 0.2, 1) 1.6s forwards;
+}
+
+.celebration-streak-digit {
+  height: 44px;
+  line-height: 44px;
+}
+
+.celebration-streak-flame {
+  color: var(--text-muted);
+}
+
+.celebration-streak-flame.is-active {
+  color: var(--accent);
+}
+
+.celebration-streak-flame.is-flaring {
+  animation: flame-flare 1s ease-out 2s;
+}
+
 @keyframes gear-snap {
   to { transform: rotate(300deg); }
 }
