@@ -47,6 +47,30 @@ function pad2(n) {
   return String(n).padStart(2, '0')
 }
 
+const WORKOUT_REMINDER_MESSAGES = [
+  "Today's a workout day — make it count!",
+  "Small steps, big gains — today's workout is on the schedule.",
+  'You showed up before — show up again today!',
+  "Consistency builds champions. Today's your day!",
+  "Every workout adds up. Today's one worth showing up for.",
+  "Don't forget today's workout — future you will say thanks.",
+  "Your workout's on the calendar. Let's make it happen!",
+]
+
+const PROTEIN_REMINDER_MESSAGES = [
+  'Muscles repair with protein — refuel and lock in those gains!',
+  'That workout deserves a protein reward — go refuel!',
+  'Recovery starts now. Grab some protein!',
+  "Don't let today's effort go to waste — protein time!",
+  'Your muscles are calling for protein after that workout.',
+  'Great workout! Now give your body the protein it needs to recover.',
+  'Give your muscles the protein boost they earned.',
+]
+
+function randomFrom(list) {
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 // Runs every minute. Sends each user's workout-day reminder at most once per
 // day, at or after their configured time-of-day — gated by
 // last_workout_reminder_date (not an exact-minute match) so a brief server
@@ -73,7 +97,7 @@ function checkWorkoutReminders() {
     db.prepare('UPDATE user_profile SET last_workout_reminder_date = ? WHERE id = ?').run(today, user.id)
     sendToUser(user.id, {
       title: 'Workout day',
-      body: "You've got a workout scheduled today — let's go!",
+      body: randomFrom(WORKOUT_REMINDER_MESSAGES),
     }).catch((err) => logError('push.checkWorkoutReminders', err))
   }
 }
@@ -101,7 +125,7 @@ function checkProteinReminders() {
     db.prepare('UPDATE user_profile SET protein_reminder_pending_at = NULL WHERE id = ?').run(user.id)
     sendToUser(user.id, {
       title: 'Drink protein',
-      body: 'Time to get some protein in after your workout!',
+      body: randomFrom(PROTEIN_REMINDER_MESSAGES),
     }).catch((err) => logError('push.checkProteinReminders', err))
   }
 }
