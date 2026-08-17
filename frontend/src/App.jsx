@@ -19,7 +19,7 @@ import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.0'
+const APP_VERSION = 'beta 0.7.0.1'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -970,13 +970,15 @@ function App() {
         )}
 
         <div className="header-actions">
-          {streak.current_streak > 0 && view !== 'settings' && (
+          {view !== 'settings' && (
             <div
-              className="streak-badge"
-              title={`${streak.current_streak}-day streak`}
-              onMouseEnter={triggerFlameFlare}
+              className={`streak-badge ${!streak.current_streak ? 'is-inactive' : ''}`}
+              title={streak.current_streak ? `${streak.current_streak}-day streak` : 'No active streak'}
+              onMouseEnter={() => {
+                if (streak.current_streak > 0 && streak.current_streak === streak.longest_streak) triggerFlameFlare()
+              }}
             >
-              <span className="streak-number">{streak.current_streak}</span>
+              <span className="streak-number">{streak.current_streak || 0}</span>
               <FlameIcon size={26} className={`streak-flame ${flameAnimating ? 'is-flaring' : ''}`} />
             </div>
           )}

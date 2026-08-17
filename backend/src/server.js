@@ -1,11 +1,12 @@
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError } = require('./openai')
-const { writeLLMLog, logRequest, logError, logInfo, logCli, logCliBlock, logStartup, cli } = require('./logger')
+const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
 const push = require('./push')
+const { isTailscaleConnected } = require('./tailscale')
 
 maybeBackupDatabase()
 
@@ -661,5 +662,10 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
     process.exit(1)
   }
   logStartup(PORT)
+  if (isTailscaleConnected()) {
+    logInfo('Tailscale: connected')
+  } else {
+    logWarn('Tailscale: not connected')
+  }
   push.startScheduler()
 })
