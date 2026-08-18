@@ -275,16 +275,24 @@ function formatFreezeDate(iso) {
   return `${d}/${m}/${y}`
 }
 
-function StreakFreezeModal({ onActivate, onClose }) {
-  const [date, setDate] = useState('')
-  const [showError, setShowError] = useState(false)
+function StreakGuardianPasswordModal({ title, description, submitLabel = 'Accept', onSubmit, onSuccess, onClose }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleActivate() {
-    if (!date) {
-      setShowError(true)
+  async function handleSubmit() {
+    if (!password) {
+      setError('A password is required.')
       return
     }
-    onActivate(date)
+    setSubmitting(true)
+    const result = await onSubmit(password)
+    setSubmitting(false)
+    if (!result?.ok) {
+      setError(result?.error || 'Something went wrong.')
+      return
+    }
+    onSuccess?.()
     onClose()
   }
 
@@ -293,34 +301,174 @@ function StreakFreezeModal({ onActivate, onClose }) {
       <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         <div className="modal-box goals-modal streak-freeze-modal">
-          <h2 className="regen-title">Streak Freeze</h2>
+          <h2 className="regen-title">{title}</h2>
           <div className="goals-list">
-            <span className="reminder-option-description streak-freeze-description">
-              Freezes your streak from being lost during times you are unable to attend to the gym —
-              exams, travel, work, etc.
-            </span>
-            <div className="regen-row">
-              <span className="regen-label">Return date</span>
-              <input
-                type="date"
-                className={`reminder-time-input streak-freeze-date-input ${showError ? 'is-error' : ''}`}
-                min={todayISODate()}
-                value={date}
-                onChange={(e) => { setDate(e.target.value); setShowError(false) }}
-              />
-            </div>
-            {showError && (
-              <span className="streak-freeze-error">
-                Choosing a date is required — knowing exactly when you're coming back makes it far more
-                likely that you actually will.
-              </span>
+            {description && (
+              <span className="reminder-option-description streak-freeze-description">{description}</span>
             )}
+            <input
+              type="password"
+              className={`reminder-time-input streak-guardian-password-input ${error ? 'is-error' : ''}`}
+              placeholder="Password"
+              autoFocus
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError('') }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+            />
+            {error && <span className="streak-freeze-error">{error}</span>}
           </div>
-          <button className="goals-save-btn" onClick={handleActivate}>Activate</button>
+          <div className="streak-guardian-modal-actions">
+            <button type="button" className="streak-freeze-suspend-btn" onClick={onClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button type="button" className="goals-save-btn" onClick={handleSubmit} disabled={submitting}>
+              {submitLabel}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
     document.body
+  )
+}
+
+function StreakFreezeModal({ onActivate, onClose, guardianEnabled, userId, onGuardianChange }) {
+  const [date, setDate] = useState('')
+  const [showError, setShowError] = useState(false)
+  const [guardianSetupOpen, setGuardianSetupOpen] = useState(false)
+  const [guardianDisableOpen, setGuardianDisableOpen] = useState(false)
+  const [guardianVerifyOpen, setGuardianVerifyOpen] = useState(false)
+
+  function handleActivate() {
+    if (!date) {
+      setShowError(true)
+      return
+    }
+    if (guardianEnabled) {
+      setGuardianVerifyOpen(true)
+      return
+    }
+    onActivate(date)
+    onClose()
+  }
+
+  async function submitGuardianPassword(endpoint, password) {
+    try {
+      const res = await fetch(`${API_BASE}/api/streak-guardian/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, password }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) return { ok: false, error: data.error }
+      return { ok: true }
+    } catch {
+      return { ok: false, error: 'Could not reach the server.' }
+    }
+  }
+
+  return (
+    <>
+      {createPortal(
+        <div className="modal-overlay" onMouseDown={onClose}>
+          <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+            <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+            <div className="modal-box goals-modal streak-freeze-modal">
+              <h2 className="regen-title">Streak Freeze</h2>
+              <span className="reminder-option-description streak-freeze-description streak-freeze-intro">
+                Freezes your streak from being lost during times you are unable to attend to the gym —
+                exams, travel, work, etc.
+              </span>
+              <div className="goals-list">
+                <div className="regen-row">
+                  <span className="regen-label">Return date</span>
+                  <input
+                    type="date"
+                    className={`reminder-time-input streak-freeze-date-input ${showError ? 'is-error' : ''}`}
+                    min={todayISODate()}
+                    value={date}
+                    onChange={(e) => { setDate(e.target.value); setShowError(false) }}
+                  />
+                </div>
+                {showError && (
+                  <span className="streak-freeze-error">
+                    Choosing a date is required — knowing exactly when you're coming back makes it far more
+                    likely that you actually will.
+                  </span>
+                )}
+
+                <div className="regen-row">
+                  <span className="regen-label">Streak Guardian</span>
+                  <div className="streak-guardian-control">
+                    {guardianEnabled ? (
+                      <>
+                        <button
+                          type="button"
+                          className="streak-guardian-remove-btn"
+                          onClick={() => setGuardianDisableOpen(true)}
+                          aria-label="Disable Streak Guardian"
+                        >
+                          <XIcon size={16} />
+                        </button>
+                        <button type="button" className="streak-guardian-status-btn" disabled>
+                          Activate
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="bio-edit-btn streak-freeze-btn"
+                        onClick={() => setGuardianSetupOpen(true)}
+                      >
+                        Set up
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <span className="reminder-option-description streak-freeze-description streak-guardian-caption">
+                  Require a trusted person's password before streak freeze can be turned on.
+                </span>
+              </div>
+              <button className="goals-save-btn" onClick={handleActivate}>Activate</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {guardianSetupOpen && (
+        <StreakGuardianPasswordModal
+          title="Set Up Streak Guardian"
+          description="Choose a password only your guardian knows — it'll be required to turn streak freeze on."
+          submitLabel="Accept"
+          onSubmit={(password) => submitGuardianPassword('setup', password)}
+          onSuccess={() => onGuardianChange(true)}
+          onClose={() => setGuardianSetupOpen(false)}
+        />
+      )}
+
+      {guardianDisableOpen && (
+        <StreakGuardianPasswordModal
+          title="Disable Streak Guardian"
+          description="Enter the guardian password to remove this lock."
+          submitLabel="Accept"
+          onSubmit={(password) => submitGuardianPassword('disable', password)}
+          onSuccess={() => onGuardianChange(false)}
+          onClose={() => setGuardianDisableOpen(false)}
+        />
+      )}
+
+      {guardianVerifyOpen && (
+        <StreakGuardianPasswordModal
+          title="Enter Streak Guardian Password"
+          description="This streak freeze is locked. Enter the guardian password to activate it."
+          submitLabel="Activate"
+          onSubmit={(password) => submitGuardianPassword('verify', password)}
+          onSuccess={() => { onActivate(date); onClose() }}
+          onClose={() => setGuardianVerifyOpen(false)}
+        />
+      )}
+    </>
   )
 }
 
@@ -379,6 +527,7 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
     workout_reminder: 0, workout_reminder_time: '08:00',
     protein_reminder: 0, protein_reminder_delay_minutes: 60,
     streak_freeze_until: null,
+    streak_guardian_enabled: false,
   })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
@@ -579,6 +728,9 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
         <StreakFreezeModal
           onActivate={saveStreakFreeze}
           onClose={() => setStreakFreezeOpen(false)}
+          guardianEnabled={profile.streak_guardian_enabled}
+          userId={currentUser?.id}
+          onGuardianChange={(enabled) => setProfile((p) => ({ ...p, streak_guardian_enabled: enabled }))}
         />
       )}
 

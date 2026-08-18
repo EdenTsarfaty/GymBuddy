@@ -5,6 +5,7 @@ const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock
 const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
+const streakGuardian = require('./streakGuardian')
 const push = require('./push')
 const { isTailscaleConnected } = require('./tailscale')
 
@@ -248,10 +249,16 @@ fastify.get('/api/day-plans', async (request) => {
 const PROFILE_COLUMNS =
   'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
 
+// Never select streak_guardian_hash/salt into an API response — the hash is
+// derived here into a plain enabled/disabled boolean instead.
+function loadProfile(uid) {
+  const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
+  return { ...row, goals: row.goals ? JSON.parse(row.goals) : [], streak_guardian_enabled: streakGuardian.isEnabled(uid) }
+}
+
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
-  return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
+  return loadProfile(uid)
 })
 
 fastify.put('/api/profile', async (request) => {
@@ -277,8 +284,40 @@ fastify.put('/api/profile', async (request) => {
     uid,
   )
   streak.recomputeStreak(uid)
-  const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
-  return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
+  return loadProfile(uid)
+})
+
+fastify.post('/api/streak-guardian/setup', async (request, reply) => {
+  const { user_id, password } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  if (!password || !password.trim()) {
+    reply.code(400)
+    return { error: 'Password is required' }
+  }
+  streakGuardian.setup(uid, password)
+  return { enabled: true }
+})
+
+fastify.post('/api/streak-guardian/disable', async (request, reply) => {
+  const { user_id, password } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  const ok = streakGuardian.disable(uid, password || '')
+  if (!ok) {
+    reply.code(401)
+    return { error: 'Incorrect password' }
+  }
+  return { enabled: false }
+})
+
+fastify.post('/api/streak-guardian/verify', async (request, reply) => {
+  const { user_id, password } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  const ok = streakGuardian.verify(uid, password || '')
+  if (!ok) {
+    reply.code(401)
+    return { error: 'Incorrect password' }
+  }
+  return { valid: true }
 })
 
 const VALID_SWAP_REASONS = ['hurts', 'new', 'unavailable', 'dislike', 'other']
