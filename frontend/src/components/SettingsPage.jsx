@@ -293,21 +293,22 @@ function StreakFreezeModal({ onActivate, onClose }) {
       <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         <div className="modal-box goals-modal streak-freeze-modal">
+          <h2 className="regen-title">Streak Freeze</h2>
           <div className="goals-list">
             <span className="reminder-option-description streak-freeze-description">
               Freezes your streak from being lost during times you are unable to attend to the gym —
               exams, travel, work, etc.
-              <br />
-              Choose the date you expect to be coming back.
             </span>
-            <input
-              type="date"
-              lang="en-GB"
-              className={`reminder-time-input streak-freeze-date-input ${showError ? 'is-error' : ''}`}
-              min={todayISODate()}
-              value={date}
-              onChange={(e) => { setDate(e.target.value); setShowError(false) }}
-            />
+            <div className="regen-row">
+              <span className="regen-label">Return date</span>
+              <input
+                type="date"
+                className={`reminder-time-input streak-freeze-date-input ${showError ? 'is-error' : ''}`}
+                min={todayISODate()}
+                value={date}
+                onChange={(e) => { setDate(e.target.value); setShowError(false) }}
+              />
+            </div>
             {showError && (
               <span className="streak-freeze-error">
                 Choosing a date is required — knowing exactly when you're coming back makes it far more
@@ -371,17 +372,25 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
     workout_reminder: 0, workout_reminder_time: '08:00',
     protein_reminder: 0, protein_reminder_delay_minutes: 60,
+    streak_freeze_until: null,
   })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
   const [streakFreezeOpen, setStreakFreezeOpen] = useState(false)
-  const [streakFreeze, setStreakFreeze] = useState({ active: false, until: null })
+  const [streakFreezeFlashing, setStreakFreezeFlashing] = useState(false)
+
+  useEffect(() => {
+    if (!flashStreakFreeze) return
+    setStreakFreezeFlashing(true)
+    const timeout = setTimeout(() => setStreakFreezeFlashing(false), 1400)
+    return () => clearTimeout(timeout)
+  }, [flashStreakFreeze])
 
   useEffect(() => {
     if (!currentUser) return
@@ -414,6 +423,16 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
       if (!subscribed) nextValues = { ...values, workout_reminder: false, protein_reminder: false }
     }
     const updated = { ...profile, ...nextValues, user_id: currentUser?.id }
+    setProfile(updated)
+    fetch(`${API_BASE}/api/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch(() => {})
+  }
+
+  function saveStreakFreeze(date) {
+    const updated = { ...profile, streak_freeze_until: date, user_id: currentUser?.id }
     setProfile(updated)
     fetch(`${API_BASE}/api/profile`, {
       method: 'PUT',
@@ -540,25 +559,25 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
 
       <div className="settings-separator" />
 
-      <div className="settings-row">
+      <div className={`settings-row ${streakFreezeFlashing ? 'is-flashing' : ''}`}>
         <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Streak Freeze</span>
         <div className="bio-row-right">
-          {streakFreeze.active && (
-            <span className="streak-freeze-active-until">active until {formatFreezeDate(streakFreeze.until)}</span>
+          {profile.streak_freeze_until && (
+            <span className="streak-freeze-active-until">active until {formatFreezeDate(profile.streak_freeze_until)}</span>
           )}
           <button
             className="bio-edit-btn streak-freeze-btn"
             disabled={isOffline}
-            onClick={() => (streakFreeze.active ? setStreakFreeze({ active: false, until: null }) : setStreakFreezeOpen(true))}
+            onClick={() => (profile.streak_freeze_until ? saveStreakFreeze(null) : setStreakFreezeOpen(true))}
           >
-            {streakFreeze.active ? 'Deactivate' : 'Activate'}
+            {profile.streak_freeze_until ? 'Deactivate' : 'Activate'}
           </button>
         </div>
       </div>
 
       {streakFreezeOpen && (
         <StreakFreezeModal
-          onActivate={(date) => setStreakFreeze({ active: true, until: date })}
+          onActivate={saveStreakFreeze}
           onClose={() => setStreakFreezeOpen(false)}
         />
       )}

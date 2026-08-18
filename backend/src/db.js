@@ -91,6 +91,7 @@ try { db.exec('ALTER TABLE user_profile ADD COLUMN last_workout_reminder_date TE
 try { db.exec("ALTER TABLE user_profile ADD COLUMN workout_reminder_time TEXT DEFAULT '08:00'") } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_delay_minutes INTEGER DEFAULT 60') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_pending_at TEXT') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_freeze_until TEXT') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS push_subscriptions (

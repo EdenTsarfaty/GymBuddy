@@ -14,17 +14,20 @@ import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
+import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.2'
+const APP_VERSION = 'beta 0.7.3'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
+const STREAK_FREEZE_SUSPEND_STORAGE_KEY = 'gymbuddy-streak-freeze-suspended-until'
+const STREAK_FREEZE_SUSPEND_MS = 3 * 60 * 60 * 1000
 const REPORT_BUG_URL = `https://t.me/Azsper?text=${encodeURIComponent('Hey! I found a bug in GymBuddy — ')}`
 
 const CATEGORY_ORDER = { warm_up: 0, stretch: 2 }
@@ -215,7 +218,10 @@ function App() {
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
   const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
-  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0 })
+  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0, streak_freeze_until: null })
+  const [freezeSuspendedUntil, setFreezeSuspendedUntil] = useState(0)
+  const [settingsFlashToken, setSettingsFlashToken] = useState(0)
+  const showFreezeScreen = !!streak.streak_freeze_until && Date.now() >= freezeSuspendedUntil
   const [celebration, setCelebration] = useState(null)
   const [flameAnimating, setFlameAnimating] = useState(false)
   const prevStreakRef = useRef(0)
@@ -247,6 +253,19 @@ function App() {
       setPendingEdits(cachedPending ? new Map(JSON.parse(cachedPending)) : new Map())
     } catch {}
   }, [currentUser?.id])
+
+  useEffect(() => {
+    if (!currentUser) return
+    const stored = Number(localStorage.getItem(`${STREAK_FREEZE_SUSPEND_STORAGE_KEY}-${currentUser.id}`))
+    setFreezeSuspendedUntil(stored || 0)
+  }, [currentUser?.id])
+
+  function suspendStreakFreezeNotice() {
+    const until = Date.now() + STREAK_FREEZE_SUSPEND_MS
+    const uid = currentUserRef.current?.id
+    if (uid) localStorage.setItem(`${STREAK_FREEZE_SUSPEND_STORAGE_KEY}-${uid}`, String(until))
+    setFreezeSuspendedUntil(until)
+  }
 
   function persistPending(map) {
     const uid = currentUserRef.current?.id
@@ -1052,6 +1071,7 @@ function App() {
               setCurrentUser(user)
               localStorage.setItem(CURRENT_USER_STORAGE_KEY, String(user.id))
             }}
+            flashStreakFreeze={settingsFlashToken}
           />
         ) : (
           <main className="card-list">
@@ -1064,8 +1084,18 @@ function App() {
                 </p>
               </div>
             )}
-            {!loading && !serverDown && error && <p className="status-message">Couldn't load exercises: {error}</p>}
-            {!loading && !serverDown && !error && exercises.length === 0 && (
+            {!loading && !serverDown && showFreezeScreen && (
+              <StreakFreezeNotice
+                untilDate={streak.streak_freeze_until}
+                onSuspend={suspendStreakFreezeNotice}
+                onDeactivate={() => {
+                  setSettingsFlashToken((t) => t + 1)
+                  setView('settings')
+                }}
+              />
+            )}
+            {!loading && !serverDown && !showFreezeScreen && error && <p className="status-message">Couldn't load exercises: {error}</p>}
+            {!loading && !serverDown && !showFreezeScreen && !error && exercises.length === 0 && (
               <div className="empty-day">
                 <ZzzIcon className="empty-day-zzz" />
                 <p className="empty-day-message">
@@ -1075,6 +1105,7 @@ function App() {
             )}
             {!loading &&
               !serverDown &&
+              !showFreezeScreen &&
               !error &&
               exercises.map((item, index) => (
                 <WorkoutCard
@@ -1102,7 +1133,7 @@ function App() {
                   cascadeIndex={index}
                 />
               ))}
-            {!loading && !serverDown && !error && exercises.length > 0 && (
+            {!loading && !serverDown && !showFreezeScreen && !error && exercises.length > 0 && (
               <button
                 type="button"
                 className="complete-workout-btn"

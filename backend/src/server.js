@@ -246,7 +246,7 @@ fastify.get('/api/day-plans', async (request) => {
 })
 
 const PROFILE_COLUMNS =
-  'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes'
+  'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
 
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
@@ -258,10 +258,11 @@ fastify.put('/api/profile', async (request) => {
   const {
     user_id, age, height, weight, goals, beginner_mode,
     workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes,
+    streak_freeze_until,
   } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    `UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ? WHERE id = ?`,
+    `UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ?, streak_freeze_until = ? WHERE id = ?`,
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
@@ -272,8 +273,10 @@ fastify.put('/api/profile', async (request) => {
     protein_reminder !== undefined ? (protein_reminder ? 1 : 0) : 0,
     workout_reminder_time || '08:00',
     protein_reminder_delay_minutes !== undefined ? protein_reminder_delay_minutes : 60,
+    streak_freeze_until || null,
     uid,
   )
+  streak.recomputeStreak(uid)
   const row = db.prepare(`SELECT ${PROFILE_COLUMNS} FROM user_profile WHERE id = ?`).get(uid)
   return { ...row, goals: row.goals ? JSON.parse(row.goals) : [] }
 })

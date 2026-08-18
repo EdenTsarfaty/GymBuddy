@@ -78,10 +78,18 @@ function recomputeStreak(userId) {
     'SELECT scheduled_date, performed_date FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
   ).all(userId)
 
+  const profile = db.prepare('SELECT longest_streak, streak_freeze_until FROM user_profile WHERE id = ?').get(userId)
+  const freezeUntil = profile?.streak_freeze_until || null
+
   let streak = 0
   for (const row of rows) {
     if (row.performed_date) {
       streak += 1
+      continue
+    }
+    // A missed date covered by an active streak freeze neither breaks the
+    // streak nor extends it — the count just holds until the freeze lifts.
+    if (freezeUntil && row.scheduled_date <= freezeUntil) {
       continue
     }
     const nextDate = nextScheduledDateAfter(userId, row.scheduled_date)
@@ -91,12 +99,11 @@ function recomputeStreak(userId) {
     // else: grace window still open — pending, leave the running count untouched
   }
 
-  const profile = db.prepare('SELECT longest_streak FROM user_profile WHERE id = ?').get(userId)
   const longest = Math.max(profile?.longest_streak ?? 0, streak)
 
   db.prepare('UPDATE user_profile SET current_streak = ?, longest_streak = ? WHERE id = ?').run(streak, longest, userId)
 
-  return { current_streak: streak, longest_streak: longest }
+  return { current_streak: streak, longest_streak: longest, streak_freeze_until: freezeUntil }
 }
 
 // Returns null if `scheduledDate` has no workout_log row for this user (either it
