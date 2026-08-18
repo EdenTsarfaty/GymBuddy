@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import CheckIcon from './icons/CheckIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
+import EyeIcon from './icons/EyeIcon'
+import EyeOffIcon from './icons/EyeOffIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
 import OfflineIcon from './icons/OfflineIcon'
@@ -279,6 +281,7 @@ function StreakGuardianPasswordModal({ title, description, submitLabel = 'Accept
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleSubmit() {
     if (!password) {
@@ -306,15 +309,26 @@ function StreakGuardianPasswordModal({ title, description, submitLabel = 'Accept
             {description && (
               <span className="reminder-option-description streak-freeze-description">{description}</span>
             )}
-            <input
-              type="password"
-              className={`reminder-time-input streak-guardian-password-input ${error ? 'is-error' : ''}`}
-              placeholder="Password"
-              autoFocus
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError('') }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-            />
+            <div className="streak-guardian-password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className={`reminder-time-input streak-guardian-password-input ${error ? 'is-error' : ''}`}
+                placeholder="Password"
+                autoFocus
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setError('') }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+              />
+              <button
+                type="button"
+                className="streak-guardian-password-toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+              </button>
+            </div>
             {error && <span className="streak-freeze-error">{error}</span>}
           </div>
           <div className="streak-guardian-modal-actions">
@@ -520,7 +534,7 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
@@ -587,7 +601,9 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
-    }).catch(() => {})
+    })
+      .then(() => onStreakFreezeChange?.())
+      .catch(() => {})
   }
 
   return (

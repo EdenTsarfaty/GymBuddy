@@ -161,7 +161,7 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0 }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0, isReverting = false }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
@@ -366,7 +366,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
         {completed ? <UncompleteIcon size={28} /> : <CompleteIcon size={28} />}
       </div>
       <div
-        className={`workout-card ${completed ? 'is-completed' : ''} ${isSwiping ? 'is-dragging' : ''}`}
+        className={`workout-card ${completed ? 'is-completed' : ''} ${isSwiping ? 'is-dragging' : ''} ${isReverting ? 'is-reverting' : ''}`}
         style={{ '--drag-x': `${dragPx}px` }}
       >
       <div className="workout-card-main">

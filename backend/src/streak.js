@@ -128,12 +128,32 @@ function markPerformed(userId, scheduledDate, performedDate) {
   return { workoutLog, ...streak }
 }
 
+// Reverses markPerformed for an accidental "Complete Workout" press — clears
+// performed_date and recomputes the streak as if it never happened. Returns
+// null under the same conditions markPerformed would.
+function markUnperformed(userId, scheduledDate) {
+  const existing = db.prepare(
+    'SELECT id FROM workout_log WHERE user_id = ? AND scheduled_date = ?',
+  ).get(userId, scheduledDate)
+  if (!existing) return null
+
+  db.prepare('UPDATE workout_log SET performed_date = NULL WHERE id = ?').run(existing.id)
+
+  const streak = recomputeStreak(userId)
+  const workoutLog = db.prepare(
+    'SELECT id, user_id, scheduled_date, performed_date FROM workout_log WHERE id = ?',
+  ).get(existing.id)
+
+  return { workoutLog, ...streak }
+}
+
 module.exports = {
   getScheduledWeekdays,
   syncScheduledWorkouts,
   nextScheduledDateAfter,
   recomputeStreak,
   markPerformed,
+  markUnperformed,
   getHistory,
   weekdayName,
   todayISODate,

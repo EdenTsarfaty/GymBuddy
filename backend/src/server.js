@@ -658,6 +658,30 @@ fastify.post('/api/workout-log/complete', async (request, reply) => {
   return result
 })
 
+// Reverses the completion above — for accidentally pressing "Complete
+// Workout" or the swipe that finished the last exercise. Also cancels the
+// protein reminder /complete may have just queued, since the workout it was
+// for didn't actually happen (from the app's perspective).
+fastify.post('/api/workout-log/uncomplete', async (request, reply) => {
+  const { user_id, scheduled_date } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!scheduled_date || !/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date)) {
+    reply.code(400)
+    return { error: 'scheduled_date is required (YYYY-MM-DD)' }
+  }
+
+  const result = streak.markUnperformed(uid, scheduled_date)
+  if (!result) {
+    reply.code(404)
+    return { error: 'No scheduled workout found for that date' }
+  }
+
+  db.prepare('UPDATE user_profile SET protein_reminder_pending_at = NULL WHERE id = ?').run(uid)
+
+  return result
+})
+
 fastify.get('/api/workout-log/streak', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
   return streak.recomputeStreak(uid)

@@ -18,10 +18,11 @@ import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
+import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.4'
+const APP_VERSION = 'beta 0.7.5'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -191,8 +192,28 @@ function App() {
   const [allExercises, setAllExercises] = useState([])
   const [completedExerciseIds, setCompletedExerciseIds] = useState(() => new Set())
   const [cascadeToken, setCascadeToken] = useState(0)
+  // Remembers just the last completion (whichever exercise ids the last cascade
+  // press or finishing swipe actually flipped), in memory only — cleared on
+  // reload and the moment anything is unchecked, since "all complete" stops
+  // being true. That's what lets the undo button target only that action.
+  const [lastCompletionBatch, setLastCompletionBatch] = useState(null)
+  const preCompletionSnapshotRef = useRef(new Set())
+  // Snapshot taken the instant "Complete Workout" is clicked, before any of the
+  // cascade's staggered per-card completions start — unlike preCompletionSnapshotRef
+  // (which keeps re-snapshotting on every still-incomplete render and would end
+  // up capturing only the second-to-last card), this one is frozen at the start
+  // so the diff against it covers the whole cascade batch, not just the last card.
+  const cascadeStartSnapshotRef = useRef(null)
+  const [justRevertedIds, setJustRevertedIds] = useState(() => new Set())
+  const [streakUndoTick, setStreakUndoTick] = useState(null)
 
   function toggleCompleted(id) {
+    // Un-completing while a stale non-zero cascadeToken lingers would replay
+    // the whole cascade the next time this card remounts (e.g. leaving and
+    // returning from Settings) — WorkoutCard's cascade effect only checks
+    // "is cascadeToken truthy and am I not completed", it has no memory of
+    // having already run for this token across a remount.
+    if (completedExerciseIds.has(id)) setCascadeToken(0)
     setCompletedExerciseIds((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
@@ -538,6 +559,16 @@ function App() {
     }
   }, [streak.current_streak, streak.longest_streak])
 
+  // Keeps a running snapshot of completedExerciseIds from the last render
+  // where the day *wasn't* fully complete yet — so the moment it flips to
+  // complete, this still holds the "just before" state to diff against.
+  useEffect(() => {
+    if (exercises.length === 0) return
+    if (!exercises.every((item) => completedExerciseIds.has(item.id))) {
+      preCompletionSnapshotRef.current = completedExerciseIds
+    }
+  }, [completedExerciseIds, exercises])
+
   useEffect(() => {
     if (!currentUser || selectedDay !== today || exercises.length === 0) return
     if (!exercises.every((item) => completedExerciseIds.has(item.id))) return
@@ -548,6 +579,14 @@ function App() {
     // was never actually scheduled in this case.
     const scheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : todayISO
     const oldStreak = streak.current_streak
+    // The ids that just flipped complete this round — either the whole cascade
+    // batch (diffed against the snapshot frozen when the button was clicked) or
+    // the single card whose swipe finished the day.
+    const baseline = cascadeStartSnapshotRef.current ?? preCompletionSnapshotRef.current
+    const batchIds = exercises
+      .filter((item) => !baseline.has(item.id))
+      .map((item) => item.id)
+    cascadeStartSnapshotRef.current = null
     fetch(`${API_BASE}/api/workout-log/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -557,6 +596,7 @@ function App() {
       .then((result) => {
         if (!result) return
         setWorkoutLogRefreshKey((k) => k + 1)
+        setLastCompletionBatch({ ids: batchIds, scheduledDate })
         setCelebration({
           message: WORKOUT_COMPLETE_MESSAGES[Math.floor(Math.random() * WORKOUT_COMPLETE_MESSAGES.length)],
           oldStreak,
@@ -569,6 +609,45 @@ function App() {
     // pre-completion value at the moment this fires, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp])
+
+  function handleUndoComplete() {
+    if (!lastCompletionBatch || !currentUser) return
+    const { ids, scheduledDate } = lastCompletionBatch
+    const oldStreak = streak.current_streak
+    fetch(`${API_BASE}/api/workout-log/uncomplete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: scheduledDate }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result) => {
+        if (!result) return
+        setCompletedExerciseIds((current) => {
+          const next = new Set(current)
+          ids.forEach((id) => next.delete(id))
+          return next
+        })
+        // See toggleCompleted's comment — leaving this non-zero would replay
+        // the cascade on a future remount (e.g. Settings and back).
+        setCascadeToken(0)
+        setStreak(result)
+        setLastCompletionBatch(null)
+        setWorkoutLogRefreshKey((k) => k + 1)
+        setCelebration(null)
+        // Briefly flags just the reverted cards so they play a fade instead of
+        // snapping straight to their uncompleted look.
+        setJustRevertedIds(new Set(ids))
+        setTimeout(() => setJustRevertedIds(new Set()), 450)
+        // Header streak number normally just silently updates behind the
+        // celebration overlay on a real completion — undo has no overlay to
+        // hide behind, so it plays its own little tick-down roll instead.
+        if (result.current_streak !== oldStreak) {
+          setStreakUndoTick({ from: oldStreak, to: result.current_streak })
+          setTimeout(() => setStreakUndoTick(null), 500)
+        }
+      })
+      .catch(() => {})
+  }
 
   useEffect(() => {
     if (!planMenuOpen) return
@@ -1023,7 +1102,16 @@ function App() {
                 if (streak.current_streak > 0 && streak.current_streak === streak.longest_streak) triggerFlameFlare()
               }}
             >
-              <span className="streak-number">{streak.current_streak || 0}</span>
+              {streakUndoTick ? (
+                <span className="streak-number-viewport">
+                  <span className="streak-number-roll is-tick-down">
+                    <span className="streak-number streak-number-digit">{streakUndoTick.to}</span>
+                    <span className="streak-number streak-number-digit">{streakUndoTick.from}</span>
+                  </span>
+                </span>
+              ) : (
+                <span className="streak-number">{streak.current_streak || 0}</span>
+              )}
               <FlameIcon size={26} className={`streak-flame ${flameAnimating ? 'is-flaring' : ''}`} />
             </div>
           )}
@@ -1072,6 +1160,7 @@ function App() {
               localStorage.setItem(CURRENT_USER_STORAGE_KEY, String(user.id))
             }}
             flashStreakFreeze={settingsFlashToken}
+            onStreakFreezeChange={() => setWorkoutLogRefreshKey((k) => k + 1)}
           />
         ) : (
           <main className="card-list">
@@ -1129,21 +1218,46 @@ function App() {
                   onOpenTimer={() => openTimer(item)}
                   completed={completedExerciseIds.has(item.id)}
                   onToggleComplete={() => toggleCompleted(item.id)}
+                  isReverting={justRevertedIds.has(item.id)}
                   cascadeToken={cascadeToken}
                   cascadeIndex={index}
                 />
               ))}
-            {!loading && !serverDown && !showFreezeScreen && !error && exercises.length > 0 && (
-              <button
-                type="button"
-                className="complete-workout-btn"
-                onClick={() => setCascadeToken((t) => t + 1)}
-                disabled={exercises.every((item) => completedExerciseIds.has(item.id))}
-              >
-                <CheckAllIcon size={20} />
-                Complete Workout
-              </button>
-            )}
+            {!loading && !serverDown && !showFreezeScreen && !error && exercises.length > 0 && (() => {
+              const allComplete = exercises.every((item) => completedExerciseIds.has(item.id))
+              const currentScheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : toISODate(new Date())
+              const canUndo = allComplete
+                && selectedDay === today
+                && lastCompletionBatch?.scheduledDate === currentScheduledDate
+                && lastCompletionBatch.ids.length > 0
+              return (
+                <div className="workout-actions">
+                  {canUndo && (
+                    <button
+                      type="button"
+                      className="workout-undo-btn"
+                      onClick={handleUndoComplete}
+                      aria-label="Undo completing workout"
+                      title="Undo completing workout"
+                    >
+                      <UndoIcon size={18} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="complete-workout-btn"
+                    onClick={() => {
+                      cascadeStartSnapshotRef.current = new Set(completedExerciseIds)
+                      setCascadeToken((t) => t + 1)
+                    }}
+                    disabled={allComplete}
+                  >
+                    <CheckAllIcon size={20} />
+                    Complete Workout
+                  </button>
+                </div>
+              )
+            })()}
           </main>
         )}
       </div>

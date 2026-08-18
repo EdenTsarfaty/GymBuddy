@@ -100,6 +100,37 @@
   user-select: none;
 }
 
+/* Undo's header tick-down — the mirror of the celebration's odometer roll
+   (WorkoutCompleteCelebration's .celebration-streak-roll), but rolling the
+   opposite way since this is the one place a streak decreases and has no
+   fullscreen overlay to hide the plain number just silently changing behind. */
+.streak-number-viewport {
+  display: inline-block;
+  height: 30px;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.streak-number-roll {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-30px);
+}
+
+.streak-number-roll.is-tick-down {
+  animation: streak-number-tick-down 0.45s cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+
+@keyframes streak-number-tick-down {
+  0%   { transform: translateY(-30px); }
+  100% { transform: translateY(0); }
+}
+
+.streak-number-digit {
+  height: 30px;
+  line-height: 30px;
+}
+
 .streak-flame {
   color: var(--accent);
   transform-origin: bottom center;
@@ -801,6 +832,19 @@
 
 .workout-card.is-completed .exercise-category {
   color: color-mix(in srgb, var(--accent) 70%, white);
+}
+
+/* Undo reverts a card's completed state instantly (the gradient background
+   above can't cross-fade via a plain CSS transition), so this dip stands in
+   as visual confirmation that something changed, instead of a silent snap. */
+@keyframes workout-card-revert-fade {
+  0% { opacity: 1; }
+  40% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.workout-card.is-reverting {
+  animation: workout-card-revert-fade 0.45s ease;
 }
 
 .workout-card-main {
@@ -1841,6 +1885,35 @@
   align-self: flex-start;
 }
 
+.workout-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.workout-undo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.workout-undo-btn:hover {
+  color: var(--text-h);
+  border-color: var(--text-muted);
+}
+
 .complete-workout-btn {
   display: flex;
   align-items: center;
@@ -1855,7 +1928,6 @@
   border: none;
   border-radius: 999px;
   padding: 8px 18px;
-  margin-top: 4px;
   cursor: pointer;
   transition: opacity 0.15s ease;
 }
@@ -1956,10 +2028,37 @@
   color: var(--text-h);
 }
 
+.streak-guardian-password-field {
+  position: relative;
+  align-self: stretch;
+}
+
 .streak-guardian-password-input {
   margin-left: 0;
   align-self: stretch;
   width: 100%;
+  padding-right: 38px;
+}
+
+.streak-guardian-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.streak-guardian-password-toggle:hover {
+  opacity: 0.8;
 }
 
 .streak-guardian-modal-actions {
