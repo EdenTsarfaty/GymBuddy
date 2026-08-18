@@ -1563,6 +1563,17 @@
   width: 120px;
 }
 
+.streak-freeze-btn {
+  width: auto;
+  padding: 5px 14px;
+}
+
+.streak-freeze-active-until {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 @keyframes bio-cancel-in {
   from { opacity: 0; transform: translateX(6px); }
   to   { opacity: 1; transform: translateX(0); }
@@ -1811,6 +1822,28 @@
 
 .goals-save-btn:hover {
   opacity: 0.85;
+}
+
+/* Streak freeze modal */
+.streak-freeze-description {
+  padding-left: 0;
+  font-size: 16px;
+  color: var(--text-h);
+}
+
+.streak-freeze-date-input {
+  margin-left: 0;
+  align-self: flex-start;
+}
+
+.streak-freeze-date-input.is-error {
+  border-color: #e5484d;
+}
+
+.streak-freeze-error {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5484d;
 }
 
 /* Swap exercise modal */

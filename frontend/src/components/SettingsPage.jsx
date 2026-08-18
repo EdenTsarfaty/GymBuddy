@@ -261,6 +261,68 @@ function ReminderModal({ initialValues, onSave, onClose }) {
   )
 }
 
+function todayISODate() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function formatFreezeDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function StreakFreezeModal({ onActivate, onClose }) {
+  const [date, setDate] = useState('')
+  const [showError, setShowError] = useState(false)
+
+  function handleActivate() {
+    if (!date) {
+      setShowError(true)
+      return
+    }
+    onActivate(date)
+    onClose()
+  }
+
+  return createPortal(
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        <div className="modal-box goals-modal streak-freeze-modal">
+          <div className="goals-list">
+            <span className="reminder-option-description streak-freeze-description">
+              Freezes your streak from being lost during times you are unable to attend to the gym —
+              exams, travel, work, etc.
+              <br />
+              Choose the date you expect to be coming back.
+            </span>
+            <input
+              type="date"
+              lang="en-GB"
+              className={`reminder-time-input streak-freeze-date-input ${showError ? 'is-error' : ''}`}
+              min={todayISODate()}
+              value={date}
+              onChange={(e) => { setDate(e.target.value); setShowError(false) }}
+            />
+            {showError && (
+              <span className="streak-freeze-error">
+                Choosing a date is required — knowing exactly when you're coming back makes it far more
+                likely that you actually will.
+              </span>
+            )}
+          </div>
+          <button className="goals-save-btn" onClick={handleActivate}>Activate</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function BioRow({ label, value, onSave, placeholder, disabled }) {
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
@@ -318,6 +380,8 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
   })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
+  const [streakFreezeOpen, setStreakFreezeOpen] = useState(false)
+  const [streakFreeze, setStreakFreeze] = useState({ active: false, until: null })
 
   useEffect(() => {
     if (!currentUser) return
@@ -471,6 +535,31 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
           initialValues={profile}
           onSave={saveReminders}
           onClose={() => setRemindersOpen(false)}
+        />
+      )}
+
+      <div className="settings-separator" />
+
+      <div className="settings-row">
+        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Streak Freeze</span>
+        <div className="bio-row-right">
+          {streakFreeze.active && (
+            <span className="streak-freeze-active-until">active until {formatFreezeDate(streakFreeze.until)}</span>
+          )}
+          <button
+            className="bio-edit-btn streak-freeze-btn"
+            disabled={isOffline}
+            onClick={() => (streakFreeze.active ? setStreakFreeze({ active: false, until: null }) : setStreakFreezeOpen(true))}
+          >
+            {streakFreeze.active ? 'Deactivate' : 'Activate'}
+          </button>
+        </div>
+      </div>
+
+      {streakFreezeOpen && (
+        <StreakFreezeModal
+          onActivate={(date) => setStreakFreeze({ active: true, until: date })}
+          onClose={() => setStreakFreezeOpen(false)}
         />
       )}
 
