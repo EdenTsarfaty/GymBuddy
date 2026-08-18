@@ -11,6 +11,11 @@
   display: flex;
   flex-direction: column;
   padding: 24px 16px;
+  /* The swipe-to-complete drag can push a card's right edge past the viewport
+     edge, which briefly widens the document's scrollable area on mobile and
+     flashes the overlay scrollbars. Clip (not hidden) so it doesn't turn this
+     into a scroll container of its own. */
+  overflow-x: clip;
 }
 
 .page-header {
