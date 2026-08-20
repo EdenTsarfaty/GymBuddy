@@ -4,7 +4,12 @@ const path = require('node:path')
 const sharp = require('sharp')
 
 const EXERCISE_PHOTOS_DIR = path.join(__dirname, '..', 'data', 'exercise-photos')
-const MAX_DIMENSION = 1000
+// The largest this ever displays at is the 110px expanded thumbnail
+// (WorkoutCard.jsx) — 330px covers that at 3x for retina/high-DPI screens.
+// Resizing at upload time (once, with sharp's resampling) instead of leaving
+// a much larger source for the browser to downscale at render time is both
+// smaller on disk and visibly crisper.
+const MAX_DIMENSION = 330
 const OUTPUT_FORMAT = 'webp'
 
 // crypto.randomUUID() output — lowercase hex and hyphens, 36 chars — is the

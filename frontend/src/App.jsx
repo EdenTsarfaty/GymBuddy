@@ -22,7 +22,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.5.5'
+const APP_VERSION = 'beta 0.7.6'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -1209,6 +1209,7 @@ function App() {
                   videoId={item.video_id}
                   duration={item.duration}
                   category={item.category}
+                  photo={item.photo}
                   isOffline={isOffline}
                   pendingFields={pendingEdits.get(item.id)?.changedFields ?? []}
                   initiallyExpanded={item.id === chatReturnExerciseId}

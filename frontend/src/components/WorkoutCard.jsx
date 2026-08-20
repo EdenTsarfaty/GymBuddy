@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { API_BASE } from '../apiBase'
 import LottiePlayer from './LottiePlayer'
 import ChatIcon from './icons/ChatIcon'
 import CheckIcon from './icons/CheckIcon'
@@ -161,11 +162,16 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0, isReverting = false }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, photo, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0, isReverting = false }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
+  const photoUrl = photo ? (photo.startsWith('https://') ? photo : `${API_BASE}/api/exercise-photos/${photo}`) : null
+  const [photoFailed, setPhotoFailed] = useState(false)
   const [expanded, setExpanded] = useState(initiallyExpanded)
+  const photoExpandActive = expanded && !!photoUrl && !photoFailed
+  const statsRef = useRef(null)
+  const statsFlipRectRef = useRef(null)
   const [editing, setEditing] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
   const [draftSets, setDraftSets] = useState(sets)
@@ -184,8 +190,45 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
 
   function toggleExpanded() {
     if (editing) return
+    // Only relevant when a photo is present — that's the only case where
+    // expanding actually moves the stats (row -> stacked column). The title
+    // doesn't need this: it's naturally carried along smoothly by the
+    // image's own width/height transition reflowing the row underneath it.
+    if (photoUrl && !photoFailed && statsRef.current) {
+      statsFlipRectRef.current = statsRef.current.getBoundingClientRect()
+    }
     setExpanded((current) => !current)
   }
+
+  // FLIP for the stats block's reflow (row -> stacked column) — a
+  // flex-direction change isn't something a plain CSS transition can
+  // interpolate, so this measures the gap between its pre-toggle rect
+  // (captured above) and where it actually landed, and plays that
+  // difference backwards. Duration/easing intentionally match the photo
+  // thumbnail's own width/height transition (see .workout-card-photo-thumb)
+  // so both finish together instead of the front-loaded easing here making
+  // this one visually stop before the resize does. useLayoutEffect (not
+  // useEffect) so the inverted starting position is set before the browser
+  // ever paints the new layout.
+  useLayoutEffect(() => {
+    const startRect = statsFlipRectRef.current
+    const el = statsRef.current
+    statsFlipRectRef.current = null
+    if (!startRect || !el) return
+
+    const endRect = el.getBoundingClientRect()
+    const translateX = startRect.left - endRect.left
+    const translateY = startRect.top - endRect.top
+    if (translateX === 0 && translateY === 0) return
+
+    el.style.transition = 'none'
+    el.style.transform = `translate(${translateX}px, ${translateY}px)`
+    void el.offsetWidth
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.35s cubic-bezier(0.3, 0, 0.2, 1)'
+      el.style.transform = 'translate(0, 0)'
+    })
+  }, [expanded])
 
   function addAdjustmentField() {
     justAddedAdjustmentRef.current = true
@@ -369,13 +412,24 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
         className={`workout-card ${completed ? 'is-completed' : ''} ${isSwiping ? 'is-dragging' : ''} ${isReverting ? 'is-reverting' : ''}`}
         style={{ '--drag-x': `${dragPx}px` }}
       >
-      <div className="workout-card-main">
+      <div className={`workout-card-main ${photoExpandActive ? 'is-photo-expanded' : ''}`}>
+        {photoUrl && !photoFailed && (
+          <div className={`workout-card-photo-thumb ${photoExpandActive ? 'is-expanded' : ''}`}>
+            <img src={photoUrl} alt="" onError={() => setPhotoFailed(true)} />
+          </div>
+        )}
+        <div className={`workout-card-header-content ${photoExpandActive ? 'is-stacked' : ''}`}>
         <h3
           className="workout-card-title"
           style={{ '--title-len': exercise.length }}
         >{exercise}</h3>
 
         <div className="workout-card-main-right">
+          {/* Animated ref lives on this inner wrapper, not workout-card-main-right
+              itself — a CSS transform on an ancestor becomes the new containing
+              block for any position:absolute descendant, which would hijack the
+              expand-btn below (it's positioned relative to workout-card-main). */}
+          <div className="workout-card-stats-inner" ref={statsRef}>
           {!editing ? (
             <div className="workout-card-right">
               {hasSets && (
@@ -511,6 +565,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
               </div>
             </div>
           )}
+          </div>
 
           {!editing && (
             <button
@@ -523,6 +578,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
               <ChevronDownIcon size={18} />
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -663,6 +719,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
           }}
         />
       )}
+
       </div>
     </div>
   )

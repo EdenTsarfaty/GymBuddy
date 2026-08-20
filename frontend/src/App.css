@@ -850,8 +850,35 @@
 .workout-card-main {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+/* Experimental (may be reverted) — while collapsed, expanding a card with no
+   photo behaves exactly as before; this whole block only kicks in when a
+   photo is present. */
+.workout-card-main.is-photo-expanded {
+  align-items: flex-start;
+  position: relative;
+  padding-right: 34px;
+}
+
+/* Always the same DOM position (title, then stats) — only the flex direction
+   changes between "row, spread apart" (default, matches the original layout
+   exactly) and "column, tightly stacked, left-aligned" (photo expanded). */
+.workout-card-header-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.workout-card-header-content.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .workout-card-title {
@@ -866,11 +893,55 @@
   user-select: text;
 }
 
+.workout-card-header-content.is-stacked .workout-card-title {
+  font-size: clamp(17px, calc(29px - var(--title-len) * 0.22px), 22px);
+}
+
+/* Experimental (may be reverted) — grayscale while collapsed to stay neutral
+   with the rest of the card's design; expanding brings it to full size and
+   color. Size/filter both animate via plain CSS since the element never
+   changes DOM position, only its own dimensions. */
+.workout-card-photo-thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--chip-bg);
+  transition: width 0.35s cubic-bezier(0.3, 0, 0.2, 1), height 0.35s cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+.workout-card-photo-thumb.is-expanded {
+  width: 110px;
+  height: 110px;
+}
+
+.workout-card-photo-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(100%);
+  transition: filter 0.35s ease;
+}
+
+.workout-card-photo-thumb.is-expanded img {
+  filter: grayscale(0%);
+}
+
+
 .workout-card-main-right {
   display: flex;
   align-items: flex-end;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.workout-card-stats-inner {
+  display: flex;
+  align-items: flex-end;
 }
 
 .workout-card-right {
@@ -944,6 +1015,14 @@
   border-radius: 6px;
   outline: none;
   transition: transform 0.2s ease, color 0.15s ease;
+}
+
+/* Popped out of the stacked title/stats column and pinned to the card's own
+   top-right corner, instead of trailing at the end of the stats block. */
+.workout-card-main.is-photo-expanded .expand-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 .expand-btn:focus-visible {
