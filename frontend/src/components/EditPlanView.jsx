@@ -38,6 +38,9 @@ function formatDuration(seconds) {
 // this is being built toward.
 function EditPlanView({ allExercises, dayTitles, onClose }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
+  // Real card selection is Phase 2 — this toggle exists only so the two
+  // toolbar states (default vs. cards-selected) can be previewed now.
+  const [mockSelected, setMockSelected] = useState(false)
   const dayExercises = allExercises.filter((item) => item.day === selectedDay)
 
   return (
@@ -49,10 +52,44 @@ function EditPlanView({ allExercises, dayTitles, onClose }) {
             <span className="edit-plan-day-subtitle">{dayTitles.get(selectedDay)}</span>
           )}
         </div>
-        <button type="button" className="edit-plan-close-btn" onClick={onClose} aria-label="Close">
-          <XIcon size={16} />
-        </button>
+        <div className="edit-plan-header-right">
+          {mockSelected ? (
+            <>
+              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Delete">
+                <TrashIcon size={17} />
+              </button>
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <CopyIcon size={14} />
+                <span>Copy to</span>
+              </button>
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <MoveIcon size={14} />
+                <span>Move to</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Undo">
+                <UndoIcon size={17} />
+              </button>
+              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Redo">
+                <RedoIcon size={17} />
+              </button>
+              <button type="button" className="edit-plan-pill-btn is-filled" disabled>
+                <GenerateIcon size={14} />
+                <span>Generate</span>
+              </button>
+            </>
+          )}
+          <button type="button" className="edit-plan-close-btn" onClick={onClose} aria-label="Close">
+            <XIcon size={16} />
+          </button>
+        </div>
       </div>
+
+      <button type="button" className="edit-plan-mock-toggle" onClick={() => setMockSelected((v) => !v)}>
+        Dev preview: {mockSelected ? 'cards selected' : 'default'} toolbar (tap to toggle)
+      </button>
 
       <div className="edit-plan-day-pills">
         {WEEKDAYS.map((day, i) => (
@@ -78,60 +115,19 @@ function EditPlanView({ allExercises, dayTitles, onClose }) {
                 {Icon && <Icon size={20} className="edit-plan-card-icon" />}
                 <h3 className="edit-plan-card-title">{item.name}</h3>
                 <div className="edit-plan-card-stats">
-                  {item.sets > 0 && (
-                    <div className="stat">
-                      <span className="stat-label">Sets</span>
-                      <span className="stat-value">{item.sets}</span>
-                    </div>
-                  )}
-                  {item.reps > 0 && (
-                    <div className="stat">
-                      <span className="stat-label">Reps</span>
-                      <span className="stat-value">{item.reps}</span>
-                    </div>
+                  {item.sets > 0 && item.reps > 0 && (
+                    <span className="edit-plan-stat">{item.sets}×{item.reps}</span>
                   )}
                   {item.duration != null ? (
-                    <div className="stat">
-                      <span className="stat-label">Duration</span>
-                      <span className="stat-value">{formatDuration(item.duration)}</span>
-                    </div>
+                    <span className="edit-plan-stat">{formatDuration(item.duration)}</span>
                   ) : item.weight != null ? (
-                    <div className="stat">
-                      <span className="stat-label">Weight</span>
-                      <span className="stat-value">{Math.round(item.weight)} kg</span>
-                    </div>
+                    <span className="edit-plan-stat">{Math.round(item.weight)} kg</span>
                   ) : null}
                 </div>
               </div>
             )
           })
         )}
-      </div>
-
-      {/* Placeholder — none of these do anything yet (Phases 2/3/7). Shown now
-          just to validate the intended shape of the screen. */}
-      <div className="edit-plan-toolbar">
-        <button type="button" className="edit-plan-toolbar-btn is-compact" disabled aria-label="Undo">
-          <UndoIcon size={22} />
-        </button>
-        <button type="button" className="edit-plan-toolbar-btn is-compact" disabled aria-label="Redo">
-          <RedoIcon size={22} />
-        </button>
-        <button type="button" className="edit-plan-toolbar-btn" disabled>
-          <MoveIcon size={20} />
-          <span>Move to</span>
-        </button>
-        <button type="button" className="edit-plan-toolbar-btn" disabled>
-          <CopyIcon size={20} />
-          <span>Copy to</span>
-        </button>
-        <button type="button" className="edit-plan-toolbar-btn is-compact" disabled aria-label="Delete">
-          <TrashIcon size={20} />
-        </button>
-        <button type="button" className="edit-plan-toolbar-btn" disabled>
-          <GenerateIcon size={20} />
-          <span>Generate</span>
-        </button>
       </div>
     </div>
   )
