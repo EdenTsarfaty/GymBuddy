@@ -7,9 +7,6 @@ import StretchIcon from './icons/StretchIcon'
 import UndoIcon from './icons/UndoIcon'
 import RedoIcon from './icons/RedoIcon'
 import GenerateIcon from './icons/GenerateIcon'
-import MoveIcon from './icons/MoveIcon'
-import CopyIcon from './icons/CopyIcon'
-import TrashIcon from './icons/TrashIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -38,9 +35,6 @@ function formatDuration(seconds) {
 // this is being built toward.
 function EditPlanView({ allExercises, dayTitles, onClose }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
-  // Real card selection is Phase 2 — this toggle exists only so the two
-  // toolbar states (default vs. cards-selected) can be previewed now.
-  const [mockSelected, setMockSelected] = useState(false)
   const dayExercises = allExercises.filter((item) => item.day === selectedDay)
 
   return (
@@ -53,43 +47,21 @@ function EditPlanView({ allExercises, dayTitles, onClose }) {
           )}
         </div>
         <div className="edit-plan-header-right">
-          {mockSelected ? (
-            <>
-              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Delete">
-                <TrashIcon size={17} />
-              </button>
-              <button type="button" className="edit-plan-pill-btn" disabled>
-                <CopyIcon size={14} />
-                <span>Copy to</span>
-              </button>
-              <button type="button" className="edit-plan-pill-btn" disabled>
-                <MoveIcon size={14} />
-                <span>Move to</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Undo">
-                <UndoIcon size={17} />
-              </button>
-              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Redo">
-                <RedoIcon size={17} />
-              </button>
-              <button type="button" className="edit-plan-pill-btn is-filled" disabled>
-                <GenerateIcon size={14} />
-                <span>Generate</span>
-              </button>
-            </>
-          )}
+          <button type="button" className="edit-plan-icon-btn" disabled aria-label="Undo">
+            <UndoIcon size={17} />
+          </button>
+          <button type="button" className="edit-plan-icon-btn" disabled aria-label="Redo">
+            <RedoIcon size={17} />
+          </button>
+          <button type="button" className="edit-plan-pill-btn is-filled" disabled>
+            <GenerateIcon size={14} />
+            <span>Generate</span>
+          </button>
           <button type="button" className="edit-plan-close-btn" onClick={onClose} aria-label="Close">
             <XIcon size={16} />
           </button>
         </div>
       </div>
-
-      <button type="button" className="edit-plan-mock-toggle" onClick={() => setMockSelected((v) => !v)}>
-        Dev preview: {mockSelected ? 'cards selected' : 'default'} toolbar (tap to toggle)
-      </button>
 
       <div className="edit-plan-day-pills">
         {WEEKDAYS.map((day, i) => (

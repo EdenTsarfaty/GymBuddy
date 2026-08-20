@@ -3284,20 +3284,6 @@
   border-color: var(--accent);
 }
 
-.edit-plan-mock-toggle {
-  align-self: flex-start;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background: none;
-  border: none;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 0;
-  margin-top: -12px;
-}
-
 .edit-plan-title {
   font-size: 22px;
   font-weight: 700;
