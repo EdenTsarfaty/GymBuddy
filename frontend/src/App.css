@@ -3498,6 +3498,12 @@
      .edit-plan-sheet-backdrop (300) so both correctly cover this button —
      only above the header (50) and the scrolling card list beneath it. */
   z-index: 60;
+  animation: edit-plan-fab-float-in 0.3s ease-out;
+}
+
+@keyframes edit-plan-fab-float-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .edit-plan-save-fab svg {

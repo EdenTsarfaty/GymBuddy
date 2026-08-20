@@ -128,7 +128,40 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  // Snapshot-history stack: each mutating action pushes the draft as it was
+  // just before that action, so Undo can pop straight back to it. A fresh
+  // mutation after an Undo clears the redo tail (standard editor behavior —
+  // once you diverge from the undone timeline, "redo" no longer means
+  // anything). Draft updates are always immutable (new object/array
+  // references, never mutated in place), so pushing the current `draft`
+  // reference itself onto the stack is safe — no cloning needed.
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
   const newKeyCounter = useRef(0)
+
+  function commitDraft(updater) {
+    setUndoStack((stack) => [...stack, draft])
+    setRedoStack([])
+    setDraft(updater)
+  }
+
+  function handleUndo() {
+    if (undoStack.length === 0) return
+    const previous = undoStack[undoStack.length - 1]
+    setUndoStack((stack) => stack.slice(0, -1))
+    setRedoStack((stack) => [...stack, draft])
+    setDraft(previous)
+    setSelectedKeys(new Set())
+  }
+
+  function handleRedo() {
+    if (redoStack.length === 0) return
+    const next = redoStack[redoStack.length - 1]
+    setRedoStack((stack) => stack.slice(0, -1))
+    setUndoStack((stack) => [...stack, draft])
+    setDraft(next)
+    setSelectedKeys(new Set())
+  }
 
   const originalIds = useMemo(() => new Set(allExercises.map((e) => e.id)), [allExercises])
   const isDirty = useMemo(() => {
@@ -163,7 +196,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   function handleDragEnd(event) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    setDraft((current) => {
+    commitDraft((current) => {
       const list = current[selectedDay]
       const oldIndex = list.findIndex((item) => item._key === active.id)
       const newIndex = list.findIndex((item) => item._key === over.id)
@@ -173,7 +206,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   }
 
   function handleDelete() {
-    setDraft((current) => {
+    commitDraft((current) => {
       const next = {}
       for (const day of WEEKDAYS) {
         next[day] = current[day].filter((item) => !selectedKeys.has(item._key))
@@ -184,7 +217,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   }
 
   function handleMoveOrCopy(targetDay) {
-    setDraft((current) => {
+    commitDraft((current) => {
       const next = {}
       for (const day of WEEKDAYS) next[day] = [...current[day]]
 
@@ -267,25 +300,37 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
         <div className="edit-plan-header-right">
           {isSelecting ? (
             <>
-              <button type="button" className="edit-plan-icon-btn" onClick={handleDelete} aria-label="Delete">
+              <button type="button" className="edit-plan-icon-btn" onClick={handleDelete} disabled={saving} aria-label="Delete">
                 <TrashIcon size={17} />
               </button>
-              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('copy')}>
+              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('copy')} disabled={saving}>
                 <CopyIcon size={14} />
                 <span>Copy to</span>
               </button>
-              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('move')}>
+              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('move')} disabled={saving}>
                 <MoveIcon size={14} />
                 <span>Move to</span>
               </button>
             </>
           ) : (
             <>
-              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Undo">
-                <UndoIcon size={17} />
+              <button
+                type="button"
+                className="edit-plan-icon-btn"
+                onClick={handleUndo}
+                disabled={undoStack.length === 0 || saving}
+                aria-label="Undo"
+              >
+                <UndoIcon size={21} />
               </button>
-              <button type="button" className="edit-plan-icon-btn" disabled aria-label="Redo">
-                <RedoIcon size={17} />
+              <button
+                type="button"
+                className="edit-plan-icon-btn"
+                onClick={handleRedo}
+                disabled={redoStack.length === 0 || saving}
+                aria-label="Redo"
+              >
+                <RedoIcon size={21} />
               </button>
               <button type="button" className="edit-plan-pill-btn is-filled" disabled>
                 <GenerateIcon size={14} />
