@@ -12,8 +12,8 @@ import GearIcon from './components/icons/GearIcon'
 import FlameIcon from './components/icons/FlameIcon'
 import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
-import RegeneratePlanModal from './components/RegeneratePlanModal'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
+import EditPlanView from './components/EditPlanView'
 import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
@@ -761,7 +761,6 @@ function App() {
     )
   }
 
-  const [regenOpen, setRegenOpen] = useState(false)
   const [planGenerating, setPlanGenerating] = useState(false)
   const [planPhase, setPlanPhase] = useState('thinking')
   const [planStructure, setPlanStructure] = useState(null)
@@ -826,8 +825,11 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [view, chatExercise, timerExercise])
 
+  // Currently unreachable — RegeneratePlanModal's trigger was removed when
+  // "Regenerate Plan" became "Edit Plan" in Settings. Kept as-is for Phase 7
+  // (manual plan edit mode's "Generate -> regenerate whole plan" toolbar
+  // action), which will call this directly instead of through a modal.
   async function handleGenerate(settings) {
-    setRegenOpen(false)
     setPlanPhase('thinking')
     setPlanGenerating(true)
     setPlanStructure(null)
@@ -899,7 +901,8 @@ function App() {
   }
 
   return (
-    <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''}`}>
+    <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''} ${view === 'editPlan' ? 'is-edit-plan' : ''}`}>
+      {view !== 'editPlan' && (
       <header className="page-header">
         {view === 'chat' || view === 'timer' ? (
           <>
@@ -1129,6 +1132,7 @@ function App() {
           </>
         )}
       </header>
+      )}
 
       <div key={view} className="view-content">
         {view === 'chat' ? (
@@ -1150,7 +1154,7 @@ function App() {
               setBeginnerMode(val)
               localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
             }}
-            onRegenerate={() => setRegenOpen(true)}
+            onEditPlan={() => setView('editPlan')}
             version={APP_VERSION}
             isOffline={isOffline}
             users={users}
@@ -1161,6 +1165,12 @@ function App() {
             }}
             flashStreakFreeze={settingsFlashToken}
             onStreakFreezeChange={() => setWorkoutLogRefreshKey((k) => k + 1)}
+          />
+        ) : view === 'editPlan' ? (
+          <EditPlanView
+            allExercises={allExercises}
+            dayTitles={dayTitles}
+            onClose={() => setView('settings')}
           />
         ) : (
           <main className="card-list">
@@ -1263,6 +1273,7 @@ function App() {
         )}
       </div>
 
+      {view !== 'editPlan' && (
       <footer className="page-footer">
         <span>{APP_VERSION}</span>
         <a
@@ -1276,23 +1287,8 @@ function App() {
           Report bug
         </a>
       </footer>
-
-      {regenOpen && (
-        <RegeneratePlanModal
-          beginnerMode={beginnerMode}
-          onClose={() => setRegenOpen(false)}
-          onGenerate={handleGenerate}
-          onBeginnerChange={(val) => {
-            setBeginnerMode(val)
-            localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
-            fetch(`${API_BASE}/api/profile`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ user_id: currentUser?.id, beginner_mode: val ? 1 : 0 }),
-            }).catch(() => {})
-          }}
-        />
       )}
+
 
       {planGenerating && (
         <PlanGeneratingOverlay

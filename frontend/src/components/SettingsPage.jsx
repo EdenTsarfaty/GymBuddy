@@ -534,7 +534,7 @@ function BioRow({ label, value, onSave, placeholder, disabled }) {
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onRegenerate, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
+function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onEditPlan, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
@@ -704,7 +704,7 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
 
       <div className="settings-row">
         <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Workout plan</span>
-        <button className="bio-edit-btn regen-settings-btn" disabled={isOffline} onClick={onRegenerate}>Regenerate Plan</button>
+        <button className="bio-edit-btn regen-settings-btn" disabled={isOffline} onClick={onEditPlan}>Edit Plan</button>
       </div>
 
       <div className="settings-separator" />

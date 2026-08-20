@@ -1746,7 +1746,8 @@
 }
 
 .regen-settings-btn {
-  width: 120px;
+  width: auto;
+  padding: 5px 16px;
 }
 
 .streak-freeze-btn {
@@ -3223,4 +3224,193 @@
   width: 20px;
   height: 20px;
   transform: translate(-1px, 1px);
+}
+
+/* Edit Plan view — Phase 1 (skeleton): navigation + read-only plan display.
+   See the manual-edit-mode design notes in memory for the full spec. */
+.edit-plan-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 20px;
+}
+
+.edit-plan-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-plan-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.edit-plan-day-subtitle {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.edit-plan-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-plan-close-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.edit-plan-day-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.edit-plan-day-pill {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-day-pill:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.edit-plan-day-pill.is-active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.edit-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.edit-plan-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-style: italic;
+  margin-top: 24px;
+}
+
+.edit-plan-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.edit-plan-card-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.edit-plan-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-plan-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* One unified bar — rounded top corners, no per-button chrome. Each button
+   is an equal-width segment (flex: 1) separated by a hairline, rather than
+   individual pills — frees up real width for labels since there's no
+   per-button padding/border overhead, while staying just as flexible to
+   resize since every segment just shrinks/grows together. */
+.edit-plan-toolbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  margin: 0 -16px -24px;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+}
+
+.edit-plan-toolbar-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 12px 4px;
+  cursor: not-allowed;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+.edit-plan-toolbar-btn:not(:last-child) {
+  border-right: 1.5px solid var(--border);
+}
+
+.edit-plan-toolbar-btn.no-separator {
+  border-right: none;
+}
+
+/* Icon-only (Undo/Redo/Delete) don't need to share equal width with the
+   labeled buttons — a fixed compact width frees up the remaining space for
+   Move to/Copy to/Generate to actually fit their labels on one line. Undo and
+   Redo are also tighter on padding so the pair reads as one grouped control. */
+.edit-plan-toolbar-btn.is-compact {
+  flex: 0 0 auto;
+  width: 38px;
+  padding-left: 0;
+  padding-right: 0;
 }
