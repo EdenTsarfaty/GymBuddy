@@ -22,7 +22,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.6'
+const APP_VERSION = 'beta 0.7.7'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -1170,6 +1170,8 @@ function App() {
           <EditPlanView
             allExercises={allExercises}
             dayTitles={dayTitles}
+            userId={currentUser?.id}
+            onSaved={() => setExercisesRefreshKey((k) => k + 1)}
             onClose={() => setView('settings')}
           />
         ) : (

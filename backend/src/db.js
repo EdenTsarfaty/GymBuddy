@@ -44,6 +44,25 @@ try { db.exec('ALTER TABLE exercises ADD COLUMN adjustments TEXT') } catch {}
 // fetched server-side. See streakGuardian.js-adjacent design notes in memory
 // for why the two cases share one column (their value shapes never collide).
 try { db.exec('ALTER TABLE exercises ADD COLUMN photo TEXT') } catch {}
+// Explicit position within a (user_id, day) group — lets manual reordering
+// (Edit Plan's drag handle) persist independently of insertion/id order,
+// which the app previously relied on implicitly. Backfilled once below from
+// existing id order so pre-existing rows keep their current on-screen order.
+try { db.exec('ALTER TABLE exercises ADD COLUMN sort_order INTEGER') } catch {}
+{
+  const needsBackfill = db.prepare('SELECT COUNT(*) AS c FROM exercises WHERE sort_order IS NULL').get().c
+  if (needsBackfill > 0) {
+    const rows = db.prepare('SELECT id, user_id, day FROM exercises WHERE sort_order IS NULL ORDER BY user_id, day, id').all()
+    const setSortOrder = db.prepare('UPDATE exercises SET sort_order = ? WHERE id = ?')
+    const nextIndex = new Map()
+    for (const row of rows) {
+      const key = `${row.user_id}|${row.day}`
+      const index = (nextIndex.get(key) ?? -1) + 1
+      nextIndex.set(key, index)
+      setSortOrder.run(index, row.id)
+    }
+  }
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_profile (
@@ -118,10 +137,13 @@ const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count
   if (count > 0) return
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, category, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
+  const nextIndex = new Map()
   for (const ex of exercises) {
-    insert.run(userId, ex.name, ex.day, ex.sets ?? null, ex.reps ?? null, ex.weight ?? null, ex.duration ?? null, ex.description, JSON.stringify(ex.bullets), ex.category ?? null)
+    const index = (nextIndex.get(ex.day) ?? -1) + 1
+    nextIndex.set(ex.day, index)
+    insert.run(userId, ex.name, ex.day, ex.sets ?? null, ex.reps ?? null, ex.weight ?? null, ex.duration ?? null, ex.description, JSON.stringify(ex.bullets), ex.category ?? null, index)
   }
 }
 

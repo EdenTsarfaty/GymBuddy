@@ -188,8 +188,8 @@ fastify.get('/api/exercises', async (request, reply) => {
   }
 
   const rows = day
-    ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ?').all(day, uid)
-    : db.prepare('SELECT * FROM exercises WHERE user_id = ?').all(uid)
+    ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ? ORDER BY sort_order, id').all(day, uid)
+    : db.prepare('SELECT * FROM exercises WHERE user_id = ? ORDER BY sort_order, id').all(uid)
 
   return rows.map(parseExerciseRow)
 })
@@ -226,8 +226,11 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     return { error: 'Failed to generate exercise data' }
   }
 
+  const maxOrderRow = db.prepare('SELECT MAX(sort_order) AS m FROM exercises WHERE user_id = ? AND day = ?').get(uid, effectiveDay)
+  const nextOrder = (maxOrderRow?.m ?? -1) + 1
+
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
     uid,
@@ -241,6 +244,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     JSON.stringify(generated.bullets),
     generated.video_id || null,
     generated.category || null,
+    nextOrder,
   )
 
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
@@ -445,6 +449,45 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return parseExerciseRow(updated)
+})
+
+// Bulk-applies Edit Plan's whole-plan draft on Save: reordering within a day,
+// moving to another day, copying to another day, and deleting — all in one
+// request rather than many sequential ones, matching the draft's "commit
+// everything at once" model. No AI involved; this only restructures rows
+// that already exist. copies always start with a clean photo/adjustments
+// slate (see comments below) rather than sharing state with their source.
+fastify.post('/api/exercises/plan', async (request, reply) => {
+  const { user_id, deletes, updates, copies } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  for (const { id, day, sort_order } of updates || []) {
+    if (!VALID_DAYS.includes(day)) continue
+    db.prepare('UPDATE exercises SET day = ?, sort_order = ? WHERE id = ? AND user_id = ?')
+      .run(day, sort_order, id, uid)
+  }
+
+  for (const { sourceId, day, sort_order } of copies || []) {
+    if (!VALID_DAYS.includes(day)) continue
+    const source = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ?').get(sourceId, uid)
+    if (!source) continue
+    db.prepare(
+      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
+    ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order)
+  }
+
+  for (const id of deletes || []) {
+    const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ?').get(id, uid)
+    if (!existing) continue
+    if (exercisePhotos.isValidStoredFilename(existing.photo)) {
+      await exercisePhotos.deleteStoredPhoto(existing.photo)
+    }
+    db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
+    db.prepare('DELETE FROM exercises WHERE id = ?').run(id)
+  }
+
+  return { ok: true }
 })
 
 // Uploaded photo: multipart file, decoded and re-encoded (see

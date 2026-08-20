@@ -3236,10 +3236,17 @@
 }
 
 .edit-plan-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin: -24px -16px 0;
+  padding: 24px 16px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .edit-plan-header-right {
@@ -3257,6 +3264,10 @@
   background: none;
   border: none;
   color: var(--text-muted);
+  cursor: pointer;
+}
+
+.edit-plan-icon-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -3274,6 +3285,10 @@
   background: transparent;
   border: 1.5px solid var(--accent);
   border-radius: 999px;
+  cursor: pointer;
+}
+
+.edit-plan-pill-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -3375,11 +3390,50 @@
 .edit-plan-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: var(--card-bg);
   border: 1.5px solid var(--border);
   border-radius: 12px;
-  padding: 11px 14px;
+  padding: 11px 14px 11px 6px;
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-card.is-selected {
+  border-color: var(--accent);
+}
+
+.edit-plan-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  touch-action: none;
+  cursor: grab;
+}
+
+.edit-plan-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--bg);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-plan-checkbox.is-checked {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .edit-plan-card-icon {
@@ -3409,5 +3463,145 @@
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.edit-plan-save-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  font-weight: 600;
+  margin: -4px 0 0;
+}
+
+.edit-plan-save-fab {
+  /* Mirrors .page's own centering formula (margin-left: max(0px, calc(50vw -
+     240px))) so the button hugs the content column's right edge instead of
+     the raw viewport — on desktop .page is a fixed 480px column centered in
+     the middle of the screen, not full-width. */
+  position: fixed;
+  right: max(23px, calc(50vw - 240px + 23px));
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: var(--bg);
+  /* Material Design elevation-6 FAB shadow: a sharp near shadow plus a
+     wider, softer far shadow — reads as a crisp cast shadow rather than a
+     generic blurred glow. */
+  box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.4), 0 6px 10px 0 rgba(0, 0, 0, 0.34), 0 1px 18px 0 rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  /* Below .modal-overlay (z-index 200, e.g. the discard-confirm dialog) and
+     .edit-plan-sheet-backdrop (300) so both correctly cover this button —
+     only above the header (50) and the scrolling card list beneath it. */
+  z-index: 60;
+}
+
+.edit-plan-save-fab svg {
+  width: 68%;
+  height: 68%;
+}
+
+/* Smaller on desktop, not bigger: .page stays a 480px column at any window
+   width, so the button always sits in that same narrow strip — a thumb-sized
+   circle that reads right on a phone just looks oversized next to a mouse
+   cursor in the same amount of space. */
+@media (min-width: 600px) {
+  .edit-plan-save-fab {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+.edit-plan-save-fab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.edit-plan-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: modal-overlay-in 0.2s ease-out;
+}
+
+.edit-plan-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  animation: modal-in 0.22s ease-out;
+}
+
+.edit-plan-sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 14px;
+}
+
+.edit-plan-sheet-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.edit-plan-sheet-day {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.edit-plan-sheet-day.is-current {
+  border-color: var(--accent);
+}
+
+.edit-plan-sheet-day-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.edit-plan-sheet-cancel {
+  display: block;
+  width: fit-content;
+  margin: 14px auto 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-plan-sheet-cancel:hover {
+  color: var(--text-h);
+  border-color: var(--text-muted);
 }
 
