@@ -425,7 +425,7 @@ function StreakFreezeModal({ onActivate, onClose, guardianEnabled, userId, onGua
                           <XIcon size={16} />
                         </button>
                         <button type="button" className="streak-guardian-status-btn" disabled>
-                          Activate
+                          Activated
                         </button>
                       </>
                     ) : (

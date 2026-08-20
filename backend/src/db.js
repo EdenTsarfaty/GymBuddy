@@ -4,8 +4,10 @@ const path = require('node:path')
 
 const DATA_DIR = path.join(__dirname, '..', 'data')
 const DB_PATH = path.join(DATA_DIR, 'gymbuddy.db')
+const EXERCISE_PHOTOS_DIR = path.join(DATA_DIR, 'exercise-photos')
 
 fs.mkdirSync(DATA_DIR, { recursive: true })
+fs.mkdirSync(EXERCISE_PHOTOS_DIR, { recursive: true })
 
 const db = new DatabaseSync(DB_PATH)
 
@@ -36,6 +38,12 @@ db.exec(`
 `)
 try { db.exec('ALTER TABLE exercises ADD COLUMN reps INTEGER') } catch {}
 try { db.exec('ALTER TABLE exercises ADD COLUMN adjustments TEXT') } catch {}
+// Either our own generated filename (an uploaded photo, re-encoded and stored
+// under EXERCISE_PHOTOS_DIR, served via /api/exercise-photos/:filename) or a
+// validated https:// URL rendered directly by the client — never both, never
+// fetched server-side. See streakGuardian.js-adjacent design notes in memory
+// for why the two cases share one column (their value shapes never collide).
+try { db.exec('ALTER TABLE exercises ADD COLUMN photo TEXT') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_profile (

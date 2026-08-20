@@ -1,3 +1,5 @@
+const fs = require('node:fs')
+const path = require('node:path')
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError } = require('./openai')
@@ -6,6 +8,7 @@ const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
 const streakGuardian = require('./streakGuardian')
+const exercisePhotos = require('./exercisePhotos')
 const push = require('./push')
 const { isTailscaleConnected } = require('./tailscale')
 
@@ -139,6 +142,10 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || [
 fastify.register(require('@fastify/cors'), {
   origin: FRONTEND_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+})
+
+fastify.register(require('@fastify/multipart'), {
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
 })
 
 fastify.get('/api/health', async () => {
@@ -438,6 +445,108 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return parseExerciseRow(updated)
+})
+
+// Uploaded photo: multipart file, decoded and re-encoded (see
+// exercisePhotos.js for why that's the actual security boundary here, not
+// just a size/type check). Replaces whatever photo was set before, deleting
+// the old file first if it was a local upload (a URL has nothing to delete).
+fastify.post('/api/exercises/:id/photo', async (request, reply) => {
+  const { id } = request.params
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  const file = await request.file()
+  if (!file) {
+    reply.code(400)
+    return { error: 'No photo uploaded' }
+  }
+  const buffer = await file.toBuffer()
+
+  const filename = await exercisePhotos.saveUploadedPhoto(buffer)
+  if (!filename) {
+    reply.code(400)
+    return { error: "That file isn't a valid image" }
+  }
+
+  if (exercisePhotos.isValidStoredFilename(existing.photo)) {
+    await exercisePhotos.deleteStoredPhoto(existing.photo)
+  }
+  db.prepare('UPDATE exercises SET photo = ? WHERE id = ?').run(filename, id)
+
+  const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return parseExerciseRow(updated)
+})
+
+// External photo: just the URL string, validated and stored as-is — never
+// fetched by the backend (see exercisePhotos.isValidPhotoUrl for why).
+fastify.put('/api/exercises/:id/photo', async (request, reply) => {
+  const { id } = request.params
+  const { url } = request.body || {}
+
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  if (!exercisePhotos.isValidPhotoUrl(url)) {
+    reply.code(400)
+    return { error: 'url must be a valid https:// link' }
+  }
+
+  if (exercisePhotos.isValidStoredFilename(existing.photo)) {
+    await exercisePhotos.deleteStoredPhoto(existing.photo)
+  }
+  db.prepare('UPDATE exercises SET photo = ? WHERE id = ?').run(url, id)
+
+  const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return parseExerciseRow(updated)
+})
+
+fastify.delete('/api/exercises/:id/photo', async (request, reply) => {
+  const { id } = request.params
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  if (exercisePhotos.isValidStoredFilename(existing.photo)) {
+    await exercisePhotos.deleteStoredPhoto(existing.photo)
+  }
+  db.prepare('UPDATE exercises SET photo = NULL WHERE id = ?').run(id)
+
+  const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return parseExerciseRow(updated)
+})
+
+// Only ever serves a filename matching our own generated pattern, from the
+// one fixed directory — path traversal is closed off by that check, not by
+// trusting anything about the request. nosniff plus an explicit content type
+// means the browser never re-interprets this as anything but an image.
+fastify.get('/api/exercise-photos/:filename', async (request, reply) => {
+  const { filename } = request.params
+  if (!exercisePhotos.isValidStoredFilename(filename)) {
+    reply.code(400)
+    return { error: 'Invalid filename' }
+  }
+
+  const filePath = path.join(exercisePhotos.EXERCISE_PHOTOS_DIR, filename)
+  try {
+    const data = await fs.promises.readFile(filePath)
+    reply
+      .header('Content-Type', 'image/webp')
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Cache-Control', 'public, max-age=31536000, immutable')
+      .send(data)
+  } catch {
+    reply.code(404)
+    return { error: 'Photo not found' }
+  }
 })
 
 function parseChatMessage(row) {
