@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { countTokens } = require('./tokenizer')
@@ -257,6 +257,31 @@ fastify.get('/api/day-plans', async (request) => {
   return db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)
 })
 
+// Renames a single day's title from Edit Plan's header — upserts since a
+// rest day (no workout scheduled) has no day_plans row yet to UPDATE.
+fastify.put('/api/day-plans/:day', async (request, reply) => {
+  const { day } = request.params
+  const { user_id, title } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+  const trimmed = (title || '').trim()
+  if (!trimmed) {
+    reply.code(400)
+    return { error: 'title is required' }
+  }
+
+  db.prepare(
+    `INSERT INTO day_plans (user_id, day, title) VALUES (?, ?, ?)
+     ON CONFLICT(user_id, day) DO UPDATE SET title = excluded.title`,
+  ).run(uid, day, trimmed)
+
+  return { day, title: trimmed }
+})
+
 const PROFILE_COLUMNS =
   'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
 
@@ -465,13 +490,13 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
   const { user_id, deletes, updates, copies } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
 
-  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets } of updates || []) {
+  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id } of updates || []) {
     if (!VALID_DAYS.includes(day)) continue
     db.prepare(
       `UPDATE exercises
-       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?
+       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?
        WHERE id = ? AND user_id = ?`,
-    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), id, uid)
+    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, id, uid)
   }
 
   for (const { sourceId, day, sort_order } of copies || []) {
@@ -572,6 +597,70 @@ fastify.delete('/api/exercises/:id/photo', async (request, reply) => {
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return parseExerciseRow(updated)
+})
+
+// Image search for the Edit Plan photo picker — Serper.dev's /images
+// endpoint. Only ever returns URLs for the client to render/pick from (the
+// same "URLs only, never fetched server-side" model as the PUT .../photo
+// endpoint above) — never downloads or stores the images itself. Returns
+// 503 rather than erroring hard when the key isn't configured, since this
+// is optional and the rest of Edit Plan works without it.
+fastify.get('/api/image-search', async (request, reply) => {
+  const q = (request.query.q || '').trim()
+  if (!q) {
+    reply.code(400)
+    return { error: 'q is required' }
+  }
+
+  const apiKey = process.env.SERPER_API_KEY
+  if (!apiKey) {
+    reply.code(503)
+    return { error: 'Image search is not configured' }
+  }
+
+  let data
+  try {
+    const res = await fetch('https://google.serper.dev/images', {
+      method: 'POST',
+      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q, num: 9, safe: 'active' }),
+    })
+    if (!res.ok) throw new Error(`Serper returned ${res.status}`)
+    data = await res.json()
+  } catch (err) {
+    logError('GET /api/image-search', err)
+    reply.code(502)
+    return { error: 'Image search failed' }
+  }
+
+  const results = (data.images || []).map((item) => ({
+    url: item.imageUrl,
+    thumbnailUrl: item.thumbnailUrl || item.imageUrl,
+  }))
+  return { results }
+})
+
+// Video search for the Edit Plan YouTube picker — reuses searchYouTube from
+// openai.js, the same YouTube Data API lookup the AI pipeline already uses
+// to auto-attach a demo clip when generating an exercise (see
+// findVideoForExercise). Same <60s-clip filter applies here too, since the
+// use case is identical: a short form/technique demo, not a full workout.
+fastify.get('/api/youtube-search', async (request, reply) => {
+  const q = (request.query.q || '').trim()
+  if (!q) {
+    reply.code(400)
+    return { error: 'q is required' }
+  }
+
+  let results
+  try {
+    results = await searchYouTube(q)
+  } catch (err) {
+    logError('GET /api/youtube-search', err)
+    reply.code(502)
+    return { error: 'YouTube search failed' }
+  }
+  return { results }
 })
 
 // Only ever serves a filename matching our own generated pattern, from the

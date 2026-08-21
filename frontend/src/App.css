@@ -3265,6 +3265,11 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.edit-plan-icon-btn:hover:not(:disabled) {
+  color: var(--accent);
 }
 
 .edit-plan-icon-btn:disabled {
@@ -3281,11 +3286,16 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  color: var(--text-muted);
+  color: var(--accent);
   background: transparent;
+  transition: opacity 0.15s ease;
   border: 1.5px solid var(--accent);
   border-radius: 999px;
   cursor: pointer;
+}
+
+.edit-plan-pill-btn:hover:not(:disabled) {
+  opacity: 0.75;
 }
 
 .edit-plan-pill-btn:disabled {
@@ -3297,6 +3307,11 @@
   color: var(--bg);
   background: var(--accent);
   border-color: var(--accent);
+}
+
+.edit-plan-pill-btn.is-filled:hover:not(:disabled) {
+  color: var(--bg);
+  opacity: 0.85;
 }
 
 .edit-plan-title {
@@ -3311,7 +3326,94 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.edit-plan-day-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 2px;
+}
+
+.edit-plan-day-title-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.edit-plan-day-title-edit-btn:hover {
+  color: var(--accent);
+}
+
+.edit-plan-day-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.edit-plan-day-title-input {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 6px;
+  padding: 1px 6px;
+  width: 110px;
+}
+
+.edit-plan-day-title-input:focus {
+  outline: none;
+}
+
+.edit-plan-day-title-confirm,
+.edit-plan-day-title-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-plan-day-title-confirm {
+  background: var(--chip-bg);
+  color: var(--text-muted);
+}
+
+.edit-plan-day-title-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.edit-plan-day-title-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-plan-day-title-cancel {
+  background: var(--chip-bg);
+  color: var(--text-muted);
+}
+
+.edit-plan-day-title-cancel:hover {
+  background: rgba(229, 72, 77, 0.15);
+  border-color: #e5484d;
+  color: #e5484d;
 }
 
 .edit-plan-close-btn {
@@ -3377,6 +3479,51 @@
   flex-direction: column;
   gap: 8px;
   flex: 1;
+}
+
+/* Sits in the gap above/below whichever card is open for editing. 48px
+   lines the dotted line + button up with the checkbox's own x-center
+   (6px card padding + 24px drag-handle box + 8px gap + half of the 20px
+   checkbox) rather than the card's full width. */
+.edit-plan-insert-divider {
+  position: relative;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.edit-plan-insert-line {
+  position: absolute;
+  left: 48px;
+  /* Bleeds 8px past the divider's own box each way — .edit-plan-list's flex
+     gap adds that much extra space between the divider and the adjacent
+     card on top of the divider's own height, so without this the line
+     stops short and never actually touches the card. */
+  top: -8px;
+  bottom: -8px;
+  border-left: 2px dashed var(--border);
+}
+
+.edit-plan-insert-plus {
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chip-bg);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.edit-plan-insert-plus:hover {
+  background: var(--card-bg);
+  color: var(--text-h);
 }
 
 .edit-plan-empty {
@@ -3499,6 +3646,11 @@
      only above the header (50) and the scrolling card list beneath it. */
   z-index: 60;
   animation: edit-plan-fab-float-in 0.3s ease-out;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.edit-plan-save-fab:hover:not(:disabled) {
+  transform: scale(1.06);
 }
 
 @keyframes edit-plan-fab-float-in {
@@ -3578,6 +3730,11 @@
   border-radius: 12px;
   cursor: pointer;
   text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-sheet-day:hover {
+  border-color: var(--accent);
 }
 
 .edit-plan-sheet-day.is-current {
@@ -3662,9 +3819,16 @@
 }
 
 .edit-plan-edit-form-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 0 -16px;
+  padding: 6px 16px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .edit-plan-edit-form-header h3 {
@@ -3691,6 +3855,12 @@
   background: var(--chip-bg);
   color: var(--text-muted);
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-plan-edit-close:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .edit-plan-field {
@@ -3705,6 +3875,18 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
+}
+
+.edit-plan-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: -8px;
 }
 
 .edit-plan-field input,
@@ -3767,6 +3949,12 @@
   background: var(--chip-bg);
   color: var(--text-muted);
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edit-plan-bullet-remove:hover {
+  background: rgba(229, 72, 77, 0.15);
+  color: #e5484d;
 }
 
 .edit-plan-bullet-add {
@@ -3779,6 +3967,11 @@
   padding: 4px 0;
   cursor: pointer;
   text-align: left;
+  transition: opacity 0.15s ease;
+}
+
+.edit-plan-bullet-add:hover {
+  opacity: 0.75;
 }
 
 .edit-plan-photo-row {
@@ -3788,6 +3981,7 @@
 }
 
 .edit-plan-photo-square {
+  position: relative;
   flex: 0 0 50%;
   aspect-ratio: 1;
   display: flex;
@@ -3797,6 +3991,33 @@
   border: 1.5px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+}
+
+.edit-plan-photo-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edit-plan-photo-remove:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.55);
+  color: #e5484d;
+}
+
+.edit-plan-photo-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .edit-plan-photo-square img {
@@ -3834,6 +4055,24 @@
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 
+/* Fixed-size slot so every icon centers the same way regardless of its own
+   natural rendered size (they range from 16px to 27px) — without this, the
+   labels start at different x positions since a wider icon pushes its own
+   text further right than its neighbors. */
+.edit-plan-photo-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.edit-plan-photo-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .edit-plan-photo-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -3867,6 +4106,115 @@
   padding: 8px 12px;
 }
 
+.edit-plan-photo-url-input.is-error {
+  border-color: #e5484d;
+}
+
+.edit-plan-youtube-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-plan-youtube-thumb {
+  flex-shrink: 0;
+  width: 120px;
+  height: 67px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1.5px solid var(--accent);
+}
+
+.edit-plan-youtube-search-btn {
+  flex-shrink: 0;
+  width: auto;
+  padding: 9px;
+}
+
+.edit-plan-youtube-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.edit-plan-youtube-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--chip-bg);
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-youtube-result:hover {
+  border-color: var(--accent);
+}
+
+.edit-plan-youtube-result-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.edit-plan-youtube-result-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-youtube-result-open:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.edit-plan-youtube-result img {
+  flex-shrink: 0;
+  width: 72px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.edit-plan-youtube-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.edit-plan-youtube-result-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-plan-youtube-result-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .edit-plan-photo-url-input:focus {
   outline: none;
   border-color: var(--accent);
@@ -3883,10 +4231,53 @@
   border-radius: 10px;
   padding: 8px 16px;
   cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.edit-plan-photo-url-confirm:hover:not(:disabled) {
+  opacity: 0.85;
 }
 
 .edit-plan-photo-url-confirm:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.edit-plan-photo-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-plan-photo-results {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.edit-plan-photo-result {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--chip-bg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-photo-result:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.edit-plan-photo-result:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-plan-photo-result img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 

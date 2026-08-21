@@ -1172,6 +1172,7 @@ function App() {
             dayTitles={dayTitles}
             userId={currentUser?.id}
             onSaved={() => setExercisesRefreshKey((k) => k + 1)}
+            onDayTitleSaved={(day, title) => setDayTitles((prev) => new Map(prev).set(day, title))}
             onClose={() => setView('settings')}
           />
         ) : (

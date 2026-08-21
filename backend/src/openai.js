@@ -798,4 +798,4 @@ async function findVideoForExercise(name) {
   return results[0]?.video_id || null
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, checkOpenAIHealth, describeOpenAIError }
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError }

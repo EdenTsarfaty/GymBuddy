@@ -18,11 +18,16 @@ import TrashIcon from './icons/TrashIcon'
 import SaveIcon from './icons/SaveIcon'
 import GripIcon from './icons/GripIcon'
 import CheckIcon from './icons/CheckIcon'
+import EditFieldIcon from './icons/EditFieldIcon'
+import PlusIcon from './icons/PlusIcon'
 import ChevronUpIcon from './icons/ChevronUpIcon'
 import CameraIcon from './icons/CameraIcon'
 import UploadIcon from './icons/UploadIcon'
 import WebIcon from './icons/WebIcon'
 import PhotoIcon from './icons/PhotoIcon'
+import SearchIcon from './icons/SearchIcon'
+import YouTubeIcon from './icons/YouTubeIcon'
+import NewTabIcon from './icons/NewTabIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -43,6 +48,48 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/
+
+// Accepts whatever shape of YouTube link someone pastes — watch/embed/
+// shorts/live URLs, youtu.be short links, mobile/music subdomains, extra
+// query params (&t=, &list=, si=, ...) tagging along — plus a bare video id
+// typed directly, and pulls out just the 11-char id or null if it can't.
+function parseYouTubeId(input) {
+  const trimmed = (input || '').trim()
+  if (!trimmed) return null
+  if (YOUTUBE_ID_RE.test(trimmed)) return trimmed
+
+  let url
+  try {
+    url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
+  } catch {
+    return null
+  }
+
+  const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '')
+  if (host === 'youtu.be') {
+    const id = url.pathname.slice(1).split('/')[0]
+    return YOUTUBE_ID_RE.test(id) ? id : null
+  }
+  if (host === 'youtube.com' || host === 'music.youtube.com') {
+    if (url.pathname === '/watch') {
+      const id = url.searchParams.get('v')
+      return id && YOUTUBE_ID_RE.test(id) ? id : null
+    }
+    const match = url.pathname.match(/^\/(?:embed|shorts|live)\/([A-Za-z0-9_-]{11})/)
+    if (match) return match[1]
+  }
+  return null
+}
+
+// Distinguishes "this looks like a link that happens to not be a valid
+// YouTube one" (worth an error) from plain search text like "romanian
+// deadlift" (not an error — it's going to run as a search instead).
+function looksLikeUrl(input) {
+  const s = (input || '').trim()
+  return /^(https?:\/\/|www\.)/i.test(s) || /^[a-z0-9-]+\.[a-z]{2,}(\/|$|\?)/i.test(s)
+}
+
 // Groups the flat exercise list into per-day arrays, each item tagged with a
 // stable string _key — real exercises key off their id, and copies (created
 // client-side, no id yet) get one assigned when they're created. Keying by
@@ -55,6 +102,23 @@ function groupByDay(exercises) {
     if (groups[ex.day]) groups[ex.day].push({ ...ex, _key: String(ex.id) })
   }
   return groups
+}
+
+// Shown in the gap above and below whichever card is open for field editing
+// (tapped body, not checkbox) — a vertical dotted line at the checkbox's
+// x-position with a round + in the middle, hinting at inserting a new
+// exercise at that exact spot. Purely visual for now: the actual
+// add-exercise flow (title search / photo / manual entry) is a later phase,
+// so the + button has no handler yet.
+function InsertDivider() {
+  return (
+    <div className="edit-plan-insert-divider">
+      <span className="edit-plan-insert-line" aria-hidden="true" />
+      <button type="button" className="edit-plan-insert-plus" aria-label="Insert exercise here">
+        <PlusIcon size={14} />
+      </button>
+    </div>
+  )
 }
 
 function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit }) {
@@ -146,16 +210,92 @@ function ExerciseEditPanel({
   const [uploading, setUploading] = useState(false)
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlValue, setUrlValue] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState(item.name)
+  const [searchResults, setSearchResults] = useState(null)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(null)
+  const [youtubeInput, setYoutubeInput] = useState(item.video_id ? `https://www.youtube.com/watch?v=${item.video_id}` : '')
+  const [showYoutubeSearch, setShowYoutubeSearch] = useState(false)
+  const [youtubeResults, setYoutubeResults] = useState(null)
+  const [youtubeSearching, setYoutubeSearching] = useState(false)
+  const [youtubeSearchError, setYoutubeSearchError] = useState(null)
   const fileInputRef = useRef(null)
+  const bulletRefs = useRef([])
 
   useEffect(() => {
     setForm(item)
     setShowUrlInput(false)
     setUrlValue('')
+    setShowSearch(false)
+    setSearchQuery(item.name)
+    setSearchResults(null)
+    setSearchError(null)
+    setYoutubeInput(item.video_id ? `https://www.youtube.com/watch?v=${item.video_id}` : '')
+    setShowYoutubeSearch(false)
+    setYoutubeResults(null)
+    setYoutubeSearchError(null)
   }, [item])
 
   const hasDuration = item.duration != null
   const canUploadPhoto = !item.isNew
+  const parsedVideoId = parseYouTubeId(youtubeInput)
+  // Only flag as an error when the text actually resembles a URL but failed
+  // to parse as a YouTube one — plain search text (no protocol/domain shape)
+  // isn't "invalid", it's just going to be treated as a search query instead.
+  const youtubeInvalid = youtubeInput.trim() !== '' && !parsedVideoId && looksLikeUrl(youtubeInput)
+
+  function pickYoutubeResult(videoId) {
+    setYoutubeInput(`https://www.youtube.com/watch?v=${videoId}`)
+    onCommitField('video_id', videoId)
+    setShowYoutubeSearch(false)
+  }
+
+  async function runYoutubeSearch(query) {
+    const q = (query || '').trim()
+    if (!q) return
+    setYoutubeSearching(true)
+    setYoutubeSearchError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/youtube-search?q=${encodeURIComponent(q)}`)
+      if (!res.ok) throw new Error('Search failed')
+      const data = await res.json()
+      setYoutubeResults(data.results || [])
+    } catch {
+      setYoutubeSearchError('Search failed — check your connection and try again.')
+      setYoutubeResults([])
+    } finally {
+      setYoutubeSearching(false)
+    }
+  }
+
+  // The single field doubles as both a paste-a-link box and a search box:
+  // a recognizable YouTube URL commits directly, plain text runs a search
+  // (opening the results list) instead of being treated as a bad link.
+  function handleYoutubeFieldCommit() {
+    const trimmed = youtubeInput.trim()
+    if (!trimmed) {
+      onCommitField('video_id', null)
+      return
+    }
+    if (parsedVideoId) {
+      onCommitField('video_id', parsedVideoId)
+      return
+    }
+    if (!looksLikeUrl(trimmed)) {
+      setShowYoutubeSearch(true)
+      runYoutubeSearch(trimmed)
+    }
+  }
+
+  function toggleYoutubeSearch() {
+    const opening = !showYoutubeSearch
+    setShowYoutubeSearch(opening)
+    if (opening) {
+      const trimmed = youtubeInput.trim()
+      runYoutubeSearch(trimmed && !looksLikeUrl(trimmed) ? trimmed : item.name)
+    }
+  }
 
   const photoUrl = item.photo
     ? (item.photo.startsWith('https://') ? item.photo : `${API_BASE}/api/exercise-photos/${item.photo}`)
@@ -180,9 +320,7 @@ function ExerciseEditPanel({
     }
   }
 
-  async function confirmUrl() {
-    const url = urlValue.trim()
-    if (!url) return
+  async function applyPhotoUrl(url) {
     setUploading(true)
     try {
       const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, {
@@ -195,10 +333,52 @@ function ExerciseEditPanel({
       onPhotoChange(updated.photo)
       setShowUrlInput(false)
       setUrlValue('')
+      setShowSearch(false)
     } catch {
       // Silently no-op on failure for now — the thumbnail just stays as it was.
     } finally {
       setUploading(false)
+    }
+  }
+
+  function confirmUrl() {
+    const url = urlValue.trim()
+    if (url) applyPhotoUrl(url)
+  }
+
+  async function removePhoto() {
+    setUploading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Remove failed')
+      onPhotoChange(null)
+    } catch {
+      // Silently no-op on failure for now — the thumbnail just stays as it was.
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function runSearch() {
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearching(true)
+    setSearchError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/image-search?q=${encodeURIComponent(q)}`)
+      if (res.status === 503) {
+        setSearchError("Image search isn't set up yet.")
+        setSearchResults([])
+        return
+      }
+      if (!res.ok) throw new Error('Search failed')
+      const data = await res.json()
+      setSearchResults(data.results || [])
+    } catch {
+      setSearchError('Search failed — check your connection and try again.')
+      setSearchResults([])
+    } finally {
+      setSearching(false)
     }
   }
 
@@ -225,12 +405,25 @@ function ExerciseEditPanel({
   // lets it scroll internally instead of pushing the rest of the panel down —
   // avoids the single-line input's uncomfortable horizontal scroll on long
   // bullets without the panel's height jumping around unboundedly either.
-  function autoGrowBullet(e) {
-    const el = e.target
+  function resizeBulletEl(el) {
     el.style.height = 'auto'
     const maxHeight = 3 * 20 + 16 // ~3 lines at this font-size/line-height, plus padding
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
   }
+
+  function autoGrowBullet(e) {
+    resizeBulletEl(e.target)
+  }
+
+  // Sizing on user input alone (autoGrowBullet's onChange) never runs for
+  // bullets that arrive already long — the panel's initial open, switching
+  // to a different exercise, or an Undo/Redo that changes this item's
+  // bullets — so re-measure every bullet whenever the expanded panel's
+  // content could have changed out from under it.
+  useEffect(() => {
+    if (!expanded) return
+    bulletRefs.current.forEach((el) => el && resizeBulletEl(el))
+  }, [expanded, form.bullets])
 
   return (
     <div className="edit-plan-edit-panel">
@@ -254,63 +447,6 @@ function ExerciseEditPanel({
               </button>
             </div>
           </div>
-
-          <div className="edit-plan-photo-row">
-            <div className="edit-plan-photo-square">
-              {photoUrl ? (
-                <img src={photoUrl} alt="" />
-              ) : (
-                <PhotoIcon size={36} className="edit-plan-photo-placeholder" />
-              )}
-            </div>
-            <div className="edit-plan-photo-actions">
-              <button type="button" className="edit-plan-photo-btn" disabled aria-label="Take photo">
-                <CameraIcon size={16} />
-                <span>Camera</span>
-              </button>
-              <button
-                type="button"
-                className="edit-plan-photo-btn"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!canUploadPhoto || uploading}
-                aria-label="Upload photo"
-              >
-                <UploadIcon size={16} />
-                <span>Upload</span>
-              </button>
-              <button
-                type="button"
-                className={`edit-plan-photo-btn ${showUrlInput ? 'is-active' : ''}`}
-                onClick={() => setShowUrlInput((v) => !v)}
-                disabled={!canUploadPhoto || uploading}
-                aria-label="Photo from web address"
-              >
-                <WebIcon size={16} />
-                <span>Web URL</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="edit-plan-photo-file-input"
-                onChange={handleFileSelected}
-              />
-            </div>
-          </div>
-
-          {showUrlInput && (
-            <div className="edit-plan-photo-url-row">
-              <input
-                type="text"
-                className="edit-plan-photo-url-input"
-                placeholder="https://…"
-                value={urlValue}
-                onChange={(e) => setUrlValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmUrl() }}
-              />
-              <button type="button" className="edit-plan-photo-url-confirm" onClick={confirmUrl} disabled={uploading}>Use</button>
-            </div>
-          )}
 
           <label className="edit-plan-field">
             <span>Name</span>
@@ -364,6 +500,119 @@ function ExerciseEditPanel({
             </div>
           )}
 
+          <span className="edit-plan-field-label">Photo</span>
+          <div className="edit-plan-photo-row">
+            <div className="edit-plan-photo-square">
+              {photoUrl ? (
+                <>
+                  <img src={photoUrl} alt="" />
+                  <button
+                    type="button"
+                    className="edit-plan-photo-remove"
+                    onClick={removePhoto}
+                    disabled={!canUploadPhoto || uploading}
+                    aria-label="Remove photo"
+                  >
+                    <XIcon size={12} />
+                  </button>
+                </>
+              ) : (
+                <PhotoIcon size={36} className="edit-plan-photo-placeholder" />
+              )}
+            </div>
+            <div className="edit-plan-photo-actions">
+              <button type="button" className="edit-plan-photo-btn" disabled aria-label="Take photo">
+                <span className="edit-plan-photo-btn-icon"><CameraIcon size={19} /></span>
+                <span>Camera</span>
+              </button>
+              <button
+                type="button"
+                className="edit-plan-photo-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Upload photo"
+              >
+                <span className="edit-plan-photo-btn-icon"><UploadIcon size={16} /></span>
+                <span>Upload</span>
+              </button>
+              <button
+                type="button"
+                className={`edit-plan-photo-btn ${showUrlInput ? 'is-active' : ''}`}
+                onClick={() => setShowUrlInput((v) => !v)}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Photo from web address"
+              >
+                <span className="edit-plan-photo-btn-icon"><WebIcon size={16} /></span>
+                <span>Web URL</span>
+              </button>
+              <button
+                type="button"
+                className={`edit-plan-photo-btn ${showSearch ? 'is-active' : ''}`}
+                onClick={() => setShowSearch((v) => !v)}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Search the web for a photo"
+              >
+                <span className="edit-plan-photo-btn-icon"><SearchIcon size={18} /></span>
+                <span>Search</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="edit-plan-photo-file-input"
+                onChange={handleFileSelected}
+              />
+            </div>
+          </div>
+
+          {showUrlInput && (
+            <div className="edit-plan-photo-url-row">
+              <input
+                type="text"
+                className="edit-plan-photo-url-input"
+                placeholder="https://…"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmUrl() }}
+              />
+              <button type="button" className="edit-plan-photo-url-confirm" onClick={confirmUrl} disabled={uploading}>Use</button>
+            </div>
+          )}
+
+          {showSearch && (
+            <div className="edit-plan-photo-search">
+              <div className="edit-plan-photo-url-row">
+                <input
+                  type="text"
+                  className="edit-plan-photo-url-input"
+                  placeholder="Search query"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') runSearch() }}
+                />
+                <button type="button" className="edit-plan-photo-url-confirm" onClick={runSearch} disabled={searching}>
+                  {searching ? '…' : 'Search'}
+                </button>
+              </div>
+              {searchError && <p className="edit-plan-save-error">{searchError}</p>}
+              {searchResults && searchResults.length > 0 && (
+                <div className="edit-plan-photo-results">
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.url}
+                      type="button"
+                      className="edit-plan-photo-result"
+                      onClick={() => applyPhotoUrl(result.url)}
+                      disabled={uploading}
+                    >
+                      <img src={result.thumbnailUrl} alt="" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <label className="edit-plan-field">
             <span>Description</span>
             <textarea
@@ -379,6 +628,7 @@ function ExerciseEditPanel({
             {form.bullets.map((bullet, i) => (
               <div key={i} className="edit-plan-bullet-row">
                 <textarea
+                  ref={(el) => { bulletRefs.current[i] = el }}
                   rows={1}
                   value={bullet}
                   onChange={(e) => { updateBullet(i, e.target.value); autoGrowBullet(e) }}
@@ -391,6 +641,87 @@ function ExerciseEditPanel({
             ))}
             <button type="button" className="edit-plan-bullet-add" onClick={addBullet}>+ Add bullet</button>
           </div>
+
+          <span className="edit-plan-field-label">
+            <YouTubeIcon size={13} />
+            <span>YouTube</span>
+          </span>
+          <div className="edit-plan-youtube-row">
+            <input
+              type="text"
+              className={`edit-plan-photo-url-input ${youtubeInvalid ? 'is-error' : ''}`}
+              placeholder="Paste a link or search…"
+              value={youtubeInput}
+              onChange={(e) => setYoutubeInput(e.target.value)}
+              onBlur={handleYoutubeFieldCommit}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+            />
+            {!parsedVideoId && (
+              <button
+                type="button"
+                className={`edit-plan-photo-btn edit-plan-youtube-search-btn ${showYoutubeSearch ? 'is-active' : ''}`}
+                onClick={toggleYoutubeSearch}
+                disabled={youtubeSearching}
+                aria-label="Search YouTube"
+              >
+                <span className="edit-plan-photo-btn-icon"><SearchIcon size={16} /></span>
+              </button>
+            )}
+            {parsedVideoId && (
+              <a
+                href={`https://www.youtube.com/watch?v=${parsedVideoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open on YouTube"
+              >
+                <img
+                  className="edit-plan-youtube-thumb"
+                  src={`https://img.youtube.com/vi/${parsedVideoId}/mqdefault.jpg`}
+                  alt=""
+                />
+              </a>
+            )}
+          </div>
+          {youtubeInvalid && <p className="edit-plan-save-error">Doesn't look like a YouTube link.</p>}
+
+          {showYoutubeSearch && (
+            <div className="edit-plan-photo-search">
+              {youtubeSearching && <p className="edit-plan-save-error">Searching…</p>}
+              {youtubeSearchError && <p className="edit-plan-save-error">{youtubeSearchError}</p>}
+              {youtubeResults && youtubeResults.length === 0 && !youtubeSearchError && (
+                <p className="edit-plan-save-error">No short-form results found.</p>
+              )}
+              {youtubeResults && youtubeResults.length > 0 && (
+                <div className="edit-plan-youtube-result-list">
+                  {youtubeResults.map((result) => (
+                    <div key={result.video_id} className="edit-plan-youtube-result">
+                      <button
+                        type="button"
+                        className="edit-plan-youtube-result-main"
+                        onClick={() => pickYoutubeResult(result.video_id)}
+                      >
+                        <img src={`https://img.youtube.com/vi/${result.video_id}/mqdefault.jpg`} alt="" loading="lazy" />
+                        <div className="edit-plan-youtube-result-info">
+                          <span className="edit-plan-youtube-result-title">{result.title}</span>
+                          <span className="edit-plan-youtube-result-meta">{result.channel} · {result.duration}</span>
+                        </div>
+                      </button>
+                      <a
+                        href={`https://www.youtube.com/watch?v=${result.video_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="edit-plan-youtube-result-open"
+                        aria-label="Open on YouTube in a new tab"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <NewTabIcon size={14} />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -403,8 +734,11 @@ function ExerciseEditPanel({
 // discards it, no server round-trip). No AI involved yet; this only
 // restructures exercises that already exist. See the manual-edit-mode design
 // notes in memory for the full spec this is being built toward.
-function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
+function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSaved, onClose }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
+  const [editingDayTitle, setEditingDayTitle] = useState(false)
+  const [dayTitleDraft, setDayTitleDraft] = useState('')
+  const [savingDayTitle, setSavingDayTitle] = useState(false)
   const [draft, setDraft] = useState(() => groupByDay(allExercises))
   const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [sheet, setSheet] = useState(null) // 'move' | 'copy' | null
@@ -477,6 +811,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
           item.weight !== original.weight ||
           item.duration !== original.duration ||
           item.description !== original.description ||
+          item.video_id !== original.video_id ||
           JSON.stringify(item.bullets) !== JSON.stringify(original.bullets)
         ) {
           return true
@@ -544,6 +879,43 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   function handleCancel() {
     if (isDirty) setConfirmingDiscard(true)
     else onClose()
+  }
+
+  useEffect(() => {
+    setEditingDayTitle(false)
+  }, [selectedDay])
+
+  function startEditDayTitle() {
+    setDayTitleDraft(dayTitles.get(selectedDay) || '')
+    setEditingDayTitle(true)
+  }
+
+  function cancelEditDayTitle() {
+    setEditingDayTitle(false)
+  }
+
+  // Renaming a day's title is immediate/server-side, same as photo edits —
+  // it's not an exercise field, so it doesn't belong in the whole-plan
+  // draft/Undo/Save flow; onDayTitleSaved just updates App's dayTitles
+  // state directly so the new title shows without a refetch.
+  async function confirmEditDayTitle() {
+    const trimmed = dayTitleDraft.trim()
+    if (!trimmed) return
+    setSavingDayTitle(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/day-plans/${selectedDay}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: trimmed }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      onDayTitleSaved?.(selectedDay, trimmed)
+      setEditingDayTitle(false)
+    } catch {
+      // Silently no-op on failure for now — the title just stays as it was.
+    } finally {
+      setSavingDayTitle(false)
+    }
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -641,6 +1013,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
             duration: item.duration,
             description: item.description,
             bullets: item.bullets,
+            video_id: item.video_id,
           })
         }
       })
@@ -670,7 +1043,50 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
       <div className="edit-plan-header">
         <div>
           <h2 className="edit-plan-title">Edit Plan</h2>
-          <span className="edit-plan-day-subtitle">{dayTitles.get(selectedDay) || 'Rest day'}</span>
+          {editingDayTitle ? (
+            <div className="edit-plan-day-title-edit">
+              <input
+                type="text"
+                className="edit-plan-day-title-input"
+                value={dayTitleDraft}
+                onChange={(e) => setDayTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') confirmEditDayTitle()
+                  if (e.key === 'Escape') cancelEditDayTitle()
+                }}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="edit-plan-day-title-confirm"
+                onClick={confirmEditDayTitle}
+                disabled={savingDayTitle || !dayTitleDraft.trim()}
+                aria-label="Save day title"
+              >
+                <CheckIcon size={13} />
+              </button>
+              <button
+                type="button"
+                className="edit-plan-day-title-cancel"
+                onClick={cancelEditDayTitle}
+                aria-label="Cancel"
+              >
+                <XIcon size={12} />
+              </button>
+            </div>
+          ) : (
+            <div className="edit-plan-day-title-row">
+              <span className="edit-plan-day-subtitle">{dayTitles.get(selectedDay) || 'Rest day'}</span>
+              <button
+                type="button"
+                className="edit-plan-day-title-edit-btn"
+                onClick={startEditDayTitle}
+                aria-label="Edit day title"
+              >
+                <EditFieldIcon size={16} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="edit-plan-header-right">
           {isSelecting ? (
@@ -741,14 +1157,17 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
               {dayExercises.map((item) => (
-                <SortableCard
-                  key={item._key}
-                  item={item}
-                  selected={selectedKeys.has(item._key)}
-                  editing={editingKey === item._key}
-                  onToggleSelect={toggleSelect}
-                  onOpenEdit={handleOpenEdit}
-                />
+                <div key={item._key} style={{ display: 'contents' }}>
+                  {editingKey === item._key && <InsertDivider />}
+                  <SortableCard
+                    item={item}
+                    selected={selectedKeys.has(item._key)}
+                    editing={editingKey === item._key}
+                    onToggleSelect={toggleSelect}
+                    onOpenEdit={handleOpenEdit}
+                  />
+                  {editingKey === item._key && <InsertDivider />}
+                </div>
               ))}
             </SortableContext>
           </DndContext>
