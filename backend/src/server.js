@@ -452,19 +452,26 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 })
 
 // Bulk-applies Edit Plan's whole-plan draft on Save: reordering within a day,
-// moving to another day, copying to another day, and deleting — all in one
+// moving to another day, copying to another day, field edits (name/sets/
+// reps/weight/duration/description/bullets), and deleting — all in one
 // request rather than many sequential ones, matching the draft's "commit
-// everything at once" model. No AI involved; this only restructures rows
-// that already exist. copies always start with a clean photo/adjustments
-// slate (see comments below) rather than sharing state with their source.
+// everything at once" model. `updates` always carries each existing row's
+// full current field set (not just what changed) so the UPDATE below is a
+// plain unconditional write, same idea as `copies` duplicating a full row.
+// No AI involved; this only restructures/edits rows that already exist.
+// copies always start with a clean photo/adjustments slate (see comments
+// below) rather than sharing state with their source.
 fastify.post('/api/exercises/plan', async (request, reply) => {
   const { user_id, deletes, updates, copies } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
 
-  for (const { id, day, sort_order } of updates || []) {
+  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets } of updates || []) {
     if (!VALID_DAYS.includes(day)) continue
-    db.prepare('UPDATE exercises SET day = ?, sort_order = ? WHERE id = ? AND user_id = ?')
-      .run(day, sort_order, id, uid)
+    db.prepare(
+      `UPDATE exercises
+       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?
+       WHERE id = ? AND user_id = ?`,
+    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), id, uid)
   }
 
   for (const { sourceId, day, sort_order } of copies || []) {

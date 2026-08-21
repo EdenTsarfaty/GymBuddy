@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -18,6 +18,11 @@ import TrashIcon from './icons/TrashIcon'
 import SaveIcon from './icons/SaveIcon'
 import GripIcon from './icons/GripIcon'
 import CheckIcon from './icons/CheckIcon'
+import ChevronUpIcon from './icons/ChevronUpIcon'
+import CameraIcon from './icons/CameraIcon'
+import UploadIcon from './icons/UploadIcon'
+import WebIcon from './icons/WebIcon'
+import PhotoIcon from './icons/PhotoIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -52,7 +57,7 @@ function groupByDay(exercises) {
   return groups
 }
 
-function SortableCard({ item, selected, onToggleSelect }) {
+function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item._key })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,14 +67,26 @@ function SortableCard({ item, selected, onToggleSelect }) {
   const Icon = CATEGORY_ICONS[item.category]
 
   return (
-    <div ref={setNodeRef} style={style} className={`edit-plan-card ${selected ? 'is-selected' : ''}`}>
-      <button type="button" className="edit-plan-drag-handle" aria-label="Drag to reorder" {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`edit-plan-card ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`}
+      onClick={() => onOpenEdit(item._key)}
+    >
+      <button
+        type="button"
+        className="edit-plan-drag-handle"
+        aria-label="Drag to reorder"
+        onClick={(e) => e.stopPropagation()}
+        {...attributes}
+        {...listeners}
+      >
         <GripIcon size={16} />
       </button>
       <button
         type="button"
         className={`edit-plan-checkbox ${selected ? 'is-checked' : ''}`}
-        onClick={() => onToggleSelect(item._key)}
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(item._key) }}
         aria-label={selected ? 'Deselect exercise' : 'Select exercise'}
       >
         {selected && <CheckIcon size={12} />}
@@ -114,6 +131,272 @@ function DayPickerSheet({ title, currentDay, dayTitles, onPick, onCancel }) {
   )
 }
 
+// Collapsed: just a grab bar with a wide chevron, tucked at the bottom of the
+// screen. Expanded: the same bar (chevron now pointing down) sits atop a
+// scrollable form with every field the tapped card carries. Field edits go
+// straight into the draft on blur (so they ride the same Undo/Redo stack and
+// Save as every other Phase 2/3 action) rather than needing their own
+// confirm step — typing doesn't spam the undo stack since each field commits
+// once, on blur, not per keystroke.
+function ExerciseEditPanel({
+  item, expanded, onToggleExpanded, onClose, onCommitField,
+  canUndo, canRedo, onUndo, onRedo, onPhotoChange,
+}) {
+  const [form, setForm] = useState(item)
+  const [uploading, setUploading] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlValue, setUrlValue] = useState('')
+  const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    setForm(item)
+    setShowUrlInput(false)
+    setUrlValue('')
+  }, [item])
+
+  const hasDuration = item.duration != null
+  const canUploadPhoto = !item.isNew
+
+  const photoUrl = item.photo
+    ? (item.photo.startsWith('https://') ? item.photo : `${API_BASE}/api/exercise-photos/${item.photo}`)
+    : null
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setUploading(true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'POST', body })
+      if (!res.ok) throw new Error('Upload failed')
+      const updated = await res.json()
+      onPhotoChange(updated.photo)
+    } catch {
+      // Silently no-op on failure for now — the thumbnail just stays as it was.
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function confirmUrl() {
+    const url = urlValue.trim()
+    if (!url) return
+    setUploading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      const updated = await res.json()
+      onPhotoChange(updated.photo)
+      setShowUrlInput(false)
+      setUrlValue('')
+    } catch {
+      // Silently no-op on failure for now — the thumbnail just stays as it was.
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function updateBullet(index, value) {
+    setForm((f) => ({ ...f, bullets: f.bullets.map((b, i) => (i === index ? value : b)) }))
+  }
+
+  function commitBullets(bullets) {
+    onCommitField('bullets', bullets)
+  }
+
+  function removeBullet(index) {
+    const next = form.bullets.filter((_, i) => i !== index)
+    setForm((f) => ({ ...f, bullets: next }))
+    commitBullets(next)
+  }
+
+  function addBullet() {
+    const next = [...form.bullets, '']
+    setForm((f) => ({ ...f, bullets: next }))
+  }
+
+  // Grows the textarea with its content up to 3 lines' worth of height, then
+  // lets it scroll internally instead of pushing the rest of the panel down —
+  // avoids the single-line input's uncomfortable horizontal scroll on long
+  // bullets without the panel's height jumping around unboundedly either.
+  function autoGrowBullet(e) {
+    const el = e.target
+    el.style.height = 'auto'
+    const maxHeight = 3 * 20 + 16 // ~3 lines at this font-size/line-height, plus padding
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
+  }
+
+  return (
+    <div className="edit-plan-edit-panel">
+      <button type="button" className="edit-plan-edit-bar" onClick={onToggleExpanded}>
+        <ChevronUpIcon size={18} className={`edit-plan-edit-chevron ${expanded ? 'is-flipped' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="edit-plan-edit-form">
+          <div className="edit-plan-edit-form-header">
+            <h3>Edit exercise</h3>
+            <div className="edit-plan-edit-form-header-actions">
+              <button type="button" className="edit-plan-icon-btn" onClick={onUndo} disabled={!canUndo} aria-label="Undo">
+                <UndoIcon size={21} />
+              </button>
+              <button type="button" className="edit-plan-icon-btn" onClick={onRedo} disabled={!canRedo} aria-label="Redo">
+                <RedoIcon size={21} />
+              </button>
+              <button type="button" className="edit-plan-edit-close" onClick={onClose} aria-label="Close">
+                <XIcon size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="edit-plan-photo-row">
+            <div className="edit-plan-photo-square">
+              {photoUrl ? (
+                <img src={photoUrl} alt="" />
+              ) : (
+                <PhotoIcon size={36} className="edit-plan-photo-placeholder" />
+              )}
+            </div>
+            <div className="edit-plan-photo-actions">
+              <button type="button" className="edit-plan-photo-btn" disabled aria-label="Take photo">
+                <CameraIcon size={16} />
+                <span>Camera</span>
+              </button>
+              <button
+                type="button"
+                className="edit-plan-photo-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Upload photo"
+              >
+                <UploadIcon size={16} />
+                <span>Upload</span>
+              </button>
+              <button
+                type="button"
+                className={`edit-plan-photo-btn ${showUrlInput ? 'is-active' : ''}`}
+                onClick={() => setShowUrlInput((v) => !v)}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Photo from web address"
+              >
+                <WebIcon size={16} />
+                <span>Web URL</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="edit-plan-photo-file-input"
+                onChange={handleFileSelected}
+              />
+            </div>
+          </div>
+
+          {showUrlInput && (
+            <div className="edit-plan-photo-url-row">
+              <input
+                type="text"
+                className="edit-plan-photo-url-input"
+                placeholder="https://…"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmUrl() }}
+              />
+              <button type="button" className="edit-plan-photo-url-confirm" onClick={confirmUrl} disabled={uploading}>Use</button>
+            </div>
+          )}
+
+          <label className="edit-plan-field">
+            <span>Name</span>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              onBlur={(e) => onCommitField('name', e.target.value)}
+            />
+          </label>
+
+          {hasDuration ? (
+            <label className="edit-plan-field edit-plan-field-narrow">
+              <span>Duration (sec)</span>
+              <input
+                type="number"
+                value={form.duration ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
+                onBlur={(e) => onCommitField('duration', Number(e.target.value) || 0)}
+              />
+            </label>
+          ) : (
+            <div className="edit-plan-field-row">
+              <label className="edit-plan-field edit-plan-field-narrow">
+                <span>Sets</span>
+                <input
+                  type="number"
+                  value={form.sets ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, sets: e.target.value }))}
+                  onBlur={(e) => onCommitField('sets', Number(e.target.value) || 0)}
+                />
+              </label>
+              <label className="edit-plan-field edit-plan-field-narrow">
+                <span>Reps</span>
+                <input
+                  type="number"
+                  value={form.reps ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, reps: e.target.value }))}
+                  onBlur={(e) => onCommitField('reps', Number(e.target.value) || 0)}
+                />
+              </label>
+              <label className="edit-plan-field edit-plan-field-narrow">
+                <span>Weight (kg)</span>
+                <input
+                  type="number"
+                  value={form.weight ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
+                  onBlur={(e) => onCommitField('weight', Number(e.target.value) || 0)}
+                />
+              </label>
+            </div>
+          )}
+
+          <label className="edit-plan-field">
+            <span>Description</span>
+            <textarea
+              rows={3}
+              value={form.description || ''}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onBlur={(e) => onCommitField('description', e.target.value)}
+            />
+          </label>
+
+          <div className="edit-plan-field">
+            <span>Bullets</span>
+            {form.bullets.map((bullet, i) => (
+              <div key={i} className="edit-plan-bullet-row">
+                <textarea
+                  rows={1}
+                  value={bullet}
+                  onChange={(e) => { updateBullet(i, e.target.value); autoGrowBullet(e) }}
+                  onBlur={() => commitBullets(form.bullets)}
+                />
+                <button type="button" className="edit-plan-bullet-remove" onClick={() => removeBullet(i)} aria-label="Remove bullet">
+                  <XIcon size={12} />
+                </button>
+              </div>
+            ))}
+            <button type="button" className="edit-plan-bullet-add" onClick={addBullet}>+ Add bullet</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Phase 2: structural editing on top of Phase 1's skeleton — drag-handle
 // reorder, checkbox multi-select, Delete, Move to/Copy to another day, and a
 // real Save that commits the whole-plan draft in one request (Cancel just
@@ -128,6 +411,12 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  // Tapping a card body (not its checkbox or drag handle) opens this single
+  // exercise for field-level editing — distinct from selectedKeys, which is
+  // the checkbox multi-select the bulk toolbar (Delete/Copy to/Move to) acts
+  // on. editingKey and selectedKeys can be active independently.
+  const [editingKey, setEditingKey] = useState(null)
+  const [editPanelExpanded, setEditPanelExpanded] = useState(false)
   // Snapshot-history stack: each mutating action pushes the draft as it was
   // just before that action, so Undo can pop straight back to it. A fresh
   // mutation after an Undo clears the redo tail (standard editor behavior —
@@ -164,6 +453,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
   }
 
   const originalIds = useMemo(() => new Set(allExercises.map((e) => e.id)), [allExercises])
+  const originalById = useMemo(() => new Map(allExercises.map((e) => [e.id, e])), [allExercises])
   const isDirty = useMemo(() => {
     for (const day of WEEKDAYS) {
       const draftIds = draft[day].map((item) => item._key)
@@ -171,11 +461,85 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
       if (draftIds.length !== originalDayIds.length) return true
       if (draftIds.some((key, i) => key !== originalDayIds[i])) return true
     }
+    // Structural equality (same ids, same order, same days) isn't enough —
+    // the field-edit panel changes name/sets/reps/weight/duration/
+    // description/bullets in place without touching order, so those need
+    // their own comparison against the original row.
+    for (const day of WEEKDAYS) {
+      for (const item of draft[day]) {
+        if (item.isNew) return true
+        const original = originalById.get(item.id)
+        if (!original) return true
+        if (
+          item.name !== original.name ||
+          item.sets !== original.sets ||
+          item.reps !== original.reps ||
+          item.weight !== original.weight ||
+          item.duration !== original.duration ||
+          item.description !== original.description ||
+          JSON.stringify(item.bullets) !== JSON.stringify(original.bullets)
+        ) {
+          return true
+        }
+      }
+    }
     return false
-  }, [draft, allExercises])
+  }, [draft, allExercises, originalById])
 
   const dayExercises = draft[selectedDay]
   const isSelecting = selectedKeys.size > 0
+
+  function findItem(key) {
+    for (const day of WEEKDAYS) {
+      const item = draft[day].find((it) => it._key === key)
+      if (item) return { day, item }
+    }
+    return null
+  }
+
+  const editingEntry = editingKey ? findItem(editingKey) : null
+
+  function handleOpenEdit(key) {
+    if (editingKey === key) {
+      setEditingKey(null)
+      setEditPanelExpanded(false)
+    } else {
+      setEditingKey(key)
+      setEditPanelExpanded(false)
+    }
+  }
+
+  function closeEditPanel() {
+    setEditingKey(null)
+    setEditPanelExpanded(false)
+  }
+
+  function commitEditField(field, value) {
+    if (!editingEntry) return
+    const { day, item } = editingEntry
+    const unchanged = field === 'bullets'
+      ? JSON.stringify(item.bullets) === JSON.stringify(value)
+      : item[field] === value
+    if (unchanged) return
+    commitDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === editingKey ? { ...it, [field]: value } : it)),
+    }))
+  }
+
+  // Photo changes are already persisted server-side the moment they happen
+  // (upload/URL hit the backend directly, unlike every other field which
+  // just edits the draft) — so this only needs to reflect the new value
+  // locally for display, not go through commitDraft/undo for something
+  // that's not actually undoable from here anyway.
+  function handlePhotoChange(photo) {
+    if (!editingEntry) return
+    const { day } = editingEntry
+    setDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === editingKey ? { ...it, photo } : it)),
+    }))
+  }
 
   function handleCancel() {
     if (isDirty) setConfirmingDiscard(true)
@@ -266,7 +630,18 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
           copies.push({ sourceId: item.sourceId, day, sort_order: index })
         } else {
           draftExistingIds.add(item.id)
-          updates.push({ id: item.id, day, sort_order: index })
+          updates.push({
+            id: item.id,
+            day,
+            sort_order: index,
+            name: item.name,
+            sets: item.sets,
+            reps: item.reps,
+            weight: item.weight,
+            duration: item.duration,
+            description: item.description,
+            bullets: item.bullets,
+          })
         }
       })
     }
@@ -370,7 +745,9 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
                   key={item._key}
                   item={item}
                   selected={selectedKeys.has(item._key)}
+                  editing={editingKey === item._key}
                   onToggleSelect={toggleSelect}
+                  onOpenEdit={handleOpenEdit}
                 />
               ))}
             </SortableContext>
@@ -378,10 +755,25 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onClose }) {
         )}
       </div>
 
-      {isDirty && (
+      {isDirty && !editingEntry && (
         <button type="button" className="edit-plan-save-fab" onClick={handleSave} disabled={saving} aria-label="Save changes">
           <SaveIcon size={30} />
         </button>
+      )}
+
+      {editingEntry && (
+        <ExerciseEditPanel
+          item={editingEntry.item}
+          expanded={editPanelExpanded}
+          onToggleExpanded={() => setEditPanelExpanded((v) => !v)}
+          onClose={closeEditPanel}
+          onCommitField={commitEditField}
+          canUndo={undoStack.length > 0}
+          canRedo={redoStack.length > 0}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onPhotoChange={handlePhotoChange}
+        />
       )}
 
       {sheet && (
