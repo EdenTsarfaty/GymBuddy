@@ -110,10 +110,18 @@ function groupByDay(exercises) {
 // exercise at that exact spot. Purely visual for now: the actual
 // add-exercise flow (title search / photo / manual entry) is a later phase,
 // so the + button has no handler yet.
-function InsertDivider() {
+// bleedTop/bleedBottom control whether the line extends past this divider's
+// own box on that side to reach a neighboring card — false when there is no
+// neighbor that direction (this is the first/last card), so the line just
+// stops at the + button instead of trailing off into empty space.
+function InsertDivider({ bleedTop = true, bleedBottom = true }) {
   return (
     <div className="edit-plan-insert-divider">
-      <span className="edit-plan-insert-line" aria-hidden="true" />
+      <span
+        className="edit-plan-insert-line"
+        style={{ top: bleedTop ? -8 : '50%', bottom: bleedBottom ? -8 : '50%' }}
+        aria-hidden="true"
+      />
       <button type="button" className="edit-plan-insert-plus" aria-label="Insert exercise here">
         <PlusIcon size={14} />
       </button>
@@ -1150,15 +1158,15 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
 
       {saveError && <p className="edit-plan-save-error">{saveError}</p>}
 
-      <div className="edit-plan-list">
+      <div className={`edit-plan-list ${editingEntry ? 'has-edit-panel' : ''}`}>
         {dayExercises.length === 0 ? (
           <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
-              {dayExercises.map((item) => (
+              {dayExercises.map((item, i) => (
                 <div key={item._key} style={{ display: 'contents' }}>
-                  {editingKey === item._key && <InsertDivider />}
+                  {editingKey === item._key && <InsertDivider bleedTop={i > 0} />}
                   <SortableCard
                     item={item}
                     selected={selectedKeys.has(item._key)}
@@ -1166,7 +1174,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                     onToggleSelect={toggleSelect}
                     onOpenEdit={handleOpenEdit}
                   />
-                  {editingKey === item._key && <InsertDivider />}
+                  {editingKey === item._key && <InsertDivider bleedBottom={i < dayExercises.length - 1} />}
                 </div>
               ))}
             </SortableContext>

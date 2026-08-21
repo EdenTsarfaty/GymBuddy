@@ -3348,7 +3348,7 @@
 }
 
 .edit-plan-day-title-edit-btn:hover {
-  color: var(--accent);
+  color: var(--text-h);
 }
 
 .edit-plan-day-title-edit {
@@ -3365,7 +3365,7 @@
   line-height: 1;
   color: var(--text-h);
   background: var(--chip-bg);
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--border);
   border-radius: 6px;
   padding: 1px 6px;
   width: 110px;
@@ -3395,9 +3395,9 @@
 }
 
 .edit-plan-day-title-confirm:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(30, 150, 85, 0.2);
+  border-color: #1e9655;
+  color: #1e9655;
 }
 
 .edit-plan-day-title-confirm:disabled {
@@ -3481,6 +3481,13 @@
   flex: 1;
 }
 
+/* Room for the collapsed edit-panel bar fixed at the bottom of the screen —
+   without this the list's last card(s) (or the insert-divider below the
+   card being edited) sit underneath it instead of ending above it. */
+.edit-plan-list.has-edit-panel {
+  padding-bottom: calc(34px + env(safe-area-inset-bottom));
+}
+
 /* Sits in the gap above/below whichever card is open for editing. 48px
    lines the dotted line + button up with the checkbox's own x-center
    (6px card padding + 24px drag-handle box + 8px gap + half of the 20px
@@ -3489,17 +3496,21 @@
   position: relative;
   height: 40px;
   flex-shrink: 0;
+  animation: edit-plan-divider-expand 0.2s ease-out;
+}
+
+@keyframes edit-plan-divider-expand {
+  from { height: 0; }
+  to   { height: 40px; }
 }
 
 .edit-plan-insert-line {
   position: absolute;
   left: 48px;
-  /* Bleeds 8px past the divider's own box each way — .edit-plan-list's flex
-     gap adds that much extra space between the divider and the adjacent
-     card on top of the divider's own height, so without this the line
-     stops short and never actually touches the card. */
-  top: -8px;
-  bottom: -8px;
+  /* top/bottom set inline per-instance (see InsertDivider) — -8px bleeds
+     past the divider's own box to reach a neighboring card (.edit-plan-list's
+     flex gap adds that much extra space on top of the divider's own height),
+     or 50% to stop right at the + button when there's no neighbor that way. */
   border-left: 2px dashed var(--border);
 }
 
@@ -3542,11 +3553,12 @@
   border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 11px 14px 11px 6px;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .edit-plan-card.is-selected {
   border-color: var(--accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .edit-plan-drag-handle {
@@ -3770,6 +3782,7 @@
 
 .edit-plan-card.is-editing {
   border-color: var(--accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* Bleeds to the page edges like the old bottom toolbar did, and sits above
