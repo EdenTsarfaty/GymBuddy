@@ -3617,6 +3617,42 @@
   flex-shrink: 0;
 }
 
+.edit-plan-pending-add {
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.edit-plan-pending-add-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-pending-add-btn:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.edit-plan-pending-add-btn:disabled {
+  color: var(--text-muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .edit-plan-stat {
   font-size: 14px;
   font-weight: 600;
@@ -3929,6 +3965,173 @@
 .edit-plan-field-narrow {
   flex: 1;
   min-width: 0;
+}
+
+.edit-plan-name-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.edit-plan-name-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-plan-category-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.edit-plan-category-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.edit-plan-category-pill:hover {
+  border-color: var(--text-muted);
+}
+
+.edit-plan-category-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+.edit-plan-category-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.edit-plan-category-option:hover {
+  background: var(--chip-bg);
+}
+
+.edit-plan-stats-row {
+  align-items: flex-end;
+}
+
+.edit-plan-stat-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.edit-plan-stat-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edit-plan-stat-remove:hover {
+  background: rgba(229, 72, 77, 0.15);
+  color: #e5484d;
+}
+
+.edit-plan-stat-add-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.edit-plan-stat-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.edit-plan-stat-add-btn:hover {
+  border-color: var(--text-h);
+  color: var(--text-h);
+}
+
+.edit-plan-stat-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+.edit-plan-stat-menu button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.edit-plan-stat-menu button:hover {
+  background: var(--chip-bg);
 }
 
 .edit-plan-bullet-row {

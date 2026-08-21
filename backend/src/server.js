@@ -487,16 +487,16 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 // copies always start with a clean photo/adjustments slate (see comments
 // below) rather than sharing state with their source.
 fastify.post('/api/exercises/plan', async (request, reply) => {
-  const { user_id, deletes, updates, copies } = request.body || {}
+  const { user_id, deletes, updates, copies, creates } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
 
-  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id } of updates || []) {
+  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category } of updates || []) {
     if (!VALID_DAYS.includes(day)) continue
     db.prepare(
       `UPDATE exercises
-       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?
+       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?
        WHERE id = ? AND user_id = ?`,
-    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, id, uid)
+    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, category ?? null, id, uid)
   }
 
   for (const { sourceId, day, sort_order } of copies || []) {
@@ -507,6 +507,18 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
       `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
     ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order)
+  }
+
+  // Phase 4's manual-entry path — a brand new exercise with no source row to
+  // copy from, unlike `copies`. Starts with the same clean adjustments/photo
+  // slate as a copy does, since there's nothing prior to carry over here either.
+  for (const { day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category } of creates || []) {
+    if (!VALID_DAYS.includes(day)) continue
+    if (!name || !name.trim()) continue
+    db.prepare(
+      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
+    ).run(uid, name.trim(), day, sets ?? null, reps ?? null, weight ?? null, duration ?? null, description || '', JSON.stringify(bullets || []), video_id ?? null, category ?? null, sort_order)
   }
 
   for (const id of deletes || []) {

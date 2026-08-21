@@ -28,6 +28,9 @@ import PhotoIcon from './icons/PhotoIcon'
 import SearchIcon from './icons/SearchIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
 import NewTabIcon from './icons/NewTabIcon'
+import PencilIcon from './icons/PencilIcon'
+import AiSearchIcon from './icons/AiSearchIcon'
+import AiPhotoIcon from './icons/AiPhotoIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -40,6 +43,24 @@ const CATEGORY_ICONS = {
   warm_up: TreadmillIcon,
   stretch: StretchIcon,
 }
+
+const CATEGORY_LABELS = {
+  free_weight: 'Free Weight',
+  machine: 'Machine',
+  body_weight: 'Body Weight',
+  warm_up: 'Warm Up',
+  stretch: 'Stretch',
+}
+
+// The four possible stat fields, independently addable/removable (unlike
+// the old hasDuration split, which forced an either/or between Duration
+// and Sets/Reps/Weight) — the fixed order they render/offer-to-add in.
+const STAT_ORDER = ['sets', 'reps', 'weight', 'duration']
+const STAT_LABELS = { sets: 'Sets', reps: 'Reps', weight: 'Weight (kg)', duration: 'Duration (sec)' }
+// Short names, no units — for the "add a stat" menu, where the unit is
+// redundant clutter (the field itself still shows it once added).
+const STAT_SHORT_LABELS = { sets: 'Sets', reps: 'Reps', weight: 'Weight', duration: 'Duration' }
+const STAT_DEFAULTS = { sets: 3, reps: 10, weight: 0, duration: 30 }
 
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
@@ -105,16 +126,14 @@ function groupByDay(exercises) {
 }
 
 // Shown in the gap above and below whichever card is open for field editing
-// (tapped body, not checkbox) — a vertical dotted line at the checkbox's
-// x-position with a round + in the middle, hinting at inserting a new
-// exercise at that exact spot. Purely visual for now: the actual
-// add-exercise flow (title search / photo / manual entry) is a later phase,
-// so the + button has no handler yet.
+// (tapped body, not checkbox) — a vertical dashed line at the checkbox's
+// x-position with a round + in the middle. Clicking it drops a placeholder
+// card (see PendingAddCard) at that exact position.
 // bleedTop/bleedBottom control whether the line extends past this divider's
 // own box on that side to reach a neighboring card — false when there is no
 // neighbor that direction (this is the first/last card), so the line just
 // stops at the + button instead of trailing off into empty space.
-function InsertDivider({ bleedTop = true, bleedBottom = true }) {
+function InsertDivider({ bleedTop = true, bleedBottom = true, onInsert }) {
   return (
     <div className="edit-plan-insert-divider">
       <span
@@ -122,20 +141,55 @@ function InsertDivider({ bleedTop = true, bleedBottom = true }) {
         style={{ top: bleedTop ? -8 : '50%', bottom: bleedBottom ? -8 : '50%' }}
         aria-hidden="true"
       />
-      <button type="button" className="edit-plan-insert-plus" aria-label="Insert exercise here">
+      <button type="button" className="edit-plan-insert-plus" onClick={onInsert} aria-label="Insert exercise here">
         <PlusIcon size={14} />
       </button>
     </div>
   )
 }
 
-function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item._key })
+// Sits in the list in place of a real exercise card right after a + is
+// tapped — offers the three ways to fill it in. Phase 4 only wires up
+// Manual (opens the same field-edit panel every other card uses, blank);
+// the AI-backed modes are visible but inert until a later phase.
+function PendingAddCard({ onManual }) {
+  return (
+    <div className="edit-plan-card edit-plan-pending-add">
+      <button type="button" className="edit-plan-pending-add-btn" onClick={onManual}>
+        <PencilIcon size={14} />
+        <span>Manual</span>
+      </button>
+      <button type="button" className="edit-plan-pending-add-btn" disabled>
+        <AiSearchIcon size={14} />
+        <span>Title search</span>
+      </button>
+      <button type="button" className="edit-plan-pending-add-btn" disabled>
+        <AiPhotoIcon size={14} />
+        <span>Photo search</span>
+      </button>
+    </div>
+  )
+}
+
+function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onManualAdd }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item._key,
+    disabled: item.isPendingAdd,
+  })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
   }
+
+  if (item.isPendingAdd) {
+    return (
+      <div ref={setNodeRef} style={style}>
+        <PendingAddCard onManual={() => onManualAdd(item._key)} />
+      </div>
+    )
+  }
+
   const Icon = CATEGORY_ICONS[item.category]
 
   return (
@@ -228,6 +282,8 @@ function ExerciseEditPanel({
   const [youtubeResults, setYoutubeResults] = useState(null)
   const [youtubeSearching, setYoutubeSearching] = useState(false)
   const [youtubeSearchError, setYoutubeSearchError] = useState(null)
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false)
+  const [showStatMenu, setShowStatMenu] = useState(false)
   const fileInputRef = useRef(null)
   const bulletRefs = useRef([])
 
@@ -243,10 +299,31 @@ function ExerciseEditPanel({
     setShowYoutubeSearch(false)
     setYoutubeResults(null)
     setYoutubeSearchError(null)
+    setShowCategoryMenu(false)
+    setShowStatMenu(false)
   }, [item])
 
-  const hasDuration = item.duration != null
   const canUploadPhoto = !item.isNew
+  const CategoryIcon = CATEGORY_ICONS[form.category]
+  const presentStats = STAT_ORDER.filter((key) => form[key] != null)
+  const missingStats = STAT_ORDER.filter((key) => form[key] == null)
+
+  function selectCategory(category) {
+    onCommitField('category', category)
+    setShowCategoryMenu(false)
+  }
+
+  function removeStat(key) {
+    setForm((f) => ({ ...f, [key]: null }))
+    onCommitField(key, null)
+  }
+
+  function addStat(key) {
+    const value = STAT_DEFAULTS[key]
+    setForm((f) => ({ ...f, [key]: value }))
+    onCommitField(key, value)
+    setShowStatMenu(false)
+  }
   const parsedVideoId = parseYouTubeId(youtubeInput)
   // Only flag as an error when the text actually resembles a URL but failed
   // to parse as a YouTube one — plain search text (no protocol/domain shape)
@@ -456,57 +533,83 @@ function ExerciseEditPanel({
             </div>
           </div>
 
-          <label className="edit-plan-field">
-            <span>Name</span>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              onBlur={(e) => onCommitField('name', e.target.value)}
-            />
-          </label>
-
-          {hasDuration ? (
-            <label className="edit-plan-field edit-plan-field-narrow">
-              <span>Duration (sec)</span>
+          <div className="edit-plan-name-row">
+            <label className="edit-plan-field edit-plan-name-field">
+              <span>Name</span>
               <input
-                type="number"
-                value={form.duration ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                onBlur={(e) => onCommitField('duration', Number(e.target.value) || 0)}
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onBlur={(e) => onCommitField('name', e.target.value)}
               />
             </label>
-          ) : (
-            <div className="edit-plan-field-row">
-              <label className="edit-plan-field edit-plan-field-narrow">
-                <span>Sets</span>
-                <input
-                  type="number"
-                  value={form.sets ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, sets: e.target.value }))}
-                  onBlur={(e) => onCommitField('sets', Number(e.target.value) || 0)}
-                />
-              </label>
-              <label className="edit-plan-field edit-plan-field-narrow">
-                <span>Reps</span>
-                <input
-                  type="number"
-                  value={form.reps ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, reps: e.target.value }))}
-                  onBlur={(e) => onCommitField('reps', Number(e.target.value) || 0)}
-                />
-              </label>
-              <label className="edit-plan-field edit-plan-field-narrow">
-                <span>Weight (kg)</span>
-                <input
-                  type="number"
-                  value={form.weight ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
-                  onBlur={(e) => onCommitField('weight', Number(e.target.value) || 0)}
-                />
-              </label>
+            <div className="edit-plan-category-picker">
+              <button
+                type="button"
+                className="edit-plan-category-pill"
+                onClick={() => setShowCategoryMenu((v) => !v)}
+              >
+                {CategoryIcon && <CategoryIcon size={14} />}
+                <span>{CATEGORY_LABELS[form.category] || 'Category'}</span>
+              </button>
+              {showCategoryMenu && (
+                <div className="edit-plan-category-menu">
+                  {Object.keys(CATEGORY_ICONS).filter((key) => key !== form.category).map((key) => {
+                    const OptionIcon = CATEGORY_ICONS[key]
+                    return (
+                      <button key={key} type="button" className="edit-plan-category-option" onClick={() => selectCategory(key)}>
+                        <OptionIcon size={16} />
+                        <span>{CATEGORY_LABELS[key]}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="edit-plan-field-row edit-plan-stats-row">
+            {presentStats.map((key) => (
+              <label key={key} className="edit-plan-field edit-plan-field-narrow">
+                <span className="edit-plan-stat-field-label">
+                  {STAT_LABELS[key]}
+                  <button
+                    type="button"
+                    className="edit-plan-stat-remove"
+                    onClick={() => removeStat(key)}
+                    aria-label={`Remove ${STAT_LABELS[key]}`}
+                  >
+                    <XIcon size={9} />
+                  </button>
+                </span>
+                <input
+                  type="number"
+                  value={form[key] ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  onBlur={(e) => onCommitField(key, Number(e.target.value) || 0)}
+                />
+              </label>
+            ))}
+            {missingStats.length > 0 && (
+              <div className="edit-plan-stat-add-wrap">
+                <button
+                  type="button"
+                  className="edit-plan-stat-add-btn"
+                  onClick={() => setShowStatMenu((v) => !v)}
+                  aria-label="Add a stat"
+                >
+                  <PlusIcon size={14} />
+                </button>
+                {showStatMenu && (
+                  <div className="edit-plan-stat-menu">
+                    {missingStats.map((key) => (
+                      <button key={key} type="button" onClick={() => addStat(key)}>{STAT_SHORT_LABELS[key]}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <span className="edit-plan-field-label">Photo</span>
           <div className="edit-plan-photo-row">
@@ -798,7 +901,10 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const originalById = useMemo(() => new Map(allExercises.map((e) => [e.id, e])), [allExercises])
   const isDirty = useMemo(() => {
     for (const day of WEEKDAYS) {
-      const draftIds = draft[day].map((item) => item._key)
+      // Pending-add placeholders aren't real exercises yet (no name, nothing
+      // to save) — they'd otherwise trip the length check the instant + is
+      // tapped, showing the Save FAB before there's actually anything to save.
+      const draftIds = draft[day].filter((item) => !item.isPendingAdd).map((item) => item._key)
       const originalDayIds = allExercises.filter((e) => e.day === day).map((e) => String(e.id))
       if (draftIds.length !== originalDayIds.length) return true
       if (draftIds.some((key, i) => key !== originalDayIds[i])) return true
@@ -809,6 +915,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     // their own comparison against the original row.
     for (const day of WEEKDAYS) {
       for (const item of draft[day]) {
+        if (item.isPendingAdd) continue
         if (item.isNew) return true
         const original = originalById.get(item.id)
         if (!original) return true
@@ -820,6 +927,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           item.duration !== original.duration ||
           item.description !== original.description ||
           item.video_id !== original.video_id ||
+          item.category !== original.category ||
           JSON.stringify(item.bullets) !== JSON.stringify(original.bullets)
         ) {
           return true
@@ -853,8 +961,65 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   }
 
   function closeEditPanel() {
+    // A manual add left with no name typed in isn't a real exercise — drop
+    // it rather than leaving an empty-titled card sitting in the list.
+    if (editingEntry && !editingEntry.item.isPendingAdd && !editingEntry.item.name.trim()) {
+      const { day } = editingEntry
+      setDraft((current) => ({
+        ...current,
+        [day]: current[day].filter((it) => it._key !== editingKey),
+      }))
+    }
     setEditingKey(null)
     setEditPanelExpanded(false)
+  }
+
+  // Drops a blank placeholder card into the draft at the exact position the
+  // tapped + sits at — day/index are resolved by the caller from that +'s
+  // position in the currently-viewed day's list.
+  function handleInsertPlaceholder(day, index) {
+    const key = `pending-${newKeyCounter.current++}`
+    commitDraft((current) => {
+      const list = [...current[day]]
+      list.splice(index, 0, { _key: key, day, isPendingAdd: true })
+      return { ...current, [day]: list }
+    })
+    // The dividers/panel belong to whichever card is "open" — once a
+    // placeholder is inserted, that's no longer the previously-editing
+    // card, so close it out rather than leaving its dividers showing too.
+    setEditingKey(null)
+    setEditPanelExpanded(false)
+  }
+
+  // Turns a placeholder into a real (still-empty) draft item and opens it
+  // straight in the field-edit panel, reusing that same form for manual
+  // entry rather than building a separate one.
+  function handleManualAdd(key) {
+    const found = findItem(key)
+    if (!found) return
+    const { day } = found
+    commitDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === key ? {
+        ...it,
+        isPendingAdd: false,
+        isNew: true,
+        id: undefined,
+        sourceId: undefined,
+        name: '',
+        sets: 3,
+        reps: 10,
+        weight: 0,
+        duration: null,
+        description: '',
+        bullets: [],
+        category: 'free_weight',
+        video_id: null,
+        photo: null,
+      } : it)),
+    }))
+    setEditingKey(key)
+    setEditPanelExpanded(true)
   }
 
   function commitEditField(field, value) {
@@ -1002,12 +1167,34 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     const deletes = []
     const updates = []
     const copies = []
+    const creates = []
     const draftExistingIds = new Set()
 
     for (const day of WEEKDAYS) {
       draft[day].forEach((item, index) => {
-        if (item.isNew) {
+        if (item.isPendingAdd) {
+          // Never saved — a placeholder with no mode chosen yet isn't a
+          // real exercise. Just skip it; it stays a local-only draft entry.
+          return
+        }
+        if (item.isNew && item.sourceId) {
           copies.push({ sourceId: item.sourceId, day, sort_order: index })
+        } else if (item.isNew) {
+          // Manual entry — no source row, full fields supplied directly.
+          if (!item.name.trim()) return
+          creates.push({
+            day,
+            sort_order: index,
+            name: item.name,
+            sets: item.sets,
+            reps: item.reps,
+            weight: item.weight,
+            duration: item.duration,
+            description: item.description,
+            bullets: item.bullets,
+            video_id: item.video_id,
+            category: item.category,
+          })
         } else {
           draftExistingIds.add(item.id)
           updates.push({
@@ -1022,6 +1209,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             description: item.description,
             bullets: item.bullets,
             video_id: item.video_id,
+            category: item.category,
           })
         }
       })
@@ -1034,7 +1222,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       const res = await fetch(`${API_BASE}/api/exercises/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, deletes, updates, copies }),
+        body: JSON.stringify({ user_id: userId, deletes, updates, copies, creates }),
       })
       if (!res.ok) throw new Error('Save failed')
       onSaved?.()
@@ -1166,15 +1354,23 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
               {dayExercises.map((item, i) => (
                 <div key={item._key} style={{ display: 'contents' }}>
-                  {editingKey === item._key && <InsertDivider bleedTop={i > 0} />}
+                  {editingKey === item._key && (
+                    <InsertDivider bleedTop={i > 0} onInsert={() => handleInsertPlaceholder(selectedDay, i)} />
+                  )}
                   <SortableCard
                     item={item}
                     selected={selectedKeys.has(item._key)}
                     editing={editingKey === item._key}
                     onToggleSelect={toggleSelect}
                     onOpenEdit={handleOpenEdit}
+                    onManualAdd={handleManualAdd}
                   />
-                  {editingKey === item._key && <InsertDivider bleedBottom={i < dayExercises.length - 1} />}
+                  {editingKey === item._key && (
+                    <InsertDivider
+                      bleedBottom={i < dayExercises.length - 1}
+                      onInsert={() => handleInsertPlaceholder(selectedDay, i + 1)}
+                    />
+                  )}
                 </div>
               ))}
             </SortableContext>
