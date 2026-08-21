@@ -149,17 +149,134 @@ function InsertDivider({ bleedTop = true, bleedBottom = true, onInsert }) {
 }
 
 // Sits in the list in place of a real exercise card right after a + is
-// tapped — offers the three ways to fill it in. Phase 4 only wires up
-// Manual (opens the same field-edit panel every other card uses, blank);
-// the AI-backed modes are visible but inert until a later phase.
+// tapped — offers the three ways to fill it in. Manual (Phase 4) opens the
+// same field-edit panel every other card uses, blank. Title search (Phase
+// 5) swaps this card into a search field with live autocomplete against
+// the bundled wger name list — picking or typing a name doesn't populate
+// the rest of the card yet, that's a later phase. Photo search is still
+// visible but inert.
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Splits a suggestion name into the part that literally echoes the typed
+// query (kept at normal weight) and everything around it — prefix and
+// suffix alike — that the query doesn't account for (bolded, like a
+// search-engine autocomplete highlighting what's new). Bolding both sides
+// means a mid-string match (e.g. "Deficit Push ups" for query "push ups")
+// still shows something highlighted, not just a same-weight line when the
+// match happens to run to the end of the name. Mirrors the backend's
+// word-boundary matching so hyphen/space differences between the query and
+// the name don't throw off where the split lands.
+function splitSuggestionMatch(name, query) {
+  const words = query.toLowerCase().replace(/[-\s]+/g, ' ').trim().split(' ').filter(Boolean)
+  if (words.length === 0) return { pre: '', match: '', post: name }
+  const pattern = words.map(escapeRegex).join('[-\\s]+')
+  const m = name.match(new RegExp(`\\b(${pattern})`, 'i'))
+  if (!m) return { pre: '', match: '', post: name }
+  const start = m.index
+  const end = start + m[0].length
+  return { pre: name.slice(0, start), match: name.slice(start, end), post: name.slice(end) }
+}
+
 function PendingAddCard({ onManual }) {
+  const [mode, setMode] = useState(null) // null | 'title-search'
+  const [query, setQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef(null)
+
+  function runQuery(value) {
+    clearTimeout(debounceRef.current)
+    if (!value.trim()) {
+      setSuggestions([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/exercise-name-search?q=${encodeURIComponent(value.trim())}`)
+        const data = await res.json()
+        setSuggestions(data.results || [])
+      } catch {
+        setSuggestions([])
+      } finally {
+        setSearching(false)
+      }
+    }, 200)
+  }
+
+  function handleQueryChange(value) {
+    setQuery(value)
+    runQuery(value)
+  }
+
+  function closeTitleSearch() {
+    clearTimeout(debounceRef.current)
+    setMode(null)
+    setQuery('')
+    setSuggestions([])
+    setSearching(false)
+  }
+
+  if (mode === 'title-search') {
+    return (
+      <div className="edit-plan-card edit-plan-pending-add edit-plan-pending-search">
+        <button type="button" className="edit-plan-pending-back" onClick={closeTitleSearch} aria-label="Back">
+          <XIcon size={11} />
+        </button>
+        <div className="edit-plan-pending-search-wrap">
+          <input
+            type="text"
+            className="edit-plan-pending-search-input"
+            placeholder="Search exercise name…"
+            value={query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            autoFocus
+          />
+          {query.trim() && (
+            <div className="edit-plan-pending-suggestions">
+              <button
+                type="button"
+                className="edit-plan-pending-suggestion"
+                onClick={() => setSuggestions([])}
+              >
+                {query.trim()}
+              </button>
+              {searching ? (
+                <div className="edit-plan-pending-suggestion-status">Searching…</div>
+              ) : (
+                suggestions
+                  .filter((name) => name.trim().toLowerCase() !== query.trim().toLowerCase())
+                  .map((name) => {
+                    const { pre, match, post } = splitSuggestionMatch(name, query)
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        className="edit-plan-pending-suggestion"
+                        onClick={() => { setQuery(name); setSuggestions([]) }}
+                      >
+                        <strong>{pre}</strong>{match}<strong>{post}</strong>
+                      </button>
+                    )
+                  })
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="edit-plan-card edit-plan-pending-add">
       <button type="button" className="edit-plan-pending-add-btn" onClick={onManual}>
         <PencilIcon size={14} />
         <span>Manual</span>
       </button>
-      <button type="button" className="edit-plan-pending-add-btn" disabled>
+      <button type="button" className="edit-plan-pending-add-btn" onClick={() => setMode('title-search')}>
         <AiSearchIcon size={14} />
         <span>Title search</span>
       </button>
@@ -265,7 +382,7 @@ function DayPickerSheet({ title, currentDay, dayTitles, onPick, onCancel }) {
 // confirm step — typing doesn't spam the undo stack since each field commits
 // once, on blur, not per keystroke.
 function ExerciseEditPanel({
-  item, expanded, onToggleExpanded, onClose, onCommitField,
+  item, expanded, onToggleExpanded, onClose, onCommitField, onDelete,
   canUndo, canRedo, onUndo, onRedo, onPhotoChange,
 }) {
   const [form, setForm] = useState(item)
@@ -521,6 +638,9 @@ function ExerciseEditPanel({
           <div className="edit-plan-edit-form-header">
             <h3>Edit exercise</h3>
             <div className="edit-plan-edit-form-header-actions">
+              <button type="button" className="edit-plan-icon-btn" onClick={onDelete} aria-label="Delete exercise">
+                <TrashIcon size={17} />
+              </button>
               <button type="button" className="edit-plan-icon-btn" onClick={onUndo} disabled={!canUndo} aria-label="Undo">
                 <UndoIcon size={21} />
               </button>
@@ -951,6 +1071,20 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const editingEntry = editingKey ? findItem(editingKey) : null
 
   function handleOpenEdit(key) {
+    // The temporary add-exercise card is scaffolding for the add flow, not a
+    // real draft item — if one's left sitting open (mode picker, title
+    // search, etc.) and the user taps a different card instead, drop it
+    // rather than leaving it in the list unresolved.
+    setDraft((current) => {
+      let changed = false
+      const next = {}
+      for (const day of Object.keys(current)) {
+        const filtered = current[day].filter((it) => !it.isPendingAdd)
+        if (filtered.length !== current[day].length) changed = true
+        next[day] = filtered
+      }
+      return changed ? next : current
+    })
     if (editingKey === key) {
       setEditingKey(null)
       setEditPanelExpanded(false)
@@ -970,6 +1104,20 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         [day]: current[day].filter((it) => it._key !== editingKey),
       }))
     }
+    setEditingKey(null)
+    setEditPanelExpanded(false)
+  }
+
+  // Deletes the exercise currently open in the field-edit panel — same
+  // effect as the bulk checkbox-select Delete, just for the one card that's
+  // already "open" instead of requiring a separate checkbox tap first.
+  function handleDeleteEditing() {
+    if (!editingEntry) return
+    const { day } = editingEntry
+    commitDraft((current) => ({
+      ...current,
+      [day]: current[day].filter((it) => it._key !== editingKey),
+    }))
     setEditingKey(null)
     setEditPanelExpanded(false)
   }
@@ -1301,6 +1449,17 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             </>
           ) : (
             <>
+              {editingEntry && (
+                <button
+                  type="button"
+                  className="edit-plan-icon-btn"
+                  onClick={handleDeleteEditing}
+                  disabled={saving}
+                  aria-label="Delete exercise"
+                >
+                  <TrashIcon size={17} />
+                </button>
+              )}
               <button
                 type="button"
                 className="edit-plan-icon-btn"
@@ -1391,6 +1550,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           onToggleExpanded={() => setEditPanelExpanded((v) => !v)}
           onClose={closeEditPanel}
           onCommitField={commitEditField}
+          onDelete={handleDeleteEditing}
           canUndo={undoStack.length > 0}
           canRedo={redoStack.length > 0}
           onUndo={handleUndo}

@@ -5,6 +5,7 @@ const db = require('./db')
 const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
+const { maybeSyncExerciseNames } = require('./wgerSync')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
 const streakGuardian = require('./streakGuardian')
@@ -12,7 +13,35 @@ const exercisePhotos = require('./exercisePhotos')
 const push = require('./push')
 const { isTailscaleConnected } = require('./tailscale')
 
+// Bundled at build time from wger.de's public exercise database (English
+// names only, deduped — see conversation history for how this was pulled:
+// paginated through /api/v2/exercise-translation/, filtered by language id
+// 2 since wger's own `language=` query param on that endpoint doesn't
+// actually filter server-side). Static file, no live API dependency at
+// request time — used to ground/autocomplete Edit Plan's "Title search"
+// add-exercise mode against real, community-vetted exercise names rather
+// than trusting free-text alone.
+const EXERCISE_NAMES_PATH = path.join(__dirname, 'data', 'exerciseNames.json')
+let EXERCISE_NAMES = JSON.parse(fs.readFileSync(EXERCISE_NAMES_PATH, 'utf-8'))
+
+// Both of these internally no-op unless enough time has passed since their
+// last real run (3 days for backups, 7 for the wger sync), so a daily timer
+// is just the trigger cadence — it's cheap to call more often than that. A
+// recurring timer (rather than a one-shot startup call) is needed because
+// this server process can stay up for weeks without restarting, and a
+// startup-only check would only ever get one chance to fire.
 maybeBackupDatabase()
+setInterval(maybeBackupDatabase, 24 * 60 * 60 * 1000)
+
+// Re-checks wger's exercise names and refreshes the bundled dataset above if
+// anything changed (see wgerSync.js).
+function runExerciseNameSync() {
+  maybeSyncExerciseNames().then((changed) => {
+    if (changed) EXERCISE_NAMES = JSON.parse(fs.readFileSync(EXERCISE_NAMES_PATH, 'utf-8'))
+  })
+}
+runExerciseNameSync()
+setInterval(runExerciseNameSync, 24 * 60 * 60 * 1000)
 
 checkOpenAIHealth().then((result) => {
   if (result.ok) {
@@ -673,6 +702,44 @@ fastify.get('/api/youtube-search', async (request, reply) => {
     return { error: 'YouTube search failed' }
   }
   return { results }
+})
+
+// Live autocomplete for Edit Plan's "Title search" add-exercise mode —
+// local word-boundary match against the bundled wger name list (see
+// EXERCISE_NAMES above), not a network call, so it's fast enough to hit on
+// every keystroke. The query must align with the START of a word inside the
+// name (e.g. "lock" matches "Lockout" or "Kettlebell Lock..."), not appear
+// as an arbitrary mid-word substring (e.g. "lock" must NOT match
+// "clockwise" — the query would land mid-word there). Names whose *first*
+// word matches rank above names matching on a later word, then alphabetical.
+// Hyphens and spaces are treated as interchangeable on both sides of the
+// match — "Push Up" should find "Push-Up" and vice versa, since that's just
+// an inconsistent-formatting difference, not a different exercise.
+function normalizeForSearch(s) {
+  return s.toLowerCase().replace(/[-\s]+/g, ' ').trim()
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+fastify.get('/api/exercise-name-search', async (request) => {
+  const q = normalizeForSearch(request.query.q || '')
+  if (!q) return { results: [] }
+
+  const wordStartRe = new RegExp(`\\b${escapeRegex(q)}`, 'i')
+  const starts = []
+  const contains = []
+  for (const name of EXERCISE_NAMES) {
+    const normalized = normalizeForSearch(name)
+    if (!wordStartRe.test(normalized)) continue
+    if (normalized.startsWith(q)) starts.push(name)
+    else contains.push(name)
+  }
+  starts.sort((a, b) => a.localeCompare(b))
+  contains.sort((a, b) => a.localeCompare(b))
+
+  return { results: [...starts, ...contains].slice(0, 8) }
 })
 
 // Only ever serves a filename matching our own generated pattern, from the
