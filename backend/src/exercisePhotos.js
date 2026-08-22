@@ -68,10 +68,48 @@ async function deleteStoredPhoto(filename) {
   } catch {}
 }
 
+// Used by the Undo/Redo photo-revert endpoint to confirm a previously-known
+// filename hasn't actually been swept yet before pointing `photo` back at
+// it — the grace period is short, and undoing something from days ago
+// should fail cleanly rather than point at a file that's gone.
+async function storedPhotoExists(filename) {
+  if (!isValidStoredFilename(filename)) return false
+  try {
+    await fs.access(path.join(EXERCISE_PHOTOS_DIR, filename))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Same decode-then-reencode security boundary as saveUploadedPhoto (rejects
+// anything that isn't a genuine, decodable image), but for a one-shot vision
+// API call rather than the exercise's saved photo — nothing is written to
+// disk. Sized for OpenAI's "high" detail mode (identifyExerciseFromPhoto),
+// which tiles in 768px squares — 768 alone gives it exactly one tile to work
+// with, not enough resolution to reliably read the fine equipment details
+// (pin stacks, handle style, brand plates) that distinguish similar exercise
+// variants. 1536 gives it a full 2x2 tile grid's worth of detail while
+// staying well under what "high" detail mode scales down to anyway.
+// Returns a JPEG buffer, or null if it wasn't a valid image.
+async function reencodeForAnalysis(buffer) {
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize(1536, 1536, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer()
+  } catch {
+    return null
+  }
+}
+
 module.exports = {
   EXERCISE_PHOTOS_DIR,
   isValidStoredFilename,
   isValidPhotoUrl,
   saveUploadedPhoto,
   deleteStoredPhoto,
+  storedPhotoExists,
+  reencodeForAnalysis,
 }

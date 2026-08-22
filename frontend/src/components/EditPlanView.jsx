@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useRef, useState } from 'react'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -15,7 +14,6 @@ import GenerateIcon from './icons/GenerateIcon'
 import MoveIcon from './icons/MoveIcon'
 import CopyIcon from './icons/CopyIcon'
 import TrashIcon from './icons/TrashIcon'
-import SaveIcon from './icons/SaveIcon'
 import GripIcon from './icons/GripIcon'
 import CheckIcon from './icons/CheckIcon'
 import EditFieldIcon from './icons/EditFieldIcon'
@@ -31,6 +29,7 @@ import NewTabIcon from './icons/NewTabIcon'
 import PencilIcon from './icons/PencilIcon'
 import AiSearchIcon from './icons/AiSearchIcon'
 import AiPhotoIcon from './icons/AiPhotoIcon'
+import CloudIcon from './icons/CloudIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -179,12 +178,21 @@ function splitSuggestionMatch(name, query) {
   return { pre: name.slice(0, start), match: name.slice(start, end), post: name.slice(end) }
 }
 
-function PendingAddCard({ onManual }) {
-  const [mode, setMode] = useState(null) // null | 'title-search'
+function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
+  const [mode, setMode] = useState(null) // null | 'title-search' | 'photo-search'
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
   const debounceRef = useRef(null)
+
+  // 'pick' (upload/camera buttons) -> 'uploading' (identify-photo in
+  // flight) -> 'confirm' (editable guessed name, mandatory before it's used
+  // for anything) -> 'generating' (generate-preview in flight).
+  const [photoStep, setPhotoStep] = useState('pick')
+  const [photoName, setPhotoName] = useState('')
+  const [photoError, setPhotoError] = useState('')
+  const [photoFile, setPhotoFile] = useState(null)
+  const fileInputRef = useRef(null)
 
   function runQuery(value) {
     clearTimeout(debounceRef.current)
@@ -218,6 +226,57 @@ function PendingAddCard({ onManual }) {
     setQuery('')
     setSuggestions([])
     setSearching(false)
+  }
+
+  function closePhotoSearch() {
+    setMode(null)
+    setPhotoStep('pick')
+    setPhotoName('')
+    setPhotoError('')
+    setPhotoFile(null)
+  }
+
+  async function handlePhotoFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setPhotoError('')
+    setPhotoStep('uploading')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`${API_BASE}/api/exercises/identify-photo`, { method: 'POST', body })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPhotoName(data.name || '')
+      // Kept so the exact photo used to identify this exercise becomes its
+      // saved photo too once confirmed (see onPhotoConfirmed) — no reason to
+      // make the user upload the same picture twice.
+      setPhotoFile(file)
+      setPhotoStep('confirm')
+    } catch {
+      setPhotoError("Couldn't identify that photo — try another one.")
+      setPhotoStep('pick')
+    }
+  }
+
+  async function confirmPhotoName() {
+    if (!photoName.trim()) return
+    setPhotoError('')
+    setPhotoStep('generating')
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/generate-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: photoName.trim(), day, user_id: userId }),
+      })
+      if (!res.ok) throw new Error()
+      const generated = await res.json()
+      onPhotoConfirmed(generated, photoFile)
+    } catch {
+      setPhotoError("Couldn't generate exercise data — try again.")
+      setPhotoStep('confirm')
+    }
   }
 
   if (mode === 'title-search') {
@@ -270,6 +329,61 @@ function PendingAddCard({ onManual }) {
     )
   }
 
+  if (mode === 'photo-search') {
+    const busy = photoStep === 'uploading' || photoStep === 'generating'
+    return (
+      <div className="edit-plan-card edit-plan-pending-add edit-plan-pending-search">
+        <button type="button" className="edit-plan-pending-back" onClick={closePhotoSearch} aria-label="Back">
+          <XIcon size={11} />
+        </button>
+        {photoStep === 'confirm' || photoStep === 'generating' ? (
+          <div className="edit-plan-pending-photo-confirm-row">
+            <input
+              type="text"
+              className="edit-plan-pending-search-input"
+              value={photoName}
+              onChange={(e) => setPhotoName(e.target.value)}
+              disabled={photoStep === 'generating'}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="edit-plan-pending-add-btn edit-plan-pending-photo-confirm"
+              onClick={confirmPhotoName}
+              disabled={photoStep === 'generating' || !photoName.trim()}
+            >
+              <span>{photoStep === 'generating' ? 'Generating…' : 'Use this exercise'}</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="edit-plan-pending-add-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+            >
+              <UploadIcon size={14} />
+              <span>{photoStep === 'uploading' ? 'Identifying…' : 'Upload'}</span>
+            </button>
+            <button type="button" className="edit-plan-pending-add-btn" disabled>
+              <CameraIcon size={14} />
+              <span>Camera</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="edit-plan-pending-file-input"
+              onChange={handlePhotoFile}
+            />
+          </>
+        )}
+        {photoError && <div className="edit-plan-pending-suggestion-status">{photoError}</div>}
+      </div>
+    )
+  }
+
   return (
     <div className="edit-plan-card edit-plan-pending-add">
       <button type="button" className="edit-plan-pending-add-btn" onClick={onManual}>
@@ -280,7 +394,7 @@ function PendingAddCard({ onManual }) {
         <AiSearchIcon size={14} />
         <span>Title search</span>
       </button>
-      <button type="button" className="edit-plan-pending-add-btn" disabled>
+      <button type="button" className="edit-plan-pending-add-btn" onClick={() => setMode('photo-search')}>
         <AiPhotoIcon size={14} />
         <span>Photo search</span>
       </button>
@@ -288,7 +402,7 @@ function PendingAddCard({ onManual }) {
   )
 }
 
-function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onManualAdd }) {
+function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onManualAdd, onPhotoAdd, userId }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item._key,
     disabled: item.isPendingAdd,
@@ -302,7 +416,12 @@ function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onM
   if (item.isPendingAdd) {
     return (
       <div ref={setNodeRef} style={style}>
-        <PendingAddCard onManual={() => onManualAdd(item._key)} />
+        <PendingAddCard
+          onManual={() => onManualAdd(item._key)}
+          onPhotoConfirmed={(generated, photoFile) => onPhotoAdd(item._key, generated, photoFile)}
+          day={item.day}
+          userId={userId}
+        />
       </div>
     )
   }
@@ -382,8 +501,8 @@ function DayPickerSheet({ title, currentDay, dayTitles, onPick, onCancel }) {
 // confirm step — typing doesn't spam the undo stack since each field commits
 // once, on blur, not per keystroke.
 function ExerciseEditPanel({
-  item, expanded, onToggleExpanded, onClose, onCommitField, onDelete,
-  canUndo, canRedo, onUndo, onRedo, onPhotoChange,
+  item, expanded, onToggleExpanded, onClose, onCommitField, onDelete, onPhotoChange,
+  canUndo, canRedo, onUndo, onRedo, track,
 }) {
   const [form, setForm] = useState(item)
   const [uploading, setUploading] = useState(false)
@@ -420,7 +539,9 @@ function ExerciseEditPanel({
     setShowStatMenu(false)
   }, [item])
 
-  const canUploadPhoto = !item.isNew
+  // The photo endpoints are keyed by a real exercise id — an item still
+  // staged locally (no name committed yet) doesn't have one.
+  const canUploadPhoto = item.id != null
   const CategoryIcon = CATEGORY_ICONS[form.category]
   const presentStats = STAT_ORDER.filter((key) => form[key] != null)
   const missingStats = STAT_ORDER.filter((key) => form[key] == null)
@@ -511,7 +632,7 @@ function ExerciseEditPanel({
     try {
       const body = new FormData()
       body.append('file', file)
-      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'POST', body })
+      const res = await track(fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'POST', body }))
       if (!res.ok) throw new Error('Upload failed')
       const updated = await res.json()
       onPhotoChange(updated.photo)
@@ -525,11 +646,11 @@ function ExerciseEditPanel({
   async function applyPhotoUrl(url) {
     setUploading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, {
+      const res = await track(fetch(`${API_BASE}/api/exercises/${item.id}/photo`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
-      })
+      }))
       if (!res.ok) throw new Error('Save failed')
       const updated = await res.json()
       onPhotoChange(updated.photo)
@@ -551,7 +672,7 @@ function ExerciseEditPanel({
   async function removePhoto() {
     setUploading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'DELETE' })
+      const res = await track(fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'DELETE' }))
       if (!res.ok) throw new Error('Remove failed')
       onPhotoChange(null)
     } catch {
@@ -825,6 +946,7 @@ function ExerciseEditPanel({
                   {searching ? '…' : 'Search'}
                 </button>
               </div>
+              <p className="edit-plan-photo-search-tip">Tip: add "gif" to your search for an animated result.</p>
               {searchError && <p className="edit-plan-save-error">{searchError}</p>}
               {searchResults && searchResults.length > 0 && (
                 <div className="edit-plan-photo-results">
@@ -837,6 +959,7 @@ function ExerciseEditPanel({
                       disabled={uploading}
                     >
                       <img src={result.thumbnailUrl} alt="" loading="lazy" />
+                      {result.isGif && <span className="edit-plan-photo-result-gif">GIF</span>}
                     </button>
                   ))}
                 </div>
@@ -959,12 +1082,17 @@ function ExerciseEditPanel({
   )
 }
 
-// Phase 2: structural editing on top of Phase 1's skeleton — drag-handle
-// reorder, checkbox multi-select, Delete, Move to/Copy to another day, and a
-// real Save that commits the whole-plan draft in one request (Cancel just
-// discards it, no server round-trip). No AI involved yet; this only
-// restructures exercises that already exist. See the manual-edit-mode design
-// notes in memory for the full spec this is being built toward.
+// Live-sync model: every structural/field action (reorder, checkbox
+// multi-select Delete/Copy to/Move to, field edits, add) persists to the
+// server the moment it happens — no local draft, no Save button, no discard-
+// on-Cancel. `draft` is just the local mirror of server state, kept in sync
+// via optimistic updates that roll back if the request fails. Undo/Redo are
+// reverse network calls (see undoStack below), not a client-side snapshot
+// revert — Deletes are soft (see exerciseSweep.js) specifically so undoing
+// one can restore the exact same row (id, chat history, photo) instead of
+// recreating a lookalike. No AI involved in the structural actions
+// themselves. See the manual-edit-mode design notes in memory for the full
+// spec this is being built toward.
 function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSaved, onClose }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
   const [editingDayTitle, setEditingDayTitle] = useState(false)
@@ -973,89 +1101,219 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const [draft, setDraft] = useState(() => groupByDay(allExercises))
   const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [sheet, setSheet] = useState(null) // 'move' | 'copy' | null
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState(null)
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  const [actionError, setActionError] = useState(null)
   // Tapping a card body (not its checkbox or drag handle) opens this single
   // exercise for field-level editing — distinct from selectedKeys, which is
   // the checkbox multi-select the bulk toolbar (Delete/Copy to/Move to) acts
   // on. editingKey and selectedKeys can be active independently.
   const [editingKey, setEditingKey] = useState(null)
   const [editPanelExpanded, setEditPanelExpanded] = useState(false)
-  // Snapshot-history stack: each mutating action pushes the draft as it was
-  // just before that action, so Undo can pop straight back to it. A fresh
-  // mutation after an Undo clears the redo tail (standard editor behavior —
-  // once you diverge from the undone timeline, "redo" no longer means
-  // anything). Draft updates are always immutable (new object/array
-  // references, never mutated in place), so pushing the current `draft`
-  // reference itself onto the stack is safe — no cloning needed.
-  const [undoStack, setUndoStack] = useState([])
-  const [redoStack, setRedoStack] = useState([])
   const newKeyCounter = useRef(0)
 
-  function commitDraft(updater) {
-    setUndoStack((stack) => [...stack, draft])
+  // Count of in-flight persist requests, driving the header's cloud sync
+  // indicator (muted while >0, accent once every request has settled) —
+  // Google Docs-style confirmation that a change actually reached the
+  // server. A counter rather than a boolean since actions can overlap (e.g.
+  // committing a field while a previous one is still in flight).
+  const [pendingCount, setPendingCount] = useState(0)
+  // Local requests routinely resolve in a handful of ms — faster than the
+  // eye can register a color change at all, let alone one animated over a
+  // transition. Enforcing a minimum visible "pending" duration (independent
+  // of how fast the request actually was) is what makes the indicator mean
+  // anything; the request itself is never slowed down, only the bookkeeping
+  // that clears the muted state is.
+  const MIN_PENDING_MS = 350
+  function track(promise) {
+    const startedAt = Date.now()
+    setPendingCount((c) => c + 1)
+    promise.finally(() => {
+      const remaining = Math.max(0, MIN_PENDING_MS - (Date.now() - startedAt))
+      setTimeout(() => setPendingCount((c) => c - 1), remaining)
+    })
+    return promise
+  }
+
+  // "Saved" label next to the cloud icon — animates in the moment pending
+  // first drops to 0 (a real completed round trip, not idle-at-rest before
+  // anything's happened), stays put, then animates back out the instant the
+  // next action starts. hasSyncedOnce flips true on the first completion and
+  // never resets, so showSaved is just "idle, and at least one save has
+  // actually landed" — no timers needed, it's driven entirely by pendingCount.
+  const [hasSyncedOnce, setHasSyncedOnce] = useState(false)
+  const wasPendingRef = useRef(false)
+  useEffect(() => {
+    if (wasPendingRef.current && pendingCount === 0) setHasSyncedOnce(true)
+    wasPendingRef.current = pendingCount > 0
+  }, [pendingCount])
+  const showSaved = hasSyncedOnce && pendingCount === 0
+
+  // Undo/Redo stack of small, typed entries describing how to reverse each
+  // action — not draft snapshots. Two shapes:
+  //  - { kind: 'toggle', action: 'create' | 'delete', items: [...fullRows] }
+  //    covers create/copy (undo = soft-delete) and delete (undo = restore) —
+  //    both are really just opposite ends of the same deleted_at flip.
+  //  - { kind: 'fields', days: { [day]: { before: [...items], after: [...items] } } }
+  //    covers field edits, reorder, and move — any action that only changes
+  //    existing rows' fields/day/position, never their existence.
+  // A fresh action after an Undo clears the redo tail, same as any editor.
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
+
+  function pushUndo(entry) {
+    setUndoStack((stack) => [...stack, entry])
     setRedoStack([])
-    setDraft(updater)
   }
 
-  function handleUndo() {
-    if (undoStack.length === 0) return
-    const previous = undoStack[undoStack.length - 1]
-    setUndoStack((stack) => stack.slice(0, -1))
-    setRedoStack((stack) => [...stack, draft])
-    setDraft(previous)
-    setSelectedKeys(new Set())
+  // Every mutation below goes through this — small, single-action payloads
+  // (one item's `updates`, one `deletes` id, etc.) rather than the whole-plan
+  // batch this endpoint originally served. Throws on failure so callers can
+  // roll back their optimistic local update.
+  async function persistPlan(payload) {
+    const res = await track(fetch(`${API_BASE}/api/exercises/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, ...payload }),
+    }))
+    if (!res.ok) throw new Error('Request failed')
+    return res.json()
   }
 
-  function handleRedo() {
-    if (redoStack.length === 0) return
-    const next = redoStack[redoStack.length - 1]
-    setRedoStack((stack) => stack.slice(0, -1))
-    setUndoStack((stack) => [...stack, draft])
-    setDraft(next)
-    setSelectedKeys(new Set())
-  }
-
-  const originalIds = useMemo(() => new Set(allExercises.map((e) => e.id)), [allExercises])
-  const originalById = useMemo(() => new Map(allExercises.map((e) => [e.id, e])), [allExercises])
-  const isDirty = useMemo(() => {
-    for (const day of WEEKDAYS) {
-      // Pending-add placeholders aren't real exercises yet (no name, nothing
-      // to save) — they'd otherwise trip the length check the instant + is
-      // tapped, showing the Save FAB before there's actually anything to save.
-      const draftIds = draft[day].filter((item) => !item.isPendingAdd).map((item) => item._key)
-      const originalDayIds = allExercises.filter((e) => e.day === day).map((e) => String(e.id))
-      if (draftIds.length !== originalDayIds.length) return true
-      if (draftIds.some((key, i) => key !== originalDayIds[i])) return true
-    }
-    // Structural equality (same ids, same order, same days) isn't enough —
-    // the field-edit panel changes name/sets/reps/weight/duration/
-    // description/bullets in place without touching order, so those need
-    // their own comparison against the original row.
-    for (const day of WEEKDAYS) {
-      for (const item of draft[day]) {
-        if (item.isPendingAdd) continue
-        if (item.isNew) return true
-        const original = originalById.get(item.id)
-        if (!original) return true
-        if (
-          item.name !== original.name ||
-          item.sets !== original.sets ||
-          item.reps !== original.reps ||
-          item.weight !== original.weight ||
-          item.duration !== original.duration ||
-          item.description !== original.description ||
-          item.video_id !== original.video_id ||
-          item.category !== original.category ||
-          JSON.stringify(item.bullets) !== JSON.stringify(original.bullets)
-        ) {
-          return true
+  // The two ends of a deleted_at flip, shared by toggle-undo/redo and by
+  // handleDelete/handleDeleteEditing's own rollback-on-failure path.
+  async function setActive(items, active) {
+    if (items.length === 0) return
+    if (active) {
+      setDraft((current) => {
+        const next = { ...current }
+        for (const item of items) {
+          const key = String(item.id)
+          if (next[item.day].some((it) => it._key === key)) continue
+          next[item.day] = [...next[item.day], { ...item, _key: key }].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
         }
-      }
+        return next
+      })
+      await track(Promise.all(items.map((item) =>
+        fetch(`${API_BASE}/api/exercises/${item.id}/restore`, { method: 'POST' }),
+      )))
+    } else {
+      const ids = new Set(items.map((it) => it.id))
+      setDraft((current) => {
+        const next = {}
+        for (const day of WEEKDAYS) next[day] = current[day].filter((it) => !ids.has(it.id))
+        return next
+      })
+      await persistPlan({ deletes: [...ids] })
     }
-    return false
-  }, [draft, allExercises, originalById])
+  }
+
+  async function applyFieldsSnapshot(days, useAfter) {
+    setDraft((current) => {
+      const next = { ...current }
+      for (const day of Object.keys(days)) next[day] = useAfter ? days[day].after : days[day].before
+      return next
+    })
+    const updates = []
+    for (const day of Object.keys(days)) {
+      const snapshot = useAfter ? days[day].after : days[day].before
+      snapshot.forEach((item, index) => {
+        if (item.id != null) updates.push(toUpdatePayload(item, day, index))
+      })
+    }
+    if (updates.length > 0) await persistPlan({ updates })
+  }
+
+  // Re-points `photo` at a previously-known value (a filename, a URL, or
+  // null) via the dedicated revert endpoint, which doesn't destroy the file
+  // it's moving away from — that's marked orphaned server-side (see
+  // photoSweep.js), not deleted, so undo and redo can freely swap between
+  // "before" and "after" as many times as the user likes within the grace
+  // period.
+  async function applyPhotoRevert(id, day, key, photo) {
+    const res = await track(fetch(`${API_BASE}/api/exercises/${id}/photo/revert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo }),
+    }))
+    if (!res.ok) throw new Error('Revert failed')
+    setDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === key ? { ...it, photo } : it)),
+    }))
+  }
+
+  async function applyDayTitle(day, title) {
+    const res = await track(fetch(`${API_BASE}/api/day-plans/${day}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, title }),
+    }))
+    if (!res.ok) throw new Error('Save failed')
+    onDayTitleSaved?.(day, title)
+  }
+
+  async function handleUndo() {
+    if (undoStack.length === 0) return
+    const entry = undoStack[undoStack.length - 1]
+    setUndoStack((stack) => stack.slice(0, -1))
+    setRedoStack((stack) => [...stack, entry])
+    setSelectedKeys(new Set())
+    try {
+      if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'delete')
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false)
+      else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.before)
+      else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.before)
+    } catch {
+      setActionError("Couldn't undo — check your connection and try again.")
+    }
+  }
+
+  async function handleRedo() {
+    if (redoStack.length === 0) return
+    const entry = redoStack[redoStack.length - 1]
+    setRedoStack((stack) => stack.slice(0, -1))
+    setUndoStack((stack) => [...stack, entry])
+    setSelectedKeys(new Set())
+    try {
+      if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'create')
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true)
+      else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.after)
+      else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.after)
+    } catch {
+      setActionError("Couldn't redo — check your connection and try again.")
+    }
+  }
+
+  // Creates a locally-staged item (no id yet — a blank manual entry, or one
+  // pre-filled from a photo/title guess) for real, and reconciles its temp
+  // `_key` with the server-assigned id — every later action on this item
+  // (edit/delete/move/copy) keys off `id != null` to know it's real.
+  async function createExercise(day, stagedItem) {
+    const index = draft[day].findIndex((it) => it._key === stagedItem._key)
+    const result = await persistPlan({
+      creates: [{
+        day,
+        sort_order: index === -1 ? draft[day].length : index,
+        name: stagedItem.name,
+        sets: stagedItem.sets,
+        reps: stagedItem.reps,
+        weight: stagedItem.weight,
+        duration: stagedItem.duration,
+        description: stagedItem.description,
+        bullets: stagedItem.bullets,
+        video_id: stagedItem.video_id,
+        category: stagedItem.category,
+      }],
+    })
+    const createdRow = result.created?.[0]
+    if (!createdRow) throw new Error('Create failed')
+    const newKey = String(createdRow.id)
+    setDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === stagedItem._key ? { ...createdRow, _key: newKey } : it)),
+    }))
+    pushUndo({ kind: 'toggle', action: 'create', items: [createdRow] })
+    return { ...createdRow, _key: newKey }
+  }
 
   const dayExercises = draft[selectedDay]
   const isSelecting = selectedKeys.size > 0
@@ -1095,9 +1353,10 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   }
 
   function closeEditPanel() {
-    // A manual add left with no name typed in isn't a real exercise — drop
-    // it rather than leaving an empty-titled card sitting in the list.
-    if (editingEntry && !editingEntry.item.isPendingAdd && !editingEntry.item.name.trim()) {
+    // A manual add left with no name typed in was never created server-side
+    // (see commitEditField below) — drop it locally rather than leaving an
+    // empty-titled card sitting in the list.
+    if (editingEntry && editingEntry.item.id == null && !editingEntry.item.name.trim()) {
       const { day } = editingEntry
       setDraft((current) => ({
         ...current,
@@ -1111,23 +1370,37 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   // Deletes the exercise currently open in the field-edit panel — same
   // effect as the bulk checkbox-select Delete, just for the one card that's
   // already "open" instead of requiring a separate checkbox tap first.
-  function handleDeleteEditing() {
+  async function handleDeleteEditing() {
     if (!editingEntry) return
-    const { day } = editingEntry
-    commitDraft((current) => ({
-      ...current,
-      [day]: current[day].filter((it) => it._key !== editingKey),
-    }))
+    const { day, item } = editingEntry
     setEditingKey(null)
     setEditPanelExpanded(false)
+
+    if (item.id == null) {
+      // Never created server-side — just drop the local stage.
+      setDraft((current) => ({ ...current, [day]: current[day].filter((it) => it._key !== item._key) }))
+      return
+    }
+
+    const previous = draft[day]
+    setDraft((current) => ({ ...current, [day]: current[day].filter((it) => it._key !== item._key) }))
+    try {
+      await persistPlan({ deletes: [item.id] })
+      pushUndo({ kind: 'toggle', action: 'delete', items: [item] })
+    } catch {
+      setDraft((current) => ({ ...current, [day]: previous }))
+      setActionError("Couldn't delete that exercise — check your connection and try again.")
+    }
   }
 
   // Drops a blank placeholder card into the draft at the exact position the
   // tapped + sits at — day/index are resolved by the caller from that +'s
-  // position in the currently-viewed day's list.
+  // position in the currently-viewed day's list. Purely local — nothing
+  // worth persisting until a mode (Manual/Title search/Photo search) turns
+  // it into an actual exercise.
   function handleInsertPlaceholder(day, index) {
     const key = `pending-${newKeyCounter.current++}`
-    commitDraft((current) => {
+    setDraft((current) => {
       const list = [...current[day]]
       list.splice(index, 0, { _key: key, day, isPendingAdd: true })
       return { ...current, [day]: list }
@@ -1139,21 +1412,20 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setEditPanelExpanded(false)
   }
 
-  // Turns a placeholder into a real (still-empty) draft item and opens it
-  // straight in the field-edit panel, reusing that same form for manual
-  // entry rather than building a separate one.
+  // Turns a placeholder into a blank, still-local (no id yet) draft item and
+  // opens it straight in the field-edit panel. Nothing is created server-side
+  // until a name is actually typed (see commitEditField) — an exercise with
+  // no name isn't a real thing worth persisting yet.
   function handleManualAdd(key) {
     const found = findItem(key)
     if (!found) return
     const { day } = found
-    commitDraft((current) => ({
+    setDraft((current) => ({
       ...current,
       [day]: current[day].map((it) => (it._key === key ? {
-        ...it,
-        isPendingAdd: false,
-        isNew: true,
+        _key: it._key,
+        day,
         id: undefined,
-        sourceId: undefined,
         name: '',
         sets: 3,
         reps: 10,
@@ -1170,36 +1442,123 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setEditPanelExpanded(true)
   }
 
-  function commitEditField(field, value) {
+  // Creates the exercise for real, pre-filled with AI-generated data, once
+  // the user has confirmed a name guessed from a photo (see PendingAddCard's
+  // photo-search mode) — same generateExerciseData pipeline used when a
+  // whole plan is first generated, just triggered per-exercise here instead.
+  // Also attaches photoFile (the same photo that was used to identify it) as
+  // the new exercise's saved photo. Opens straight in the field-edit panel
+  // so the user can keep refining it, same as manual/title-search adds.
+  async function handlePhotoAdd(key, generated, photoFile) {
+    const found = findItem(key)
+    if (!found) return
+    const { day, item } = found
+    const stagedItem = { ...item, ...generated, isPendingAdd: false, id: undefined }
+    setDraft((current) => ({
+      ...current,
+      [day]: current[day].map((it) => (it._key === key ? stagedItem : it)),
+    }))
+    try {
+      const created = await createExercise(day, stagedItem)
+      setEditingKey(created._key)
+      setEditPanelExpanded(true)
+
+      // The same photo used to identify this exercise becomes its saved
+      // photo too — no reason to make the user upload it again from the
+      // edit panel. Best-effort: the exercise itself is already created and
+      // real by this point, so a failure here just leaves it photo-less,
+      // not undone.
+      if (photoFile) {
+        try {
+          const body = new FormData()
+          body.append('file', photoFile)
+          const res = await track(fetch(`${API_BASE}/api/exercises/${created.id}/photo`, { method: 'POST', body }))
+          if (res.ok) {
+            const updated = await res.json()
+            setDraft((current) => ({
+              ...current,
+              [day]: current[day].map((it) => (it._key === created._key ? { ...it, photo: updated.photo } : it)),
+            }))
+          }
+        } catch {
+          // Silently no-op — the exercise stays photo-less, addable manually.
+        }
+      }
+    } catch {
+      setActionError("Couldn't add that exercise — check your connection and try again.")
+      setDraft((current) => ({ ...current, [day]: current[day].filter((it) => it._key !== key) }))
+    }
+  }
+
+  // Not-yet-created items (id == null — a blank manual entry, or one that
+  // failed to create) only stage locally until they have a name; the first
+  // non-empty name commit is what actually creates the exercise. Every other
+  // field on an already-real item persists immediately.
+  async function commitEditField(field, value) {
     if (!editingEntry) return
     const { day, item } = editingEntry
     const unchanged = field === 'bullets'
       ? JSON.stringify(item.bullets) === JSON.stringify(value)
       : item[field] === value
     if (unchanged) return
-    commitDraft((current) => ({
-      ...current,
-      [day]: current[day].map((it) => (it._key === editingKey ? { ...it, [field]: value } : it)),
-    }))
+
+    const nextItem = { ...item, [field]: value }
+
+    if (item.id == null) {
+      setDraft((current) => ({
+        ...current,
+        [day]: current[day].map((it) => (it._key === editingKey ? nextItem : it)),
+      }))
+      if (field === 'name' && value.trim()) {
+        try {
+          const created = await createExercise(day, nextItem)
+          setEditingKey(created._key)
+        } catch {
+          setActionError("Couldn't create that exercise — check your connection and try again.")
+        }
+      }
+      return
+    }
+
+    const before = draft[day]
+    const after = before.map((it) => (it._key === editingKey ? nextItem : it))
+    setDraft((current) => ({ ...current, [day]: after }))
+    try {
+      await persistPlan({ updates: [toUpdatePayload(nextItem, day, before.findIndex((it) => it._key === editingKey))] })
+      pushUndo({ kind: 'fields', days: { [day]: { before, after } } })
+    } catch {
+      setDraft((current) => ({ ...current, [day]: before }))
+      setActionError("Couldn't save that change — check your connection and try again.")
+    }
   }
 
   // Photo changes are already persisted server-side the moment they happen
-  // (upload/URL hit the backend directly, unlike every other field which
-  // just edits the draft) — so this only needs to reflect the new value
-  // locally for display, not go through commitDraft/undo for something
-  // that's not actually undoable from here anyway.
+  // (upload/URL hit the backend directly, unlike every other field) — so
+  // this only needs to reflect the new value locally for display.
+  // The upload/URL/remove itself already happened server-side by the time
+  // this fires (see ExerciseEditPanel's own photo handlers) — the old file
+  // is marked orphaned rather than deleted (photoSweep.js), so this is
+  // fully undoable via the 'photo' entry below, same as everything else.
   function handlePhotoChange(photo) {
     if (!editingEntry) return
-    const { day } = editingEntry
+    const { day, item } = editingEntry
+    const before = item.photo
     setDraft((current) => ({
       ...current,
       [day]: current[day].map((it) => (it._key === editingKey ? { ...it, photo } : it)),
     }))
+    if (before !== photo) {
+      pushUndo({ kind: 'photo', id: item.id, day, key: editingKey, before, after: photo })
+    }
   }
 
+  // Every change already persisted the moment it happened — closing just
+  // tells the parent to refetch (it's holding a snapshot from before this
+  // session's edits) and dismisses the view. No discard-confirmation needed;
+  // there's nothing left unsaved to lose.
   function handleCancel() {
-    if (isDirty) setConfirmingDiscard(true)
-    else onClose()
+    onSaved?.()
+    onClose()
   }
 
   useEffect(() => {
@@ -1215,22 +1574,23 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setEditingDayTitle(false)
   }
 
-  // Renaming a day's title is immediate/server-side, same as photo edits —
-  // it's not an exercise field, so it doesn't belong in the whole-plan
-  // draft/Undo/Save flow; onDayTitleSaved just updates App's dayTitles
-  // state directly so the new title shows without a refetch.
+  // Renaming a day's title persists immediately, same as everything else —
+  // still fully undoable (it's just text, nothing gets destroyed by
+  // changing it) via its own 'dayTitle' undo-stack entry below.
+  // onDayTitleSaved updates App's dayTitles state directly so the new title
+  // shows without a refetch.
   async function confirmEditDayTitle() {
     const trimmed = dayTitleDraft.trim()
     if (!trimmed) return
+    const before = dayTitles.get(selectedDay) || ''
+    if (before === trimmed) {
+      setEditingDayTitle(false)
+      return
+    }
     setSavingDayTitle(true)
     try {
-      const res = await fetch(`${API_BASE}/api/day-plans/${selectedDay}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, title: trimmed }),
-      })
-      if (!res.ok) throw new Error('Save failed')
-      onDayTitleSaved?.(selectedDay, trimmed)
+      await applyDayTitle(selectedDay, trimmed)
+      pushUndo({ kind: 'dayTitle', day: selectedDay, before, after: trimmed })
       setEditingDayTitle(false)
     } catch {
       // Silently no-op on failure for now — the title just stays as it was.
@@ -1250,135 +1610,114 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     })
   }
 
-  function handleDragEnd(event) {
+  // Builds an `updates` entry with the full field set persistPlan expects —
+  // used wherever an already-real item's position/day changes without its
+  // own fields changing (reorder, move).
+  function toUpdatePayload(item, day, sort_order) {
+    return {
+      id: item.id, day, sort_order,
+      name: item.name, sets: item.sets, reps: item.reps, weight: item.weight, duration: item.duration,
+      description: item.description, bullets: item.bullets, video_id: item.video_id, category: item.category,
+    }
+  }
+
+  async function handleDragEnd(event) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    commitDraft((current) => {
-      const list = current[selectedDay]
-      const oldIndex = list.findIndex((item) => item._key === active.id)
-      const newIndex = list.findIndex((item) => item._key === over.id)
-      if (oldIndex === -1 || newIndex === -1) return current
-      return { ...current, [selectedDay]: arrayMove(list, oldIndex, newIndex) }
-    })
+    const list = draft[selectedDay]
+    const oldIndex = list.findIndex((item) => item._key === active.id)
+    const newIndex = list.findIndex((item) => item._key === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    const reordered = arrayMove(list, oldIndex, newIndex)
+    setDraft((current) => ({ ...current, [selectedDay]: reordered }))
+
+    const updates = reordered
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.id != null)
+      .map(({ item, index }) => toUpdatePayload(item, selectedDay, index))
+    if (updates.length === 0) return
+    try {
+      await persistPlan({ updates })
+      pushUndo({ kind: 'fields', days: { [selectedDay]: { before: list, after: reordered } } })
+    } catch {
+      setDraft((current) => ({ ...current, [selectedDay]: list }))
+      setActionError("Couldn't save the new order — check your connection and try again.")
+    }
   }
 
-  function handleDelete() {
-    commitDraft((current) => {
-      const next = {}
-      for (const day of WEEKDAYS) {
-        next[day] = current[day].filter((item) => !selectedKeys.has(item._key))
-      }
-      return next
-    })
+  async function handleDelete() {
+    const deletedItems = []
+    const previous = draft
+    const next = {}
+    for (const day of WEEKDAYS) {
+      next[day] = draft[day].filter((item) => {
+        if (!selectedKeys.has(item._key)) return true
+        if (item.id != null) deletedItems.push(item)
+        return false
+      })
+    }
+    setDraft(next)
     setSelectedKeys(new Set())
+    if (deletedItems.length === 0) return
+    try {
+      await persistPlan({ deletes: deletedItems.map((it) => it.id) })
+      pushUndo({ kind: 'toggle', action: 'delete', items: deletedItems })
+    } catch {
+      setDraft(previous)
+      setActionError("Couldn't delete — check your connection and try again.")
+    }
   }
 
-  function handleMoveOrCopy(targetDay) {
-    commitDraft((current) => {
-      const next = {}
-      for (const day of WEEKDAYS) next[day] = [...current[day]]
-
-      const moving = []
-      for (const day of WEEKDAYS) {
-        for (const item of current[day]) {
-          if (selectedKeys.has(item._key)) moving.push(item)
-        }
+  async function handleMoveOrCopy(targetDay) {
+    const isMove = sheet === 'move'
+    const moving = []
+    for (const day of WEEKDAYS) {
+      for (const item of draft[day]) {
+        if (selectedKeys.has(item._key) && item.id != null) moving.push(item)
       }
-
-      if (sheet === 'move') {
-        for (const day of WEEKDAYS) {
-          next[day] = next[day].filter((item) => !selectedKeys.has(item._key))
-        }
-        next[targetDay].push(...moving.map((item) => ({ ...item, day: targetDay })))
-      } else {
-        const copies = moving.map((item) => ({
-          ...item,
-          day: targetDay,
-          isNew: true,
-          sourceId: item.id ?? item.sourceId,
-          id: undefined,
-          _key: `new-${newKeyCounter.current++}`,
-        }))
-        next[targetDay].push(...copies)
-      }
-      return next
-    })
+    }
     setSelectedKeys(new Set())
     setSheet(null)
     setSelectedDay(targetDay)
-  }
+    if (moving.length === 0) return
 
-  async function handleSave() {
-    setSaving(true)
-    setSaveError(null)
+    if (isMove) {
+      const previous = draft
+      const next = {}
+      for (const day of WEEKDAYS) next[day] = draft[day].filter((item) => !selectedKeys.has(item._key))
+      next[targetDay] = [...next[targetDay], ...moving.map((item) => ({ ...item, day: targetDay }))]
+      setDraft(next)
 
-    const deletes = []
-    const updates = []
-    const copies = []
-    const creates = []
-    const draftExistingIds = new Set()
-
-    for (const day of WEEKDAYS) {
-      draft[day].forEach((item, index) => {
-        if (item.isPendingAdd) {
-          // Never saved — a placeholder with no mode chosen yet isn't a
-          // real exercise. Just skip it; it stays a local-only draft entry.
-          return
-        }
-        if (item.isNew && item.sourceId) {
-          copies.push({ sourceId: item.sourceId, day, sort_order: index })
-        } else if (item.isNew) {
-          // Manual entry — no source row, full fields supplied directly.
-          if (!item.name.trim()) return
-          creates.push({
-            day,
-            sort_order: index,
-            name: item.name,
-            sets: item.sets,
-            reps: item.reps,
-            weight: item.weight,
-            duration: item.duration,
-            description: item.description,
-            bullets: item.bullets,
-            video_id: item.video_id,
-            category: item.category,
-          })
-        } else {
-          draftExistingIds.add(item.id)
-          updates.push({
-            id: item.id,
-            day,
-            sort_order: index,
-            name: item.name,
-            sets: item.sets,
-            reps: item.reps,
-            weight: item.weight,
-            duration: item.duration,
-            description: item.description,
-            bullets: item.bullets,
-            video_id: item.video_id,
-            category: item.category,
-          })
-        }
-      })
-    }
-    for (const id of originalIds) {
-      if (!draftExistingIds.has(id)) deletes.push(id)
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/api/exercises/plan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, deletes, updates, copies, creates }),
-      })
-      if (!res.ok) throw new Error('Save failed')
-      onSaved?.()
-      onClose()
-    } catch {
-      setSaveError("Couldn't save — check your connection and try again.")
-    } finally {
-      setSaving(false)
+      const touchedDays = new Set([...moving.map((m) => m.day), targetDay])
+      const updates = []
+      const daysSnapshot = {}
+      for (const day of touchedDays) {
+        daysSnapshot[day] = { before: previous[day], after: next[day] }
+        next[day].forEach((item, index) => {
+          if (item.id != null) updates.push(toUpdatePayload(item, day, index))
+        })
+      }
+      try {
+        await persistPlan({ updates })
+        pushUndo({ kind: 'fields', days: daysSnapshot })
+      } catch {
+        setDraft(previous)
+        setActionError("Couldn't move — check your connection and try again.")
+      }
+    } else {
+      const baseIndex = draft[targetDay].length
+      const copies = moving.map((item, i) => ({ sourceId: item.id, day: targetDay, sort_order: baseIndex + i }))
+      try {
+        const result = await persistPlan({ copies })
+        const createdRows = result.copied || []
+        setDraft((current) => ({
+          ...current,
+          [targetDay]: [...current[targetDay], ...createdRows.map((row) => ({ ...row, _key: String(row.id) }))],
+        }))
+        if (createdRows.length > 0) pushUndo({ kind: 'toggle', action: 'create', items: createdRows })
+      } catch {
+        setActionError("Couldn't copy — check your connection and try again.")
+      }
     }
   }
 
@@ -1386,7 +1725,17 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     <div className="edit-plan-view">
       <div className="edit-plan-header">
         <div>
-          <h2 className="edit-plan-title">Edit Plan</h2>
+          <div className="edit-plan-title-row">
+            <h2 className="edit-plan-title">Edit Plan</h2>
+            <span
+              className={`edit-plan-sync-status ${pendingCount > 0 ? 'is-pending' : 'is-synced'}`}
+              role="status"
+              aria-label={pendingCount > 0 ? 'Saving…' : 'Saved'}
+            >
+              <CloudIcon size={16} />
+              <span className={`edit-plan-sync-label ${showSaved ? 'is-visible' : ''}`}>Saved</span>
+            </span>
+          </div>
           {editingDayTitle ? (
             <div className="edit-plan-day-title-edit">
               <input
@@ -1435,14 +1784,14 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         <div className="edit-plan-header-right">
           {isSelecting ? (
             <>
-              <button type="button" className="edit-plan-icon-btn" onClick={handleDelete} disabled={saving} aria-label="Delete">
+              <button type="button" className="edit-plan-icon-btn" onClick={handleDelete} aria-label="Delete">
                 <TrashIcon size={17} />
               </button>
-              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('copy')} disabled={saving}>
+              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('copy')}>
                 <CopyIcon size={14} />
                 <span>Copy to</span>
               </button>
-              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('move')} disabled={saving}>
+              <button type="button" className="edit-plan-pill-btn" onClick={() => setSheet('move')}>
                 <MoveIcon size={14} />
                 <span>Move to</span>
               </button>
@@ -1454,28 +1803,15 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                   type="button"
                   className="edit-plan-icon-btn"
                   onClick={handleDeleteEditing}
-                  disabled={saving}
                   aria-label="Delete exercise"
                 >
                   <TrashIcon size={17} />
                 </button>
               )}
-              <button
-                type="button"
-                className="edit-plan-icon-btn"
-                onClick={handleUndo}
-                disabled={undoStack.length === 0 || saving}
-                aria-label="Undo"
-              >
+              <button type="button" className="edit-plan-icon-btn" onClick={handleUndo} disabled={undoStack.length === 0} aria-label="Undo">
                 <UndoIcon size={21} />
               </button>
-              <button
-                type="button"
-                className="edit-plan-icon-btn"
-                onClick={handleRedo}
-                disabled={redoStack.length === 0 || saving}
-                aria-label="Redo"
-              >
+              <button type="button" className="edit-plan-icon-btn" onClick={handleRedo} disabled={redoStack.length === 0} aria-label="Redo">
                 <RedoIcon size={21} />
               </button>
               <button type="button" className="edit-plan-pill-btn is-filled" disabled>
@@ -1484,7 +1820,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
               </button>
             </>
           )}
-          <button type="button" className="edit-plan-close-btn" onClick={handleCancel} aria-label="Cancel">
+          <button type="button" className="edit-plan-close-btn" onClick={handleCancel} aria-label="Close">
             <XIcon size={16} />
           </button>
         </div>
@@ -1503,7 +1839,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         ))}
       </div>
 
-      {saveError && <p className="edit-plan-save-error">{saveError}</p>}
+      {actionError && <p className="edit-plan-save-error">{actionError}</p>}
 
       <div className={`edit-plan-list ${editingEntry ? 'has-edit-panel' : ''}`}>
         {dayExercises.length === 0 ? (
@@ -1523,6 +1859,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                     onToggleSelect={toggleSelect}
                     onOpenEdit={handleOpenEdit}
                     onManualAdd={handleManualAdd}
+                    onPhotoAdd={handlePhotoAdd}
+                    userId={userId}
                   />
                   {editingKey === item._key && (
                     <InsertDivider
@@ -1537,12 +1875,6 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         )}
       </div>
 
-      {isDirty && !editingEntry && (
-        <button type="button" className="edit-plan-save-fab" onClick={handleSave} disabled={saving} aria-label="Save changes">
-          <SaveIcon size={30} />
-        </button>
-      )}
-
       {editingEntry && (
         <ExerciseEditPanel
           item={editingEntry.item}
@@ -1551,11 +1883,12 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           onClose={closeEditPanel}
           onCommitField={commitEditField}
           onDelete={handleDeleteEditing}
+          onPhotoChange={handlePhotoChange}
           canUndo={undoStack.length > 0}
           canRedo={redoStack.length > 0}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          onPhotoChange={handlePhotoChange}
+          track={track}
         />
       )}
 
@@ -1567,28 +1900,6 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           onPick={handleMoveOrCopy}
           onCancel={() => setSheet(null)}
         />
-      )}
-
-      {confirmingDiscard && createPortal(
-        <div className="modal-overlay regen-confirm-overlay" onMouseDown={() => setConfirmingDiscard(false)}>
-          <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-box regen-confirm-box">
-              <p className="regen-confirm-heading">Discard changes?</p>
-              <p className="regen-confirm-body">
-                Your edits to this plan haven't been saved. This cannot be undone.
-              </p>
-              <div className="regen-confirm-actions">
-                <button className="regen-confirm-cancel" onClick={() => setConfirmingDiscard(false)}>
-                  Keep editing
-                </button>
-                <button className="regen-confirm-ok" onClick={onClose}>
-                  Discard
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
     </div>
   )

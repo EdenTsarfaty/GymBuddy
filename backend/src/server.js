@@ -2,10 +2,12 @@ const fs = require('node:fs')
 const path = require('node:path')
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { maybeSyncExerciseNames } = require('./wgerSync')
+const { sweepDeletedExercises } = require('./exerciseSweep')
+const photoSweep = require('./photoSweep')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
 const streakGuardian = require('./streakGuardian')
@@ -42,6 +44,15 @@ function runExerciseNameSync() {
 }
 runExerciseNameSync()
 setInterval(runExerciseNameSync, 24 * 60 * 60 * 1000)
+
+// Permanently clears out soft-deleted exercises past their grace period (see
+// exerciseSweep.js) — same daily-tick pattern as the two jobs above.
+sweepDeletedExercises()
+setInterval(sweepDeletedExercises, 24 * 60 * 60 * 1000)
+
+// Same for orphaned photo files (see photoSweep.js).
+photoSweep.sweepOrphanedPhotos()
+setInterval(photoSweep.sweepOrphanedPhotos, 24 * 60 * 60 * 1000)
 
 checkOpenAIHealth().then((result) => {
   if (result.ok) {
@@ -217,8 +228,8 @@ fastify.get('/api/exercises', async (request, reply) => {
   }
 
   const rows = day
-    ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ? ORDER BY sort_order, id').all(day, uid)
-    : db.prepare('SELECT * FROM exercises WHERE user_id = ? ORDER BY sort_order, id').all(uid)
+    ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ? AND deleted_at IS NULL ORDER BY sort_order, id').all(day, uid)
+    : db.prepare('SELECT * FROM exercises WHERE user_id = ? AND deleted_at IS NULL ORDER BY sort_order, id').all(uid)
 
   return rows.map(parseExerciseRow)
 })
@@ -279,6 +290,78 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
   reply.code(201)
   return parseExerciseRow(created)
+})
+
+// Same generation as POST /api/exercises/generate (same generateExerciseData
+// call, same profile/day-title personalization), but returns the generated
+// fields as plain JSON instead of inserting a row. Edit Plan's add-exercise
+// flows (Title search confirm, Photo search confirm) work against a local
+// draft that only gets written to the DB on Save — an immediate insert here
+// would create a real exercise even if the user then cancels out of Edit
+// Plan without saving.
+fastify.post('/api/exercises/generate-preview', async (request, reply) => {
+  const { title, day, user_id } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!title || !title.trim()) {
+    reply.code(400)
+    return { error: 'title is required' }
+  }
+
+  if (day && !VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
+    : null
+
+  const effectiveDay = day || currentDayName()
+  const dayPlan = db.prepare('SELECT title FROM day_plans WHERE user_id = ? AND day = ?').get(uid, effectiveDay)
+  const dayTitle = dayPlan?.title || null
+
+  try {
+    const generated = await generateExerciseData(title.trim(), profile, dayTitle)
+    return { name: title.trim(), ...generated }
+  } catch (err) {
+    logError('POST /api/exercises/generate-preview', new Error(describeOpenAIError(err)))
+    reply.code(502)
+    return { error: 'Failed to generate exercise data' }
+  }
+})
+
+// Vision-based "guess this exercise from a photo" for Edit Plan's Photo
+// search add-exercise mode. Re-encodes the upload the same way
+// saveUploadedPhoto does (decode-then-reencode is the actual security
+// boundary, not a mime check) but never writes it to disk — this is a
+// one-shot identification, not the exercise's saved photo (that's set
+// separately, later, through the existing photo picker). The guessed name is
+// never trusted on its own — the frontend requires the user to confirm (or
+// edit) it before it's used for anything.
+fastify.post('/api/exercises/identify-photo', async (request, reply) => {
+  const file = await request.file()
+  if (!file) {
+    reply.code(400)
+    return { error: 'No photo uploaded' }
+  }
+  const buffer = await file.toBuffer()
+
+  const jpeg = await exercisePhotos.reencodeForAnalysis(buffer)
+  if (!jpeg) {
+    reply.code(400)
+    return { error: "That file isn't a valid image" }
+  }
+
+  try {
+    const name = await identifyExerciseFromPhoto(`data:image/jpeg;base64,${jpeg.toString('base64')}`)
+    return { name }
+  } catch (err) {
+    logError('POST /api/exercises/identify-photo', new Error(describeOpenAIError(err)))
+    reply.code(502)
+    return { error: 'Failed to identify exercise from photo' }
+  }
 })
 
 fastify.get('/api/day-plans', async (request) => {
@@ -396,7 +479,7 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
     return { error: 'Invalid reason' }
   }
 
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }
@@ -488,7 +571,7 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
   const { id } = request.params
   const { sets, reps, weight, duration, adjustments } = request.body
 
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }
@@ -505,16 +588,21 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
   return parseExerciseRow(updated)
 })
 
-// Bulk-applies Edit Plan's whole-plan draft on Save: reordering within a day,
-// moving to another day, copying to another day, field edits (name/sets/
-// reps/weight/duration/description/bullets), and deleting — all in one
-// request rather than many sequential ones, matching the draft's "commit
-// everything at once" model. `updates` always carries each existing row's
-// full current field set (not just what changed) so the UPDATE below is a
-// plain unconditional write, same idea as `copies` duplicating a full row.
-// No AI involved; this only restructures/edits rows that already exist.
-// copies always start with a clean photo/adjustments slate (see comments
-// below) rather than sharing state with their source.
+// Applies one or more of Edit Plan's structural/field actions in a single
+// request — reordering within a day, moving to another day, copying to
+// another day, field edits (name/sets/reps/weight/duration/description/
+// bullets), and deleting. Originally the whole-plan draft's "commit
+// everything at once on Save" endpoint; now called immediately after each
+// individual action instead (Edit Plan has no local draft/Save any more —
+// every request here is small, usually touching just one array). `updates`
+// always carries each existing row's full current field set (not just what
+// changed) so the UPDATE below is a plain unconditional write, same idea as
+// `copies` duplicating a full row. No AI involved; this only restructures/
+// edits rows that already exist. copies/creates always start with a clean
+// photo/adjustments slate rather than sharing state with their source.
+// Returns the rows actually created/copied (same order as the request
+// arrays) so the caller can learn their real ids immediately — there's no
+// later Save response to learn them from any more.
 fastify.post('/api/exercises/plan', async (request, reply) => {
   const { user_id, deletes, updates, copies, creates } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
@@ -524,52 +612,72 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
     db.prepare(
       `UPDATE exercises
        SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?
-       WHERE id = ? AND user_id = ?`,
+       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
     ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, category ?? null, id, uid)
   }
 
+  const copied = []
   for (const { sourceId, day, sort_order } of copies || []) {
     if (!VALID_DAYS.includes(day)) continue
-    const source = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ?').get(sourceId, uid)
+    const source = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(sourceId, uid)
     if (!source) continue
-    db.prepare(
+    const result = db.prepare(
       `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
     ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order)
+    copied.push(parseExerciseRow(db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)))
   }
 
   // Phase 4's manual-entry path — a brand new exercise with no source row to
   // copy from, unlike `copies`. Starts with the same clean adjustments/photo
   // slate as a copy does, since there's nothing prior to carry over here either.
+  const created = []
   for (const { day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category } of creates || []) {
     if (!VALID_DAYS.includes(day)) continue
     if (!name || !name.trim()) continue
-    db.prepare(
+    const result = db.prepare(
       `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
     ).run(uid, name.trim(), day, sets ?? null, reps ?? null, weight ?? null, duration ?? null, description || '', JSON.stringify(bullets || []), video_id ?? null, category ?? null, sort_order)
+    created.push(parseExerciseRow(db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)))
   }
 
+  // Soft-delete: flips deleted_at instead of removing the row, so it can be
+  // restored exactly (same id, chat history, photo) via POST .../restore.
+  // The photo file and chat history are left untouched here — only the
+  // background sweep (exerciseSweep.js), once the row is past its grace
+  // period and nothing can undo it any more, actually removes them.
   for (const id of deletes || []) {
-    const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ?').get(id, uid)
+    const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(id, uid)
     if (!existing) continue
-    if (exercisePhotos.isValidStoredFilename(existing.photo)) {
-      await exercisePhotos.deleteStoredPhoto(existing.photo)
-    }
-    db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
-    db.prepare('DELETE FROM exercises WHERE id = ?').run(id)
+    db.prepare('UPDATE exercises SET deleted_at = ? WHERE id = ?').run(Date.now(), id)
   }
 
-  return { ok: true }
+  return { ok: true, created, copied }
+})
+
+// Undoes a soft-delete — the exact inverse of the `deletes` loop above.
+fastify.post('/api/exercises/:id/restore', async (request, reply) => {
+  const { id } = request.params
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NOT NULL').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'No deleted exercise with that id' }
+  }
+  db.prepare('UPDATE exercises SET deleted_at = NULL WHERE id = ?').run(id)
+  const restored = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return parseExerciseRow(restored)
 })
 
 // Uploaded photo: multipart file, decoded and re-encoded (see
 // exercisePhotos.js for why that's the actual security boundary here, not
-// just a size/type check). Replaces whatever photo was set before, deleting
-// the old file first if it was a local upload (a URL has nothing to delete).
+// just a size/type check). Replaces whatever photo was set before — if that
+// was a local upload, the old file is marked orphaned (see photoSweep.js)
+// rather than deleted outright, so Edit Plan's Undo can still point back at
+// it. A URL has nothing to mark.
 fastify.post('/api/exercises/:id/photo', async (request, reply) => {
   const { id } = request.params
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }
@@ -589,7 +697,7 @@ fastify.post('/api/exercises/:id/photo', async (request, reply) => {
   }
 
   if (exercisePhotos.isValidStoredFilename(existing.photo)) {
-    await exercisePhotos.deleteStoredPhoto(existing.photo)
+    photoSweep.markOrphaned(existing.photo)
   }
   db.prepare('UPDATE exercises SET photo = ? WHERE id = ?').run(filename, id)
 
@@ -603,7 +711,7 @@ fastify.put('/api/exercises/:id/photo', async (request, reply) => {
   const { id } = request.params
   const { url } = request.body || {}
 
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }
@@ -615,7 +723,7 @@ fastify.put('/api/exercises/:id/photo', async (request, reply) => {
   }
 
   if (exercisePhotos.isValidStoredFilename(existing.photo)) {
-    await exercisePhotos.deleteStoredPhoto(existing.photo)
+    photoSweep.markOrphaned(existing.photo)
   }
   db.prepare('UPDATE exercises SET photo = ? WHERE id = ?').run(url, id)
 
@@ -625,16 +733,55 @@ fastify.put('/api/exercises/:id/photo', async (request, reply) => {
 
 fastify.delete('/api/exercises/:id/photo', async (request, reply) => {
   const { id } = request.params
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }
   }
 
   if (exercisePhotos.isValidStoredFilename(existing.photo)) {
-    await exercisePhotos.deleteStoredPhoto(existing.photo)
+    photoSweep.markOrphaned(existing.photo)
   }
   db.prepare('UPDATE exercises SET photo = NULL WHERE id = ?').run(id)
+
+  const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  return parseExerciseRow(updated)
+})
+
+// Points `photo` directly at a previously-known value — a filename we
+// generated, a URL, or null — without re-uploading anything. Used only by
+// Edit Plan's Undo/Redo to revert a photo change: the old file is still on
+// disk (marked orphaned, not deleted, by the endpoints above) as long as
+// it's within its grace period, so undoing just needs to re-point the
+// column and clear the orphan mark. Not reachable with arbitrary text: a
+// non-URL, non-null value must match our own generated-filename pattern, so
+// this can never be used to point `photo` at something we didn't create.
+fastify.post('/api/exercises/:id/photo/revert', async (request, reply) => {
+  const { id } = request.params
+  const { photo } = request.body || {}
+
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
+  if (!existing) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  if (photo !== null && !exercisePhotos.isValidPhotoUrl(photo) && !exercisePhotos.isValidStoredFilename(photo)) {
+    reply.code(400)
+    return { error: 'Invalid photo value' }
+  }
+  if (photo && exercisePhotos.isValidStoredFilename(photo) && !(await exercisePhotos.storedPhotoExists(photo))) {
+    reply.code(409)
+    return { error: 'That photo is no longer available' }
+  }
+
+  if (exercisePhotos.isValidStoredFilename(existing.photo)) {
+    photoSweep.markOrphaned(existing.photo)
+  }
+  if (photo && exercisePhotos.isValidStoredFilename(photo)) {
+    photoSweep.unmarkOrphaned(photo)
+  }
+  db.prepare('UPDATE exercises SET photo = ? WHERE id = ?').run(photo, id)
 
   const updated = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
   return parseExerciseRow(updated)
@@ -674,10 +821,20 @@ fastify.get('/api/image-search', async (request, reply) => {
     return { error: 'Image search failed' }
   }
 
-  const results = (data.images || []).map((item) => ({
-    url: item.imageUrl,
-    thumbnailUrl: item.thumbnailUrl || item.imageUrl,
-  }))
+  // GIFs turn out to be a genuinely better fit for an exercise photo than a
+  // static frame — they show the actual movement — so surface them first
+  // rather than leaving it to whatever order Serper happened to return.
+  // Detected off the URL's extension since Serper doesn't expose a format
+  // field; not perfect (an extensionless GIF slips through unmarked) but a
+  // reasonable, cheap signal.
+  const isGif = (url) => /\.gif(\?|$)/i.test(url || '')
+  const results = (data.images || [])
+    .map((item) => ({
+      url: item.imageUrl,
+      thumbnailUrl: item.thumbnailUrl || item.imageUrl,
+      isGif: isGif(item.imageUrl),
+    }))
+    .sort((a, b) => Number(b.isGif) - Number(a.isGif))
   return { results }
 })
 
@@ -786,7 +943,7 @@ fastify.get('/api/exercises/:id/chat', async (request) => {
   const existing = selectAll.all(id)
   if (existing.length > 0) return existing.map(parseChatMessage)
 
-  const exercise = db.prepare('SELECT name FROM exercises WHERE id = ?').get(id)
+  const exercise = db.prepare('SELECT name FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!exercise) return []
 
   const greeting = `Ask me anything about ${exercise.name} — form cues, alternatives, or why it's in your plan.`
@@ -803,7 +960,7 @@ fastify.post('/api/exercises/:id/chat', async (request, reply) => {
     return { error: 'text is required' }
   }
 
-  const exercise = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const exercise = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!exercise) {
     reply.code(404)
     return { error: 'Exercise not found' }
@@ -859,7 +1016,7 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
   const { id } = request.params
   const { type, payload } = request.body || {}
 
-  const existing = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id)
+  const existing = db.prepare('SELECT * FROM exercises WHERE id = ? AND deleted_at IS NULL').get(id)
   if (!existing) {
     reply.code(404)
     return { error: 'Exercise not found' }

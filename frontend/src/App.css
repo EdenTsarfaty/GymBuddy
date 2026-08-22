@@ -3256,6 +3256,40 @@
   flex-shrink: 0;
 }
 
+.edit-plan-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-plan-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  transition: color 0.12s ease;
+}
+
+.edit-plan-sync-status.is-synced {
+  color: var(--accent);
+}
+
+.edit-plan-sync-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 0.25s ease, opacity 0.2s ease;
+}
+
+.edit-plan-sync-label.is-visible {
+  max-width: 40px;
+  opacity: 1;
+}
+
 .edit-plan-icon-btn {
   display: flex;
   align-items: center;
@@ -3653,6 +3687,29 @@
   cursor: not-allowed;
 }
 
+.edit-plan-pending-file-input {
+  display: none;
+}
+
+.edit-plan-pending-photo-confirm {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.edit-plan-pending-photo-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-plan-pending-photo-confirm-row .edit-plan-pending-search-input {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 .edit-plan-pending-search {
   justify-content: flex-start;
   gap: 8px;
@@ -3760,6 +3817,17 @@
   font-size: 13px;
   font-weight: 600;
   margin: -4px 0 0;
+}
+
+.edit-plan-photo-search-tip {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0 0;
 }
 
 .edit-plan-save-fab {
@@ -4045,6 +4113,7 @@
   padding: 8px 12px;
   resize: vertical;
 }
+
 
 .edit-plan-field input:focus,
 .edit-plan-field textarea:focus {
@@ -4567,6 +4636,7 @@
 }
 
 .edit-plan-photo-result {
+  position: relative;
   aspect-ratio: 1;
   padding: 0;
   border: 1.5px solid var(--border);
@@ -4575,6 +4645,20 @@
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s ease;
+}
+
+.edit-plan-photo-result-gif {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 4px;
+  padding: 2px 4px;
+  pointer-events: none;
 }
 
 .edit-plan-photo-result:hover:not(:disabled) {

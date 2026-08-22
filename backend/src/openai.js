@@ -798,4 +798,58 @@ async function findVideoForExercise(name) {
   return results[0]?.video_id || null
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError }
+// ── Photo-based exercise identification (Edit Plan's "Photo search") ──────────
+
+// `observed_details` comes before `name` in the schema deliberately — with
+// strict structured output, the model fills properties in declared order, so
+// making it write out what it actually sees (equipment type, angle, grip)
+// before committing to a name is a free way to make the final guess better
+// grounded, not just a documentation field nobody reads.
+const PHOTO_IDENTIFY_SCHEMA = {
+  type: 'object',
+  properties: {
+    observed_details: {
+      type: 'string',
+      description: 'What in the photo distinguishes this specific exercise/equipment from similar variants of the same base movement — equipment type (machine/cable/dumbbell/barbell/bodyweight), bench or seat angle (flat/incline/decline), grip or handle style, seated vs standing, single-limb vs both. Write this out before deciding on a name.',
+    },
+    name: {
+      type: 'string',
+      description: 'The exercise or gym-machine name, informed by observed_details above. Must stay specific enough to distinguish it from other variants of the same base movement — e.g. "Chest Press Machine", not just "Chest Press", if it\'s a machine; "Incline Dumbbell Press", not just "Dumbbell Press", if the bench is inclined. A vague name that drops a real distinguishing qualifier for the sake of brevity is a wrong answer, even if the base movement is right. Keep it to how a gym-goer would casually refer to it otherwise — avoid brand/model names printed on the equipment (a brand isn\'t a meaningful qualifier).',
+    },
+  },
+  required: ['observed_details', 'name'],
+  additionalProperties: false,
+}
+
+// imageDataUrl is a data: URI (e.g. "data:image/jpeg;base64,...") — the
+// caller is responsible for having already re-encoded the upload through a
+// real image decoder first (see exercisePhotos.reencodeForAnalysis), the
+// same way exercise photo uploads are neutralized before being trusted.
+// Uses PLAN_MODEL (not the lighter OPENAI_MODEL used for routine per-
+// exercise generation) since a wrong or vague guess here compounds — it
+// becomes the title fed into generateExerciseData right after.
+async function identifyExerciseFromPhoto(imageDataUrl) {
+  const data = await callOpenAI({
+    model: PLAN_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: 'You identify gym equipment or exercises from a photo for a fitness tracker app. Look carefully for whatever distinguishes this from similar exercise variants — equipment type, angle, grip, seated vs standing, single vs double limb — since a vague name would be wrong for this purpose even when it names the right general movement. Respond only with the requested fields.',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What exercise or gym machine is shown in this photo? Note the distinguishing details first, then give your best-guess name.' },
+          { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
+        ],
+      },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'exercise_photo_guess', strict: true, schema: PHOTO_IDENTIFY_SCHEMA },
+    },
+  })
+  return JSON.parse(data.choices[0].message.content).name
+}
+
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto }

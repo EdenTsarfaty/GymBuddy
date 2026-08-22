@@ -49,6 +49,14 @@ try { db.exec('ALTER TABLE exercises ADD COLUMN photo TEXT') } catch {}
 // which the app previously relied on implicitly. Backfilled once below from
 // existing id order so pre-existing rows keep their current on-screen order.
 try { db.exec('ALTER TABLE exercises ADD COLUMN sort_order INTEGER') } catch {}
+// Soft-delete marker (epoch ms, NULL = active) — deleting an exercise flips
+// this instead of removing the row, so Edit Plan's Undo can restore it
+// exactly (same id, same chat history, same photo file) rather than
+// recreating a lookalike. A background sweep (see exerciseSweep.js)
+// hard-deletes rows past a short grace period once nothing can undo them
+// any more; every read that lists/looks up exercises must exclude rows
+// where this is set.
+try { db.exec('ALTER TABLE exercises ADD COLUMN deleted_at INTEGER') } catch {}
 {
   const needsBackfill = db.prepare('SELECT COUNT(*) AS c FROM exercises WHERE sort_order IS NULL').get().c
   if (needsBackfill > 0) {
@@ -63,6 +71,19 @@ try { db.exec('ALTER TABLE exercises ADD COLUMN sort_order INTEGER') } catch {}
     }
   }
 }
+
+// Photo files marked for deferred cleanup instead of deleted on the spot —
+// same reasoning as exercises' deleted_at: replacing/clearing a photo used
+// to unlink the old file immediately, which made Undo unable to point back
+// at it. Now the old file just gets listed here with a timestamp; a
+// background sweep (see photoSweep.js) actually removes it once its grace
+// period has passed and nothing can undo that far back any more.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS orphaned_photos (
+    filename    TEXT PRIMARY KEY,
+    orphaned_at INTEGER NOT NULL
+  )
+`)
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_profile (
