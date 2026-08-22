@@ -62,6 +62,17 @@ const STAT_LABELS = { sets: 'Sets', reps: 'Reps', weight: 'Weight (kg)', duratio
 const STAT_SHORT_LABELS = { sets: 'Sets', reps: 'Reps', weight: 'Weight', duration: 'Duration' }
 const STAT_DEFAULTS = { sets: 3, reps: 10, weight: 0, duration: 30 }
 
+// A day with no title in the DB isn't necessarily a rest day — it might
+// just never have had a title set despite having real exercises (e.g. one
+// added via Manual/Photo search before the day was ever named). Only fall
+// back to "Rest day" when there's also nothing scheduled; otherwise show
+// "undefined" rather than mislabeling a real workout day as a rest day.
+// Display-only — never written back to the DB.
+function dayLabel(title, hasExercises) {
+  if (title) return title
+  return hasExercises ? 'undefined' : 'Rest day'
+}
+
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
@@ -611,23 +622,26 @@ function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onM
   )
 }
 
-function DayPickerSheet({ title, currentDay, dayTitles, onPick, onCancel }) {
+function DayPickerSheet({ title, currentDay, dayTitles, draft, onPick, onCancel }) {
   return (
     <div className="edit-plan-sheet-backdrop" onClick={onCancel}>
       <div className="edit-plan-sheet" onClick={(e) => e.stopPropagation()}>
         <h3 className="edit-plan-sheet-title">{title}</h3>
         <div className="edit-plan-sheet-days">
-          {WEEKDAYS.map((day) => (
-            <button
-              key={day}
-              type="button"
-              className={`edit-plan-sheet-day ${day === currentDay ? 'is-current' : ''}`}
-              onClick={() => onPick(day)}
-            >
-              <span>{day}</span>
-              <span className="edit-plan-sheet-day-title">{dayTitles.get(day) || 'Rest day'}</span>
-            </button>
-          ))}
+          {WEEKDAYS.map((day) => {
+            const hasExercises = draft[day].some((it) => !it.isPendingAdd)
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`edit-plan-sheet-day ${day === currentDay ? 'is-current' : ''}`}
+                onClick={() => onPick(day)}
+              >
+                <span>{day}</span>
+                <span className="edit-plan-sheet-day-title">{dayLabel(dayTitles.get(day), hasExercises)}</span>
+              </button>
+            )
+          })}
         </div>
         <button type="button" className="edit-plan-sheet-cancel" onClick={onCancel}>Cancel</button>
       </div>
@@ -1963,7 +1977,9 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             </div>
           ) : (
             <div className="edit-plan-day-title-row">
-              <span className="edit-plan-day-subtitle">{dayTitles.get(selectedDay) || 'Rest day'}</span>
+              <span className="edit-plan-day-subtitle">
+                {dayLabel(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd))}
+              </span>
               <button
                 type="button"
                 className="edit-plan-day-title-edit-btn"
@@ -2083,7 +2099,23 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
 
       <div className={`edit-plan-list ${editingEntry ? 'has-edit-panel' : ''}`}>
         {dayExercises.length === 0 ? (
-          <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
+          <div className="edit-plan-empty-day">
+            <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
+            <div className="edit-plan-empty-day-actions">
+              <button
+                type="button"
+                className="edit-plan-pill-btn is-filled"
+                onClick={() => handleInsertPlaceholder(selectedDay, 0)}
+              >
+                <PlusIcon size={16} />
+                <span>Add exercise</span>
+              </button>
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <TreadmillIcon size={16} />
+                <span>Set cardio day</span>
+              </button>
+            </div>
+          </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
@@ -2137,6 +2169,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           title={sheet === 'move' ? 'Move to' : 'Copy to'}
           currentDay={selectedDay}
           dayTitles={dayTitles}
+          draft={draft}
           onPick={handleMoveOrCopy}
           onCancel={() => setSheet(null)}
         />
