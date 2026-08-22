@@ -3311,6 +3311,28 @@
   opacity: 0.5;
 }
 
+/* A soft halo, not a border — the pseudo-element sits behind the icon via
+   negative inset so it doesn't touch the button's own box model, meaning it
+   can't shift its neighbors in the flex row when toggled on. The halo's -6px
+   inset bleeds right into the row's own 6px gap, though, crowding the next
+   button — nudge the whole thing left by that same amount with a transform
+   (paint-only, doesn't disturb layout/gap math) so the halo's edge lands
+   back where the normal gap would be. */
+.edit-plan-icon-btn.is-active {
+  position: relative;
+  color: var(--accent);
+  transform: translateX(-6px);
+}
+
+.edit-plan-icon-btn.is-active::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  background: var(--chip-bg);
+  border-radius: 50%;
+  z-index: -1;
+}
+
 .edit-plan-pill-btn {
   display: flex;
   align-items: center;
@@ -4278,6 +4300,56 @@ button.edit-plan-pending-camera-btn {
 
 .edit-plan-category-option:hover {
   background: var(--chip-bg);
+}
+
+/* Accent outline + accent text to match the "Generate" trigger button's own
+   unfilled look, rather than the neutral card-bg/border dropdown the
+   category picker uses — keeps the accent identity without a solid fill. */
+.edit-plan-generate-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+.edit-plan-generate-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.edit-plan-generate-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.edit-plan-generate-option:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-plan-generate-divider {
+  height: 1.5px;
+  margin: 2px 6px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .edit-plan-stats-row {

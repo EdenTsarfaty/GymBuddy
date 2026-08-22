@@ -30,6 +30,7 @@ import PencilIcon from './icons/PencilIcon'
 import AiSearchIcon from './icons/AiSearchIcon'
 import AiPhotoIcon from './icons/AiPhotoIcon'
 import CloudIcon from './icons/CloudIcon'
+import KebabIcon from './icons/KebabIcon'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -1284,7 +1285,7 @@ function ExerciseEditPanel({
 // recreating a lookalike. No AI involved in the structural actions
 // themselves. See the manual-edit-mode design notes in memory for the full
 // spec this is being built toward.
-function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSaved, onClose }) {
+function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSaved, onClose, onRegeneratePlan }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
   const [editingDayTitle, setEditingDayTitle] = useState(false)
   const [dayTitleDraft, setDayTitleDraft] = useState('')
@@ -1293,6 +1294,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [sheet, setSheet] = useState(null) // 'move' | 'copy' | null
   const [actionError, setActionError] = useState(null)
+  const [showGenerateMenu, setShowGenerateMenu] = useState(false)
+  const [showMoreOptions, setShowMoreOptions] = useState(false)
   // Tapping a card body (not its checkbox or drag handle) opens this single
   // exercise for field-level editing — distinct from selectedKeys, which is
   // the checkbox multi-select the bulk toolbar (Delete/Copy to/Move to) acts
@@ -1973,7 +1976,29 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           )}
         </div>
         <div className="edit-plan-header-right">
-          {isSelecting ? (
+          <button
+            type="button"
+            className={`edit-plan-icon-btn ${showMoreOptions ? 'is-active' : ''}`}
+            onClick={() => setShowMoreOptions((v) => !v)}
+            aria-label="More options"
+          >
+            <KebabIcon size={17} />
+          </button>
+          {showMoreOptions ? (
+            <>
+              {/* Placeholders — none of these are built yet, just staking
+                  out where they'll live once they are. */}
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <span>Day reordering</span>
+              </button>
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <span>Import</span>
+              </button>
+              <button type="button" className="edit-plan-pill-btn" disabled>
+                <span>Export</span>
+              </button>
+            </>
+          ) : isSelecting ? (
             <>
               <button type="button" className="edit-plan-icon-btn" onClick={handleDelete} aria-label="Delete">
                 <TrashIcon size={17} />
@@ -2005,10 +2030,34 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
               <button type="button" className="edit-plan-icon-btn" onClick={handleRedo} disabled={redoStack.length === 0} aria-label="Redo">
                 <RedoIcon size={21} />
               </button>
-              <button type="button" className="edit-plan-pill-btn is-filled" disabled>
-                <GenerateIcon size={14} />
-                <span>Generate</span>
-              </button>
+              <div className="edit-plan-category-picker">
+                <button
+                  type="button"
+                  className="edit-plan-pill-btn is-filled"
+                  onClick={() => setShowGenerateMenu((v) => !v)}
+                >
+                  <GenerateIcon size={14} />
+                  <span>Generate</span>
+                </button>
+                {showGenerateMenu && (
+                  <div className="edit-plan-generate-menu">
+                    <button
+                      type="button"
+                      className="edit-plan-generate-option"
+                      onClick={() => { setShowGenerateMenu(false); onRegeneratePlan?.() }}
+                    >
+                      <span>Regenerate plan</span>
+                    </button>
+                    <div className="edit-plan-generate-divider" />
+                    {/* Regenerating just the selected day needs its own new
+                        generation pipeline (see project notes) — not built
+                        yet, coming in a later step. */}
+                    <button type="button" className="edit-plan-generate-option" disabled>
+                      <span>Regenerate day</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
           <button type="button" className="edit-plan-close-btn" onClick={handleCancel} aria-label="Close">

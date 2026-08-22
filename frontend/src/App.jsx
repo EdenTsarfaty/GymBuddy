@@ -13,6 +13,7 @@ import FlameIcon from './components/icons/FlameIcon'
 import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
+import RegeneratePlanModal from './components/RegeneratePlanModal'
 import EditPlanView from './components/EditPlanView'
 import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
@@ -22,7 +23,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'beta 0.7.9.5'
+const APP_VERSION = 'beta 0.7.9.7'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -764,6 +765,7 @@ function App() {
   const [planGenerating, setPlanGenerating] = useState(false)
   const [planPhase, setPlanPhase] = useState('thinking')
   const [planStructure, setPlanStructure] = useState(null)
+  const [regenOpen, setRegenOpen] = useState(false)
   const [settingsClosing, setSettingsClosing] = useState(false)
   const [settingsOpening, setSettingsOpening] = useState(false)
   const [chatExercise, setChatExercise] = useState(null)
@@ -825,11 +827,14 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [view, chatExercise, timerExercise])
 
-  // Currently unreachable — RegeneratePlanModal's trigger was removed when
-  // "Regenerate Plan" became "Edit Plan" in Settings. Kept as-is for Phase 7
-  // (manual plan edit mode's "Generate -> regenerate whole plan" toolbar
-  // action), which will call this directly instead of through a modal.
+  // Triggered from Edit Plan's Generate menu (see onRegeneratePlan below) via
+  // RegeneratePlanModal's confirm step. Closes both the modal and Edit Plan
+  // itself the moment generation starts — Edit Plan's draft is a one-time
+  // snapshot of allExercises taken at mount, so it'd go stale mid-regenerate
+  // rather than reflecting the wipe-and-rebuild happening underneath it.
   async function handleGenerate(settings) {
+    setRegenOpen(false)
+    setView('settings')
     setPlanPhase('thinking')
     setPlanGenerating(true)
     setPlanStructure(null)
@@ -1174,6 +1179,7 @@ function App() {
             onSaved={() => setExercisesRefreshKey((k) => k + 1)}
             onDayTitleSaved={(day, title) => setDayTitles((prev) => new Map(prev).set(day, title))}
             onClose={() => setView('settings')}
+            onRegeneratePlan={() => setRegenOpen(true)}
           />
         ) : (
           <main className="card-list">
@@ -1292,6 +1298,18 @@ function App() {
       </footer>
       )}
 
+
+      {regenOpen && (
+        <RegeneratePlanModal
+          beginnerMode={beginnerMode}
+          onClose={() => setRegenOpen(false)}
+          onGenerate={handleGenerate}
+          onBeginnerChange={(val) => {
+            setBeginnerMode(val)
+            localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
+          }}
+        />
+      )}
 
       {planGenerating && (
         <PlanGeneratingOverlay
