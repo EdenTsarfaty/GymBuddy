@@ -178,6 +178,83 @@ function splitSuggestionMatch(name, query) {
   return { pre: name.slice(0, start), match: name.slice(start, end), post: name.slice(end) }
 }
 
+// Tracks whether a file drag is in progress ANYWHERE on the page, not just
+// over one specific drop zone — lets a drop target show an ambient "you can
+// drop here" affordance for the whole drag, with a stronger visual only once
+// actually hovered. dragenter/dragleave fire repeatedly as the cursor
+// crosses child element boundaries while bubbling to window, so a counter
+// (not a plain boolean) is needed to avoid flickering false on every child
+// crossing. Also suppresses the browser's default "navigate to this file"
+// behavior for a drop that lands outside any real drop zone.
+function useIsDraggingFile() {
+  const [isDragging, setIsDragging] = useState(false)
+  const counterRef = useRef(0)
+
+  useEffect(() => {
+    function hasFiles(e) {
+      return Array.from(e.dataTransfer?.types || []).includes('Files')
+    }
+    function onDragEnter(e) {
+      if (!hasFiles(e)) return
+      counterRef.current += 1
+      setIsDragging(true)
+    }
+    function onDragLeave(e) {
+      if (!hasFiles(e)) return
+      counterRef.current = Math.max(0, counterRef.current - 1)
+      if (counterRef.current === 0) setIsDragging(false)
+    }
+    function onDragOver(e) {
+      if (hasFiles(e)) e.preventDefault()
+    }
+    function reset() {
+      counterRef.current = 0
+      setIsDragging(false)
+    }
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', reset)
+    window.addEventListener('dragend', reset)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', reset)
+      window.removeEventListener('dragend', reset)
+    }
+  }, [])
+
+  return isDragging
+}
+
+// A camera capture (and some gallery photos) can be tens of MB at full
+// sensor resolution — shrinking it client-side, before it's ever put into a
+// FormData and sent over fetch, avoids two problems at once: staying
+// comfortably under the backend's multipart size limit, and avoiding the
+// memory spike that building/uploading a huge in-memory Blob can cause on a
+// phone (this was crashing mobile Chrome mid-upload, reloading the whole
+// page). Falls back to the original file untouched if resizing fails for
+// any reason (unsupported format, etc.) rather than blocking the upload.
+async function resizeForUpload(file) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const maxDim = 1600
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+    const width = Math.round(bitmap.width * scale)
+    const height = Math.round(bitmap.height * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height)
+    bitmap.close?.()
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    return blob || file
+  } catch {
+    return file
+  }
+}
+
 function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
   const [mode, setMode] = useState(null) // null | 'title-search' | 'photo-search'
   const [query, setQuery] = useState('')
@@ -192,7 +269,10 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
   const [photoName, setPhotoName] = useState('')
   const [photoError, setPhotoError] = useState('')
   const [photoFile, setPhotoFile] = useState(null)
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false)
+  const isDraggingFileAnywhere = useIsDraggingFile()
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
 
   function runQuery(value) {
     clearTimeout(debounceRef.current)
@@ -236,15 +316,13 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
     setPhotoFile(null)
   }
 
-  async function handlePhotoFile(e) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  async function processPhotoFile(file) {
     setPhotoError('')
     setPhotoStep('uploading')
     try {
+      const resized = await resizeForUpload(file)
       const body = new FormData()
-      body.append('file', file)
+      body.append('file', resized, 'photo.jpg')
       const res = await fetch(`${API_BASE}/api/exercises/identify-photo`, { method: 'POST', body })
       if (!res.ok) throw new Error()
       const data = await res.json()
@@ -252,12 +330,40 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
       // Kept so the exact photo used to identify this exercise becomes its
       // saved photo too once confirmed (see onPhotoConfirmed) — no reason to
       // make the user upload the same picture twice.
-      setPhotoFile(file)
+      setPhotoFile(resized)
       setPhotoStep('confirm')
     } catch {
       setPhotoError("Couldn't identify that photo — try another one.")
       setPhotoStep('pick')
     }
+  }
+
+  async function handlePhotoFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    await processPhotoFile(file)
+  }
+
+  // Desktop-only in practice — dragging a file onto a touch device isn't
+  // really a thing, and the "Upload or drag" label only shows on
+  // pointer:fine devices anyway (see App.css). Only live during the
+  // Upload/Camera picker step; there's no obvious action for a drop once
+  // you're already past it (naming/generating).
+  function handlePhotoDragOver(e) {
+    if (photoStep !== 'pick') return
+    e.preventDefault()
+    setIsDraggingPhoto(true)
+  }
+  function handlePhotoDragLeave() {
+    setIsDraggingPhoto(false)
+  }
+  function handlePhotoDrop(e) {
+    e.preventDefault()
+    setIsDraggingPhoto(false)
+    if (photoStep !== 'pick') return
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/')) processPhotoFile(file)
   }
 
   async function confirmPhotoName() {
@@ -332,7 +438,12 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
   if (mode === 'photo-search') {
     const busy = photoStep === 'uploading' || photoStep === 'generating'
     return (
-      <div className="edit-plan-card edit-plan-pending-add edit-plan-pending-search">
+      <div
+        className={`edit-plan-card edit-plan-pending-add edit-plan-pending-search ${isDraggingFileAnywhere ? 'is-drag-active' : ''} ${isDraggingPhoto ? 'is-drag-over' : ''}`}
+        onDragOver={handlePhotoDragOver}
+        onDragLeave={handlePhotoDragLeave}
+        onDrop={handlePhotoDrop}
+      >
         <button type="button" className="edit-plan-pending-back" onClick={closePhotoSearch} aria-label="Back">
           <XIcon size={11} />
         </button>
@@ -355,6 +466,11 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
               <span>{photoStep === 'generating' ? 'Generating…' : 'Use this exercise'}</span>
             </button>
           </div>
+        ) : isDraggingFileAnywhere ? (
+          <div className="edit-plan-pending-drop-hint">
+            <UploadIcon size={20} />
+            <span>Drop photo here</span>
+          </div>
         ) : (
           <>
             <button
@@ -364,9 +480,21 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
               disabled={busy}
             >
               <UploadIcon size={14} />
-              <span>{photoStep === 'uploading' ? 'Identifying…' : 'Upload'}</span>
+              <span>
+                {photoStep === 'uploading' ? 'Identifying…' : (
+                  <>
+                    <span className="edit-plan-mobile-only-text">Upload</span>
+                    <span className="edit-plan-desktop-only-text">Upload or drag</span>
+                  </>
+                )}
+              </span>
             </button>
-            <button type="button" className="edit-plan-pending-add-btn" disabled>
+            <button
+              type="button"
+              className="edit-plan-pending-add-btn edit-plan-pending-camera-btn"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={busy}
+            >
               <CameraIcon size={14} />
               <span>Camera</span>
             </button>
@@ -374,6 +502,19 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              className="edit-plan-pending-file-input"
+              onChange={handlePhotoFile}
+            />
+            {/* capture="environment" hands off to the OS camera app on
+                mobile instead of a file/photo picker — desktop browsers
+                ignore it, which is why this button only shows on
+                coarse-pointer (touch) devices, see .edit-plan-pending-
+                camera-btn in App.css. */}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
               className="edit-plan-pending-file-input"
               onChange={handlePhotoFile}
             />
@@ -506,6 +647,8 @@ function ExerciseEditPanel({
 }) {
   const [form, setForm] = useState(item)
   const [uploading, setUploading] = useState(false)
+  const [isPhotoDragOver, setIsPhotoDragOver] = useState(false)
+  const isDraggingFileAnywhere = useIsDraggingFile()
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlValue, setUrlValue] = useState('')
   const [showSearch, setShowSearch] = useState(false)
@@ -521,6 +664,7 @@ function ExerciseEditPanel({
   const [showCategoryMenu, setShowCategoryMenu] = useState(false)
   const [showStatMenu, setShowStatMenu] = useState(false)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const bulletRefs = useRef([])
 
   useEffect(() => {
@@ -624,14 +768,12 @@ function ExerciseEditPanel({
     ? (item.photo.startsWith('https://') ? item.photo : `${API_BASE}/api/exercise-photos/${item.photo}`)
     : null
 
-  async function handleFileSelected(e) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  async function processPhotoUpload(file) {
     setUploading(true)
     try {
+      const resized = await resizeForUpload(file)
       const body = new FormData()
-      body.append('file', file)
+      body.append('file', resized, 'photo.jpg')
       const res = await track(fetch(`${API_BASE}/api/exercises/${item.id}/photo`, { method: 'POST', body }))
       if (!res.ok) throw new Error('Upload failed')
       const updated = await res.json()
@@ -641,6 +783,33 @@ function ExerciseEditPanel({
     } finally {
       setUploading(false)
     }
+  }
+
+  async function handleFileSelected(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    await processPhotoUpload(file)
+  }
+
+  // Desktop-only in practice (dragging onto a touch screen isn't really a
+  // thing) — works whether or not a photo is already set, since dropping a
+  // new one onto an existing photo is just as natural as onto the empty
+  // placeholder.
+  function handlePhotoDragOver(e) {
+    if (!canUploadPhoto || uploading) return
+    e.preventDefault()
+    setIsPhotoDragOver(true)
+  }
+  function handlePhotoDragLeave() {
+    setIsPhotoDragOver(false)
+  }
+  function handlePhotoDrop(e) {
+    e.preventDefault()
+    setIsPhotoDragOver(false)
+    if (!canUploadPhoto || uploading) return
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/')) processPhotoUpload(file)
   }
 
   async function applyPhotoUrl(url) {
@@ -854,7 +1023,12 @@ function ExerciseEditPanel({
 
           <span className="edit-plan-field-label">Photo</span>
           <div className="edit-plan-photo-row">
-            <div className="edit-plan-photo-square">
+            <div
+              className={`edit-plan-photo-square ${isDraggingFileAnywhere ? 'is-drag-active' : ''} ${isPhotoDragOver ? 'is-drag-over' : ''}`}
+              onDragOver={handlePhotoDragOver}
+              onDragLeave={handlePhotoDragLeave}
+              onDrop={handlePhotoDrop}
+            >
               {photoUrl ? (
                 <>
                   <img src={photoUrl} alt="" />
@@ -869,11 +1043,20 @@ function ExerciseEditPanel({
                   </button>
                 </>
               ) : (
-                <PhotoIcon size={36} className="edit-plan-photo-placeholder" />
+                <div className="edit-plan-photo-placeholder-wrap">
+                  <PhotoIcon size={36} className="edit-plan-photo-placeholder" />
+                  <span className="edit-plan-photo-drag-hint edit-plan-desktop-only-text">You can also drag & drop!</span>
+                </div>
               )}
             </div>
             <div className="edit-plan-photo-actions">
-              <button type="button" className="edit-plan-photo-btn" disabled aria-label="Take photo">
+              <button
+                type="button"
+                className="edit-plan-photo-btn edit-plan-pending-camera-btn"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={!canUploadPhoto || uploading}
+                aria-label="Take photo"
+              >
                 <span className="edit-plan-photo-btn-icon"><CameraIcon size={19} /></span>
                 <span>Camera</span>
               </button>
@@ -911,6 +1094,14 @@ function ExerciseEditPanel({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                className="edit-plan-photo-file-input"
+                onChange={handleFileSelected}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
                 className="edit-plan-photo-file-input"
                 onChange={handleFileSelected}
               />

@@ -3687,6 +3687,82 @@
   cursor: not-allowed;
 }
 
+/* capture="environment" only does anything useful on a touch device with a
+   camera — desktop browsers ignore it and fall back to a plain file picker,
+   which Upload already covers, so there's no reason to show a second,
+   redundant button there. */
+/* The `button.` prefix (not just `.edit-plan-pending-camera-btn`) bumps
+   specificity above the shared base classes this sits alongside
+   (.edit-plan-pending-add-btn, .edit-plan-photo-btn) — both also set
+   `display: flex`, and without the extra specificity, whichever of those
+   happens to be declared later in this file would silently win the
+   cascade and make the button always show. */
+button.edit-plan-pending-camera-btn {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  button.edit-plan-pending-camera-btn {
+    display: flex;
+  }
+}
+
+/* Swaps inline text between a touch-friendly and a pointer/drag-aware
+   phrasing (e.g. "Upload" vs "Upload or drag") — same coarse/fine pointer
+   signal used above for the Camera button, just for text instead of a
+   whole element. */
+.edit-plan-desktop-only-text {
+  display: none;
+}
+
+.edit-plan-mobile-only-text {
+  display: inline;
+}
+
+@media (pointer: fine) {
+  .edit-plan-desktop-only-text {
+    display: inline;
+  }
+
+  .edit-plan-mobile-only-text {
+    display: none;
+  }
+}
+
+/* Ambient state — a file is being dragged somewhere on the page, not
+   necessarily over this zone yet. .is-drag-over (below) overrides the
+   border color once it's actually hovered; declared after this rule so it
+   wins at equal specificity. */
+.edit-plan-pending-search.is-drag-active {
+  border-width: 4px;
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+.edit-plan-pending-search.is-drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card-bg));
+}
+
+.edit-plan-pending-search.is-drag-over .edit-plan-pending-drop-hint {
+  color: var(--accent);
+}
+
+.edit-plan-pending-drop-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  padding: 6px 0;
+  font-size: 16px;
+  font-weight: 700;
+  /* Muted by default (the ambient "dragging somewhere on the page" state);
+     .is-drag-over below recolors it to accent once actually hovered. */
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 .edit-plan-pending-file-input {
   display: none;
 }
@@ -4371,6 +4447,32 @@
   border: 1.5px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-photo-square.is-drag-active {
+  border-width: 4px;
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+.edit-plan-photo-square.is-drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--chip-bg));
+}
+
+.edit-plan-photo-placeholder-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-plan-photo-drag-hint {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .edit-plan-photo-remove {
