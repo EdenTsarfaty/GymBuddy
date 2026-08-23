@@ -321,7 +321,9 @@ fastify.post('/api/plan/day/exercises', async (request, reply) => {
   }
 
   try {
-    const names = await generateDayExercises(profile, dayTitle, { currentExercises: currentNames, comments })
+    const names = await generateDayExercises(profile, dayTitle, { currentExercises: currentNames, comments }, (type, content) => {
+      try { writeLLMLog(uid, type, content) } catch {}
+    })
     return { names }
   } catch (err) {
     logError('POST /api/plan/day/exercises', new Error(describeOpenAIError(err)))

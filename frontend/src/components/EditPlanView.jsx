@@ -2502,23 +2502,16 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           <button
             type="button"
             className={`edit-plan-icon-btn ${showMoreOptions ? 'is-active' : ''}`}
-            onClick={() => setShowMoreOptions((v) => !v)}
+            onClick={() => { if (!dayReorderMode) setShowMoreOptions((v) => !v) }}
             aria-label="More options"
           >
             <KebabIcon size={17} />
           </button>
           {showMoreOptions ? (
             <>
-              {/* Import/Export are still placeholders. Day reordering is
-                  live — while active it swaps them for Apply/Cancel. */}
-              <button
-                type="button"
-                className={`edit-plan-pill-btn ${dayReorderMode ? 'is-filled' : ''}`}
-                onClick={toggleReorderMode}
-              >
-                <span>Day reordering</span>
-              </button>
-              {dayReorderMode ? (
+              {/* Import/Export is still a placeholder. Day reordering is
+                  live — while active, Apply/Cancel appear to its left. */}
+              {dayReorderMode && (
                 <>
                   <button
                     type="button"
@@ -2538,15 +2531,18 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                     <XIcon size={16} />
                   </button>
                 </>
-              ) : (
-                <>
-                  <button type="button" className="edit-plan-pill-btn" disabled>
-                    <span>Import</span>
-                  </button>
-                  <button type="button" className="edit-plan-pill-btn" disabled>
-                    <span>Export</span>
-                  </button>
-                </>
+              )}
+              <button
+                type="button"
+                className={`edit-plan-pill-btn ${dayReorderMode ? 'is-filled' : ''}`}
+                onClick={toggleReorderMode}
+              >
+                <span>Reorder days</span>
+              </button>
+              {!dayReorderMode && (
+                <button type="button" className="edit-plan-pill-btn" disabled>
+                  <span>Import/Export</span>
+                </button>
               )}
             </>
           ) : isSelecting ? (
