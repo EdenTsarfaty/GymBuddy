@@ -248,7 +248,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     return { error: 'Invalid day' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -307,7 +307,7 @@ fastify.post('/api/plan/day/exercises', async (request, reply) => {
     return { error: 'Invalid day' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -353,7 +353,7 @@ fastify.post('/api/exercises/generate-preview', async (request, reply) => {
     return { error: 'Invalid day' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -451,7 +451,7 @@ fastify.delete('/api/day-plans/:day', async (request, reply) => {
 })
 
 const PROFILE_COLUMNS =
-  'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
+  'age, height, weight, sex, medical_notes, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
 
 // Never select streak_guardian_hash/salt into an API response — the hash is
 // derived here into a plain enabled/disabled boolean instead.
@@ -467,17 +467,19 @@ fastify.get('/api/profile', async (request) => {
 
 fastify.put('/api/profile', async (request) => {
   const {
-    user_id, age, height, weight, goals, beginner_mode,
+    user_id, age, height, weight, sex, medical_notes, goals, beginner_mode,
     workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes,
     streak_freeze_until,
   } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
   db.prepare(
-    `UPDATE user_profile SET age = ?, height = ?, weight = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ?, streak_freeze_until = ? WHERE id = ?`,
+    `UPDATE user_profile SET age = ?, height = ?, weight = ?, sex = ?, medical_notes = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ?, streak_freeze_until = ? WHERE id = ?`,
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
     weight !== undefined ? weight : null,
+    sex !== undefined ? sex : null,
+    medical_notes !== undefined ? medical_notes : null,
     goals !== undefined ? JSON.stringify(goals) : null,
     beginner_mode !== undefined ? (beginner_mode ? 1 : 0) : 0,
     workout_reminder !== undefined ? (workout_reminder ? 1 : 0) : 0,
@@ -541,7 +543,7 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
     return { error: 'Exercise not found' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -585,7 +587,7 @@ fastify.post('/api/plan/structure', async (request, reply) => {
     return { error: 'Invalid start_day' }
   }
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -1027,7 +1029,7 @@ fastify.post('/api/exercises/:id/chat', async (request, reply) => {
   const userResult = insertChatMessage(id, 'user', text.trim(), null)
   const userMessage = parseChatMessage(selectById.get(userResult.lastInsertRowid))
 
-  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(exercise.user_id)
+  const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(exercise.user_id)
   const profile = profileRow
     ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
     : null
@@ -1102,7 +1104,7 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
       return { error: 'Invalid reason' }
     }
 
-    const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
+    const profileRow = db.prepare('SELECT age, height, weight, sex, medical_notes, goals, beginner_mode FROM user_profile WHERE id = ?').get(existing.user_id)
     const profile = profileRow
       ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
       : null

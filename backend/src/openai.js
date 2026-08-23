@@ -31,6 +31,14 @@ function buildSystemPrompt(profile, dayTitle) {
     if (profile.age != null)    lines.push(`Age: ${profile.age}`)
     if (profile.height != null) lines.push(`Height: ${profile.height} cm`)
     if (profile.weight != null) lines.push(`Weight: ${profile.weight} kg`)
+    if (profile.sex)            lines.push(`Sex: ${profile.sex}`)
+
+    if (profile.medical_notes && profile.medical_notes.trim()) {
+      lines.push('')
+      lines.push('## Medical conditions / injuries')
+      lines.push(profile.medical_notes.trim())
+      lines.push('Take this seriously — avoid recommending or describing this exercise in a way that could aggravate it. If it\'s fundamentally unsuitable given the condition above, say so plainly in the description rather than glossing over it.')
+    }
 
     const goals = Array.isArray(profile.goals) ? profile.goals : []
     if (goals.length > 0) {
@@ -100,6 +108,14 @@ function buildPlanningSystemPrompt(profile, settings) {
     if (profile.age != null)    lines.push(`Age: ${profile.age}`)
     if (profile.height != null) lines.push(`Height: ${profile.height} cm`)
     if (profile.weight != null) lines.push(`Weight: ${profile.weight} kg`)
+    if (profile.sex)            lines.push(`Sex: ${profile.sex}`)
+
+    if (profile.medical_notes && profile.medical_notes.trim()) {
+      lines.push('')
+      lines.push('## Medical conditions / injuries')
+      lines.push(profile.medical_notes.trim())
+      lines.push('Take this seriously when selecting exercises for every day of the plan — avoid movements that could aggravate it, and prefer safer alternatives that still address the same muscle groups.')
+    }
 
     const goals = Array.isArray(profile.goals) ? profile.goals : []
     if (goals.length > 0) {
@@ -319,6 +335,14 @@ async function generateDayExercises(profile, dayTitle, { currentExercises, comme
     if (profile.age != null)    context.push(`Age: ${profile.age}`)
     if (profile.height != null) context.push(`Height: ${profile.height} cm`)
     if (profile.weight != null) context.push(`Weight: ${profile.weight} kg`)
+    if (profile.sex)            context.push(`Sex: ${profile.sex}`)
+
+    if (profile.medical_notes && profile.medical_notes.trim()) {
+      context.push('')
+      context.push('## Medical conditions / injuries')
+      context.push(profile.medical_notes.trim())
+      context.push('Take this seriously when choosing exercises for this day — avoid movements that could aggravate it, and prefer safer alternatives that still address the same muscle groups.')
+    }
 
     const goals = Array.isArray(profile.goals) ? profile.goals : []
     if (goals.length > 0) {
@@ -863,6 +887,7 @@ function buildChatSystemPrompt(exercise, profile) {
     if (profile.age != null) lines.push(`Age: ${profile.age}`)
     if (profile.height != null) lines.push(`Height: ${profile.height} cm`)
     if (profile.weight != null) lines.push(`Weight: ${profile.weight} kg`)
+    if (profile.sex) lines.push(`Sex: ${profile.sex}`)
 
     const goals = Array.isArray(profile.goals) ? profile.goals : []
     if (goals.length > 0) {
@@ -875,6 +900,10 @@ function buildChatSystemPrompt(exercise, profile) {
 
     if (profile.beginner_mode) {
       lines.push('The user is new to the gym — keep guidance especially clear and beginner-friendly.')
+    }
+
+    if (profile.medical_notes && profile.medical_notes.trim()) {
+      lines.push(`Medical conditions / injuries: ${profile.medical_notes.trim()} — keep this in mind throughout, especially if the conversation touches on pain, intensity, or swapping this exercise out.`)
     }
   } else {
     lines.push('No profile on file.')

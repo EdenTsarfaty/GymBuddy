@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import CheckIcon from './icons/CheckIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import EyeIcon from './icons/EyeIcon'
 import EyeOffIcon from './icons/EyeOffIcon'
@@ -104,59 +103,6 @@ function UserPicker({ users, currentUser, onChangeUser, disabled }) {
         )}
       </div>
     </div>
-  )
-}
-
-const GOALS = [
-  { id: 'lose_weight',    label: 'I want to lose weight' },
-  { id: 'stay_healthy',   label: 'I want to stay healthy' },
-  { id: 'look_better',    label: 'I want a better looking body' },
-  { id: 'get_stronger',   label: 'I want to get stronger' },
-  { id: 'endurance',      label: 'I want better endurance' },
-  { id: 'mental_health',  label: 'I want to improve my mental wellbeing' },
-  { id: 'daily_energy',   label: 'I want to boost my daily energy levels' },
-]
-
-function GoalsModal({ initialGoals, onSave, onClose }) {
-  const [checked, setChecked] = useState(new Set(initialGoals || []))
-
-  function toggle(id) {
-    setChecked((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  function handleSave() {
-    onSave([...checked])
-    onClose()
-  }
-
-  return createPortal(
-    <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
-        <div className="modal-box goals-modal">
-          <div className="goals-list">
-            {GOALS.map((goal) => (
-              <label key={goal.id} className={`goals-option ${checked.has(goal.id) ? 'is-checked' : ''}`}>
-                <input
-                  type="checkbox"
-                  className="goals-checkbox"
-                  checked={checked.has(goal.id)}
-                  onChange={() => toggle(goal.id)}
-                />
-                <span className="goals-checkbox-box" aria-hidden="true" />
-                <span className="goals-option-label">{goal.label}</span>
-              </label>
-            ))}
-          </div>
-          <button className="goals-save-btn" onClick={handleSave}>Save</button>
-        </div>
-      </div>
-    </div>,
-    document.body
   )
 }
 
@@ -486,55 +432,7 @@ function StreakFreezeModal({ onActivate, onClose, guardianEnabled, userId, onGua
   )
 }
 
-function BioRow({ label, value, onSave, placeholder, disabled }) {
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
-
-  function handleEdit() {
-    setDraft(value ?? '')
-    setEditing(true)
-  }
-
-  function handleSave() {
-    onSave(draft)
-    setEditing(false)
-  }
-
-  function handleCancel() {
-    setEditing(false)
-  }
-
-  return (
-    <div className="settings-row">
-      <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>{label}</span>
-      <div className="bio-row-right">
-        {editing && (
-          <button className="bio-cancel-btn" onClick={handleCancel} aria-label="Cancel">
-            <ChevronLeftIcon size={12} />
-          </button>
-        )}
-        <input
-          className="bio-input"
-          type="text"
-          inputMode="decimal"
-          value={editing ? draft : (value ?? '')}
-          disabled={!editing}
-          placeholder={editing ? placeholder : '—'}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSave()
-            if (e.key === 'Escape') handleCancel()
-          }}
-        />
-        <button className="bio-edit-btn" disabled={disabled} onClick={editing ? handleSave : handleEdit}>
-          {editing ? 'Save' : 'Edit'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBeginnerMode, onEditPlan, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
+function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEditPlan, onEditProfile, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
@@ -543,7 +441,6 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
     streak_freeze_until: null,
     streak_guardian_enabled: false,
   })
-  const [goalsOpen, setGoalsOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
   const [streakFreezeOpen, setStreakFreezeOpen] = useState(false)
   const [streakFreezeFlashing, setStreakFreezeFlashing] = useState(false)
@@ -567,17 +464,6 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
     })
       .catch(() => {})
   }, [currentUser])
-
-  function saveField(field, raw) {
-    const value = Array.isArray(raw) ? raw : (raw === '' ? null : Number(raw))
-    const updated = { ...profile, [field]: value, user_id: currentUser?.id }
-    setProfile(updated)
-    fetch(`${API_BASE}/api/profile`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    }).catch(() => {})
-  }
 
   async function saveReminders(values) {
     let nextValues = values
@@ -669,35 +555,8 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
       <div className="settings-separator" />
 
       <div className="settings-row">
-        <div className="settings-row-label-group">
-          <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Beginner mode</span>
-          <span className={`settings-row-sublabel ${isOffline ? 'is-disabled' : ''}`}>Lets the AI know you're new to the gym</span>
-        </div>
-        <button
-          type="button"
-          className="theme-toggle-pill beginner-toggle-pill"
-          role="switch"
-          aria-checked={beginnerMode}
-          aria-label="Beginner mode"
-          data-on={String(beginnerMode)}
-          disabled={isOffline}
-          onClick={() => {
-            const next = !beginnerMode
-            onChangeBeginnerMode(next)
-            saveField('beginner_mode', next ? 1 : 0)
-          }}
-        >
-          <div
-            className="theme-toggle-thumb"
-            style={{ transform: `translateX(${beginnerMode ? 100 : 0}%)` }}
-          />
-          <span className={`theme-toggle-option ${!beginnerMode ? 'is-active' : ''}`}>
-            <XIcon size={14} />
-          </span>
-          <span className={`theme-toggle-option ${beginnerMode ? 'is-active' : ''}`}>
-            <CheckIcon size={14} />
-          </span>
-        </button>
+        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>User workout profile</span>
+        <button className="bio-edit-btn regen-settings-btn" disabled={isOffline} onClick={onEditProfile}>Edit profile</button>
       </div>
 
       <div className="settings-separator" />
@@ -747,45 +606,6 @@ function SettingsPage({ themeMode, onChangeThemeMode, beginnerMode, onChangeBegi
           guardianEnabled={profile.streak_guardian_enabled}
           userId={currentUser?.id}
           onGuardianChange={(enabled) => setProfile((p) => ({ ...p, streak_guardian_enabled: enabled }))}
-        />
-      )}
-
-      <div className="settings-separator" />
-
-      <BioRow
-        label="Age"
-        value={profile.age != null ? String(profile.age) : ''}
-        onSave={(v) => saveField('age', v)}
-        placeholder="years"
-        disabled={isOffline}
-      />
-      <BioRow
-        label="Height"
-        value={profile.height != null ? String(profile.height) : ''}
-        onSave={(v) => saveField('height', v)}
-        placeholder="cm"
-        disabled={isOffline}
-      />
-      <BioRow
-        label="Weight"
-        value={profile.weight != null ? String(profile.weight) : ''}
-        onSave={(v) => saveField('weight', v)}
-        placeholder="kg"
-        disabled={isOffline}
-      />
-
-      <div className="settings-separator" />
-
-      <div className="settings-row">
-        <span className={`settings-row-label ${isOffline ? 'is-disabled' : ''}`}>Goals</span>
-        <button className="bio-edit-btn" disabled={isOffline} onClick={() => setGoalsOpen(true)}>Edit</button>
-      </div>
-
-      {goalsOpen && (
-        <GoalsModal
-          initialGoals={profile.goals}
-          onSave={(goals) => saveField('goals', goals)}
-          onClose={() => setGoalsOpen(false)}
         />
       )}
 

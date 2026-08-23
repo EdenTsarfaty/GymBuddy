@@ -15,6 +15,7 @@ import PlugOffIcon from './components/icons/PlugOffIcon'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
 import RegeneratePlanModal from './components/RegeneratePlanModal'
 import EditPlanView from './components/EditPlanView'
+import WorkoutProfilePage from './components/WorkoutProfilePage'
 import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
@@ -23,7 +24,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.0.6'
+const APP_VERSION = 'RC 0.8.1'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
@@ -909,18 +910,20 @@ function App() {
     <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''} ${view === 'editPlan' ? 'is-edit-plan' : ''}`}>
       {view !== 'editPlan' && (
       <header className="page-header">
-        {view === 'chat' || view === 'timer' ? (
+        {view === 'chat' || view === 'timer' || view === 'workoutProfile' ? (
           <>
             <button
               type="button"
               className="chat-back-btn"
-              onClick={() => window.history.back()}
-              aria-label="Back to workout"
+              onClick={() => (view === 'workoutProfile' ? setView('settings') : window.history.back())}
+              aria-label="Back"
             >
               <ChevronLeftIcon size={20} />
             </button>
             <div className="plan-picker">
-              <span className="today is-static">{view === 'timer' ? timerExercise?.name : chatExercise?.name}</span>
+              <span className="today is-static">
+                {view === 'timer' ? timerExercise?.name : view === 'workoutProfile' ? 'User Workout Profile' : chatExercise?.name}
+              </span>
             </div>
           </>
         ) : (
@@ -1154,12 +1157,12 @@ function App() {
           <SettingsPage
             themeMode={themeMode}
             onChangeThemeMode={setThemeMode}
-            beginnerMode={beginnerMode}
             onChangeBeginnerMode={(val) => {
               setBeginnerMode(val)
               localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
             }}
             onEditPlan={() => setView('editPlan')}
+            onEditProfile={() => setView('workoutProfile')}
             version={APP_VERSION}
             isOffline={isOffline}
             users={users}
@@ -1170,6 +1173,16 @@ function App() {
             }}
             flashStreakFreeze={settingsFlashToken}
             onStreakFreezeChange={() => setWorkoutLogRefreshKey((k) => k + 1)}
+          />
+        ) : view === 'workoutProfile' ? (
+          <WorkoutProfilePage
+            beginnerMode={beginnerMode}
+            onChangeBeginnerMode={(val) => {
+              setBeginnerMode(val)
+              localStorage.setItem(BEGINNER_MODE_STORAGE_KEY, String(val))
+            }}
+            isOffline={isOffline}
+            currentUser={currentUser}
           />
         ) : view === 'editPlan' ? (
           <EditPlanView

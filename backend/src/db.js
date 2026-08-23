@@ -142,6 +142,8 @@ try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_pending_at T
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_freeze_until TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_guardian_hash TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_guardian_salt TEXT') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN sex TEXT') } catch {}
+try { db.exec('ALTER TABLE user_profile ADD COLUMN medical_notes TEXT') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS push_subscriptions (
