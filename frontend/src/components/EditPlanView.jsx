@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -31,6 +32,7 @@ import AiSearchIcon from './icons/AiSearchIcon'
 import AiPhotoIcon from './icons/AiPhotoIcon'
 import CloudIcon from './icons/CloudIcon'
 import KebabIcon from './icons/KebabIcon'
+import PlanGeneratingOverlay from './PlanGeneratingOverlay'
 import XIcon from './icons/XIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -70,7 +72,7 @@ const STAT_DEFAULTS = { sets: 3, reps: 10, weight: 0, duration: 30 }
 // Display-only — never written back to the DB.
 function dayLabel(title, hasExercises) {
   if (title) return title
-  return hasExercises ? 'undefined' : 'Rest day'
+  return hasExercises ? 'Undefined' : 'Rest day'
 }
 
 function formatDuration(seconds) {
@@ -646,6 +648,84 @@ function DayPickerSheet({ title, currentDay, dayTitles, draft, onPick, onCancel 
         <button type="button" className="edit-plan-sheet-cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>
+  )
+}
+
+// Deliberately minimal — a checkbox and an optional textarea, reusing
+// RegeneratePlanModal's visual language (modal-box/regen-* classes) rather
+// than introducing new styling for what's a much smaller ask than the
+// whole-plan version. includeCurrent defaults on: comments like "swap the
+// leg press" mean nothing to the model without seeing what's currently
+// there, and even without comments, showing the current list steers the
+// regeneration away from landing on a near-identical plan by accident.
+function RegenerateDayModal({ dayTitle, onClose, onConfirm }) {
+  const [title, setTitle] = useState(dayTitle)
+  const [includeCurrent, setIncludeCurrent] = useState(true)
+  const [comments, setComments] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  async function handleConfirm() {
+    setGenerating(true)
+    try {
+      await onConfirm({ title: title.trim(), includeCurrent, comments: comments.trim() })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return createPortal(
+    <div className="modal-overlay" onMouseDown={onClose}>
+      <div className="modal-wrap" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        <div className="modal-box regen-modal">
+          <h2 className="regen-title">Regenerate day</h2>
+          <div className="regen-rows">
+            <div className="regen-row">
+              <span className="regen-label">Day title</span>
+              <input
+                type="text"
+                className="regen-day-title-input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Back and Biceps"
+              />
+            </div>
+            <div className="regen-row">
+              <span className="regen-label">Include current day plan</span>
+              <button
+                type="button"
+                className="theme-toggle-pill beginner-toggle-pill"
+                role="switch"
+                aria-checked={includeCurrent}
+                data-on={String(includeCurrent)}
+                onClick={() => setIncludeCurrent((v) => !v)}
+              >
+                <div className="theme-toggle-thumb" style={{ transform: `translateX(${includeCurrent ? 100 : 0}%)` }} />
+                <span className={`theme-toggle-option ${!includeCurrent ? 'is-active' : ''}`}>
+                  <XIcon size={14} />
+                </span>
+                <span className={`theme-toggle-option ${includeCurrent ? 'is-active' : ''}`}>
+                  <CheckIcon size={14} />
+                </span>
+              </button>
+            </div>
+            <label className="edit-plan-field">
+              <span>Comments (optional)</span>
+              <textarea
+                rows={3}
+                placeholder="e.g. swap the leg press, add more back volume…"
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+              />
+            </label>
+          </div>
+          <button className="goals-save-btn" onClick={handleConfirm} disabled={generating}>
+            {generating ? 'Generating…' : 'Generate'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1310,6 +1390,10 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const [actionError, setActionError] = useState(null)
   const [showGenerateMenu, setShowGenerateMenu] = useState(false)
   const [showMoreOptions, setShowMoreOptions] = useState(false)
+  const [regenerateDayOpen, setRegenerateDayOpen] = useState(false)
+  const [dayGenerating, setDayGenerating] = useState(false)
+  const [dayGenPhase, setDayGenPhase] = useState('thinking')
+  const [dayGenStructure, setDayGenStructure] = useState(null)
   // Tapping a card body (not its checkbox or drag handle) opens this single
   // exercise for field-level editing — distinct from selectedKeys, which is
   // the checkbox multi-select the bulk toolbar (Delete/Copy to/Move to) acts
@@ -1459,6 +1543,90 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     onDayTitleSaved?.(day, title)
   }
 
+  // Mirrors handleGenerate in App.jsx (used by whole-plan regenerate) step
+  // for step, just scoped to one day: get the exercise names first (no DB
+  // writes yet), show the same thinking → per-exercise-progress overlay,
+  // wipe the day's current exercises, then create each new one in parallel
+  // via the same /api/exercises/generate every other add-exercise flow uses
+  // — so the loading experience is the real thing, not a lookalike.
+  async function handleRegenerateDayConfirm({ title, includeCurrent, comments }) {
+    setRegenerateDayOpen(false)
+    const day = selectedDay
+    const previousTitle = dayTitles.get(day) || ''
+    const removedItems = draft[day].filter((it) => it.id != null)
+
+    setDayGenPhase('thinking')
+    setDayGenStructure(null)
+    setDayGenerating(true)
+
+    try {
+      // Saved (and pushed as its own undo entry, same as editing it from the
+      // header) before requesting names, so the day-regen prompt reads the
+      // new title straight from the DB rather than needing it threaded
+      // through as a separate parameter. Skipped entirely if left blank or
+      // unchanged — this field is optional, not "rename this day."
+      if (title && title !== previousTitle) {
+        await applyDayTitle(day, title)
+        pushUndo({ kind: 'dayTitle', day, before: previousTitle, after: title })
+      }
+      const dayTitle = title || previousTitle || day
+
+      const namesRes = await track(fetch(`${API_BASE}/api/plan/day/exercises`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, day, include_current: includeCurrent, comments }),
+      }))
+      if (!namesRes.ok) throw new Error('Failed to generate day')
+      const { names } = await namesRes.json()
+
+      setDayGenStructure([{ day, title: dayTitle, exercises: names, completed: 0, done: names.length === 0 }])
+      setDayGenPhase('generating')
+
+      if (removedItems.length > 0) {
+        await persistPlan({ deletes: removedItems.map((it) => it.id) })
+      }
+
+      const createdRows = []
+      await Promise.all(
+        names.map(async (name) => {
+          const res = await track(fetch(`${API_BASE}/api/exercises/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: name, day, user_id: userId }),
+          }))
+          if (res.ok) createdRows.push(await res.json())
+          setDayGenStructure((prev) => prev.map((d) => {
+            const completed = d.completed + 1
+            return { ...d, completed, done: completed >= d.exercises.length }
+          }))
+        }),
+      )
+
+      const createdWithKeys = createdRows
+        .map((row) => ({ ...row, _key: String(row.id) }))
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      setDraft((current) => ({ ...current, [day]: createdWithKeys }))
+      pushUndo({ kind: 'regenerateDay', day, removed: removedItems, created: createdRows })
+    } catch {
+      setActionError("Couldn't regenerate this day — check your connection and try again.")
+    } finally {
+      setDayGenerating(false)
+    }
+  }
+
+  // A day regenerate is really two toggles bundled as one user action (wipe
+  // the old exercises, create the new ones) — reuses setActive for both
+  // halves rather than inventing separate machinery. toRegenerated selects
+  // which side is "active": true = the regenerated state (created live,
+  // removed gone), false = back to what was there before.
+  async function applyRegenerateDay(entry, toRegenerated) {
+    if (toRegenerated) {
+      await Promise.all([setActive(entry.removed, false), setActive(entry.created, true)])
+    } else {
+      await Promise.all([setActive(entry.created, false), setActive(entry.removed, true)])
+    }
+  }
+
   async function handleUndo() {
     if (undoStack.length === 0) return
     const entry = undoStack[undoStack.length - 1]
@@ -1470,6 +1638,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false)
       else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.before)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.before)
+      else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, false)
     } catch {
       setActionError("Couldn't undo — check your connection and try again.")
     }
@@ -1486,6 +1655,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true)
       else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.after)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.after)
+      else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, true)
     } catch {
       setActionError("Couldn't redo — check your connection and try again.")
     }
@@ -2065,10 +2235,11 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                       <span>Regenerate plan</span>
                     </button>
                     <div className="edit-plan-generate-divider" />
-                    {/* Regenerating just the selected day needs its own new
-                        generation pipeline (see project notes) — not built
-                        yet, coming in a later step. */}
-                    <button type="button" className="edit-plan-generate-option" disabled>
+                    <button
+                      type="button"
+                      className="edit-plan-generate-option"
+                      onClick={() => { setShowGenerateMenu(false); setRegenerateDayOpen(true) }}
+                    >
                       <span>Regenerate day</span>
                     </button>
                   </div>
@@ -2173,6 +2344,18 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           onPick={handleMoveOrCopy}
           onCancel={() => setSheet(null)}
         />
+      )}
+
+      {regenerateDayOpen && (
+        <RegenerateDayModal
+          dayTitle={dayTitles.get(selectedDay) || ''}
+          onClose={() => setRegenerateDayOpen(false)}
+          onConfirm={handleRegenerateDayConfirm}
+        />
+      )}
+
+      {dayGenerating && (
+        <PlanGeneratingOverlay phase={dayGenPhase} planStructure={dayGenStructure} />
       )}
     </div>
   )

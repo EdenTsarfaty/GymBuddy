@@ -2381,6 +2381,24 @@
   gap: 6px;
 }
 
+.regen-day-title-input {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  width: 220px;
+  max-width: 60%;
+}
+
+.regen-day-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .regen-count-btn {
   display: flex;
   align-items: center;

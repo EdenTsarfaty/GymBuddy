@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { maybeSyncExerciseNames } = require('./wgerSync')
@@ -290,6 +290,44 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
   reply.code(201)
   return parseExerciseRow(created)
+})
+
+// Names-only, same role as POST /api/plan/structure but for a single day —
+// the day/title stays fixed (this doesn't touch the rest of the week), so
+// no DB writes happen here at all. The frontend drives the actual wipe +
+// per-exercise creation itself afterward (same as full-plan generation
+// does), reusing the existing deletes/plan and /api/exercises/generate
+// endpoints, so it can show the same day-progress overlay either way.
+fastify.post('/api/plan/day/exercises', async (request, reply) => {
+  const { user_id, day, include_current, comments } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  const profileRow = db.prepare('SELECT age, height, weight, goals, beginner_mode FROM user_profile WHERE id = ?').get(uid)
+  const profile = profileRow
+    ? { ...profileRow, goals: profileRow.goals ? JSON.parse(profileRow.goals) : [], beginner_mode: !!profileRow.beginner_mode }
+    : null
+
+  const dayPlan = db.prepare('SELECT title FROM day_plans WHERE user_id = ? AND day = ?').get(uid, day)
+  const dayTitle = dayPlan?.title || day
+
+  let currentNames
+  if (include_current) {
+    currentNames = db.prepare('SELECT name FROM exercises WHERE user_id = ? AND day = ? AND deleted_at IS NULL ORDER BY sort_order, id').all(uid, day).map((r) => r.name)
+  }
+
+  try {
+    const names = await generateDayExercises(profile, dayTitle, { currentExercises: currentNames, comments })
+    return { names }
+  } catch (err) {
+    logError('POST /api/plan/day/exercises', new Error(describeOpenAIError(err)))
+    reply.code(502)
+    return { error: 'Failed to generate day' }
+  }
 })
 
 // Same generation as POST /api/exercises/generate (same generateExerciseData

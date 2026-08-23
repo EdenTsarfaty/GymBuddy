@@ -247,7 +247,6 @@ ${settings.includeWarmUp ? '- The warm-up MUST be the very first exercise in the
 - Main exercises targeting that day's muscle groups
 ${settings.includeStretch ? '- The stretches MUST be the very last exercises in the list, after every main exercise, never interleaved among them — 2–3 stretches for the muscles worked (e.g. "Hip Flexor Stretch", "Lat Stretch", "Quad Stretch")' : ''}
 - Use common, recognisable names ("Bench Press", "Squat", "Lat Pulldown")
-- Do not repeat the same exercise across different days
 - Order matters: a muscle needs a breather before it's worked again within the same session, so don't stack consecutive exercises for the same muscle back to back — space them out with exercises for a different muscle in between. On a day focused on one major muscle group (e.g. a dedicated Legs day), apply the same idea one level down, at the sub-muscle level (quads, hamstrings, calves, glutes), so consecutive exercises don't repeatedly hit the same sub-muscle.
 
 ## Examples
@@ -270,6 +269,101 @@ ${settings.includeStretch ? '- The stretches MUST be the very last exercises in 
   })
 
   return JSON.parse(r3.choices[0].message.content)
+}
+
+// ── Single-day regeneration ─────────────────────────────────────────────────────
+
+const DAY_EXERCISES_SCHEMA = {
+  type: 'object',
+  properties: {
+    exercises: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['exercises'],
+  additionalProperties: false,
+}
+
+// Refreshes just one day's exercise list — the day/title itself is already
+// fixed (this doesn't touch the week's split), so unlike generatePlanStructure
+// this is a single-shot call, no multi-stage reasoning about the rest of the
+// week. currentExercises/comments are both optional: currentExercises gives
+// the model something concrete to react to (especially alongside comments —
+// "swap the leg press" means nothing without seeing what's currently there),
+// comments is the user's free-text steer. Neither being present just means a
+// from-scratch refresh of the day.
+async function generateDayExercises(profile, dayTitle, { currentExercises, comments } = {}) {
+  const hasComments = !!(comments && comments.trim())
+  const hasCurrent = !!(currentExercises && currentExercises.length > 0)
+
+  const lines = [
+    'You are an expert fitness coach refreshing a single day of an existing personalized weekly workout plan. The rest of the week is unchanged — only this one day is being regenerated.',
+  ]
+
+  // Surfaced up front, ahead of profile/goals — this is the actual reason
+  // the user asked for a regeneration, not background context, so it
+  // shouldn't be buried under it.
+  if (hasComments) {
+    lines.push('')
+    lines.push('## User\'s notes for this regeneration')
+    lines.push(`"${comments.trim()}"`)
+    lines.push('This is the main reason for the regeneration — address it directly.')
+  }
+
+  lines.push('')
+  lines.push('## User profile')
+
+  if (profile) {
+    if (profile.age != null)    lines.push(`Age: ${profile.age}`)
+    if (profile.height != null) lines.push(`Height: ${profile.height} cm`)
+    if (profile.weight != null) lines.push(`Weight: ${profile.weight} kg`)
+
+    const goals = Array.isArray(profile.goals) ? profile.goals : []
+    if (goals.length > 0) {
+      lines.push('')
+      lines.push('## Goals')
+      for (const id of goals) {
+        const label = GOAL_LABELS[id]
+        if (label) lines.push(`* ${label}`)
+      }
+    }
+
+    if (profile.beginner_mode) {
+      lines.push('')
+      lines.push('## Experience level: Beginner')
+      lines.push('Favour compound movements and simpler progressions. Avoid exercises that require significant technique (e.g. Olympic lifts). Give a slight preference to machine-based exercises over free-weight equivalents where a reasonable machine alternative exists.')
+    } else {
+      lines.push('')
+      lines.push('## Experience level: Intermediate / Advanced')
+    }
+  }
+
+  lines.push('')
+  lines.push('## This day')
+  lines.push(`Title: "${dayTitle}"`)
+  if (hasCurrent) {
+    lines.push(`Current exercises: ${currentExercises.join(', ')}`)
+  }
+
+  lines.push('')
+  lines.push('## Task')
+  lines.push(`Generate a fresh ordered list of exercise names for this day, matching the muscle-group focus of "${dayTitle}".`)
+  if (hasCurrent && hasComments) {
+    lines.push('Preserve as much of the current plan as possible — only change what\'s needed to address the notes above. Any exercise unrelated to the feedback should stay exactly as it is.')
+  } else if (hasCurrent) {
+    lines.push('There are no specific notes to address, so introduce variety instead: swap in different but comparable exercises for at least some of the current ones rather than reproducing the same list, while preserving each exercise\'s original intent — the same muscle group and movement pattern it targeted.')
+  }
+  lines.push('- The warm-up MUST be the very first exercise, position 1 — one cardio or mobility warm-up (e.g. "Treadmill Jog", "Rowing Machine", "Jumping Jacks")')
+  lines.push('- Main exercises targeting this day\'s muscle groups (6–8 for beginners, 8–10 for intermediate/advanced)')
+  lines.push('- The stretches MUST be the very last exercises, after every main exercise, never interleaved among them — 2–3 stretches for the muscles worked')
+  lines.push('- Use common, recognisable names ("Bench Press", "Squat", "Lat Pulldown")')
+  lines.push('- Order matters: a muscle needs a breather before it\'s worked again within the same session, so don\'t stack consecutive exercises for the same muscle back to back — space them out with exercises for a different muscle in between. On a day focused on one major muscle group, apply the same idea one level down, at the sub-muscle level (quads, hamstrings, calves, glutes), so consecutive exercises don\'t repeatedly hit the same sub-muscle.')
+
+  const data = await callOpenAI({
+    model: PLAN_MODEL,
+    messages: [{ role: 'user', content: lines.join('\n') }],
+    response_format: { type: 'json_schema', json_schema: { name: 'day_exercises', strict: true, schema: DAY_EXERCISES_SCHEMA } },
+  })
+
+  return JSON.parse(data.choices[0].message.content).exercises
 }
 
 // ── YouTube tool ──────────────────────────────────────────────────────────────
@@ -852,4 +946,4 @@ async function identifyExerciseFromPhoto(imageDataUrl) {
   return JSON.parse(data.choices[0].message.content).name
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto }
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto }
