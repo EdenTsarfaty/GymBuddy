@@ -170,6 +170,37 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
   const [photoFailed, setPhotoFailed] = useState(false)
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const photoExpandActive = expanded && !!photoUrl && !photoFailed
+  const isGifPhoto = !!photoUrl && /\.gif(\?|$)/i.test(photoUrl)
+  const [gifStaticFrame, setGifStaticFrame] = useState(null)
+
+  // GIFs animate regardless of display size, so a collapsed thumbnail would
+  // otherwise keep playing in the background. Snapshot the frame it loads
+  // on to a canvas and show that still frame while collapsed — swap back to
+  // the live animated src only once the card is expanded.
+  useEffect(() => {
+    if (!isGifPhoto || !photoUrl) { setGifStaticFrame(null); return }
+    let cancelled = false
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      if (cancelled) return
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        canvas.getContext('2d').drawImage(img, 0, 0)
+        setGifStaticFrame(canvas.toDataURL())
+      } catch {
+        // Tainted canvas (e.g. an external URL without permissive CORS) —
+        // fall back to always showing the live gif rather than breaking.
+        setGifStaticFrame(null)
+      }
+    }
+    img.src = photoUrl
+    return () => { cancelled = true }
+  }, [photoUrl, isGifPhoto])
+
+  const displayedPhotoSrc = isGifPhoto && !photoExpandActive && gifStaticFrame ? gifStaticFrame : photoUrl
   const statsRef = useRef(null)
   const statsFlipRectRef = useRef(null)
   const [editing, setEditing] = useState(false)
@@ -415,7 +446,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
       <div className={`workout-card-main ${photoExpandActive ? 'is-photo-expanded' : ''}`}>
         {photoUrl && !photoFailed && (
           <div className={`workout-card-photo-thumb ${photoExpandActive ? 'is-expanded' : ''}`}>
-            <img src={photoUrl} alt="" onError={() => setPhotoFailed(true)} />
+            <img src={displayedPhotoSrc} alt="" onError={() => setPhotoFailed(true)} />
           </div>
         )}
         <div className={`workout-card-header-content ${photoExpandActive ? 'is-stacked' : ''}`}>
