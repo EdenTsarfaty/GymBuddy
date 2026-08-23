@@ -87,11 +87,294 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
+  color: var(--text-muted);
   background: none;
   border: none;
   padding: 4px;
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.music-provider-btn.is-active {
+  color: var(--accent);
+}
+
+@media (hover: hover) {
+  .music-provider-btn:hover {
+    color: var(--accent);
+  }
+}
+
+/* Sized to its own content (grows with the grid, not a fixed/full-screen
+   width). Positioned via JS (position: fixed, left/top set inline) rather
+   than a CSS centering transform — a content-sized panel centered on an
+   icon that sits near the screen's edge would otherwise spill off it, so
+   its left offset is clamped to the app's own column in MusicProviderPanel.
+   The cone's position (--cone-left) is computed alongside it so it still
+   points at the icon even when the panel itself has been shifted to stay
+   on-screen. */
+.music-provider-panel {
+  background: var(--card-bg);
+  border: 1.5px solid var(--accent);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: var(--shadow-menu);
+  z-index: 20;
+  animation: music-provider-panel-in 0.15s ease-out;
+}
+
+/* No translateX here (unlike plan-menu-in) — this panel's horizontal
+   position is already an exact computed px value from JS, not a centering
+   transform, so baking one into the animation would offset it sideways for
+   the animation's duration and snap back when it ends. */
+@keyframes music-provider-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Speech-bubble cone pointing at the icon — two stacked triangles, the
+   larger accent one behind giving the illusion of a matching 1.5px border
+   on the smaller fill-colored one in front. */
+.music-provider-panel::before,
+.music-provider-panel::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: var(--cone-left, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+}
+
+.music-provider-panel::before {
+  border-bottom: 9px solid var(--accent);
+}
+
+.music-provider-panel::after {
+  margin-bottom: -1.5px;
+  border-left-width: 7.5px;
+  border-right-width: 7.5px;
+  border-bottom: 7.5px solid var(--card-bg);
+}
+
+/* Row count (up to 3) is decided in JS by how many rows are already full —
+   grid-template-rows is left to auto-generate so the panel's own height
+   only ever reflects the rows actually rendered. */
+.music-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  justify-items: center;
+  align-items: start;
+  gap: 20px;
+}
+
+.music-provider-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  color: var(--accent);
+  background: transparent;
+  border: 1.5px dashed var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.music-provider-add-btn:hover {
+  opacity: 0.75;
+}
+
+.music-link-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.music-link-artwork-wrap {
+  position: relative;
+}
+
+.music-link-artwork {
+  width: 112px;
+  height: 112px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.music-link-artwork-placeholder {
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+}
+
+/* Desktop only — mirrors .edit-plan-photo-remove's look (small dark circle,
+   top-right corner), revealed on hover since there's no long-press here. */
+.music-link-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .music-link-artwork-wrap:hover .music-link-remove-btn {
+    display: flex;
+  }
+}
+
+.music-link-remove-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+}
+
+/* Mobile only, shown while the panel is in remove-mode (entered via a
+   long-press on the header icon) — bigger and always visible since there's
+   no hover to reveal a small one with. */
+.music-link-remove-btn-big {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.music-link-title {
+  max-width: 112px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Empty-cell footprint: an artwork-sized box around the + button plus a
+   title-sized (single line) spacer, so it takes roughly the same space as
+   a filled cell instead of just floating as a small circle. */
+.music-link-cell-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.music-link-artwork-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 112px;
+}
+
+.music-link-title-spacer {
+  visibility: hidden;
+  -webkit-line-clamp: 1;
+  line-height: 1;
+}
+
+.music-link-cell.is-editing {
+  gap: 8px;
+}
+
+.music-link-input-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  text-align: center;
+}
+
+.music-link-input {
+  width: 100%;
+  /* Without this, the input's UA-default intrinsic min-width (well over
+     100px in most browsers, regardless of placeholder/value) can force its
+     grid column wider than the other cells — and since the panel itself is
+     sized to its content, the whole thing balloons with it. Confirmed by
+     hand: anything above 110px here widens the panel. */
+  min-width: 0;
+  max-width: 110px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: var(--chip-bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.music-link-input:focus {
+  outline: none;
+}
+
+.music-link-input-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.music-link-input-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.music-link-input-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.music-link-input-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.music-link-error {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e5484d;
+  text-align: center;
 }
 
 .streak-badge {
@@ -373,7 +656,10 @@
 
 @media (pointer: coarse) {
   .catchup-mobile-label {
-    display: inline;
+    display: block;
+    max-width: 160px;
+    white-space: normal;
+    text-align: center;
     color: #da9734;
     font-weight: 700;
   }

@@ -11,6 +11,7 @@ import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import FlameIcon from './components/icons/FlameIcon'
 import MusicProviderIcon from './components/icons/MusicProviderIcon'
+import MusicProviderPanel from './components/MusicProviderPanel'
 import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
@@ -25,7 +26,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.1.2'
+const APP_VERSION = 'RC 0.8.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -240,6 +241,8 @@ function App() {
   const [isOffline, setIsOffline] = useState(false)
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false)
+  const [musicPanelRemoveMode, setMusicPanelRemoveMode] = useState(false)
   const [planView, setPlanView] = useState('week')
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [selectedDay, setSelectedDay] = useState(today)
@@ -267,6 +270,11 @@ function App() {
   const pendingEditsRef = useRef(pendingEdits)
   const currentUserRef = useRef(currentUser)
   const planMenuRef = useRef(null)
+  const pageRef = useRef(null)
+  const musicButtonRef = useRef(null)
+  const musicPanelElRef = useRef(null)
+  const musicLongPressTimerRef = useRef(null)
+  const musicLongPressFiredRef = useRef(false)
 
   useEffect(() => {
     pendingEditsRef.current = pendingEdits
@@ -671,6 +679,59 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [planMenuOpen])
 
+  useEffect(() => {
+    if (!musicPanelOpen) return
+
+    function handleClickOutside(e) {
+      if (
+        musicButtonRef.current && !musicButtonRef.current.contains(e.target) &&
+        musicPanelElRef.current && !musicPanelElRef.current.contains(e.target)
+      ) {
+        setMusicPanelOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [musicPanelOpen])
+
+  // Remove-mode is only ever entered via the long-press below — closing the
+  // panel any other way (click-outside, a plain tap) should always drop
+  // back to it, so it never carries over into a later, freshly-opened panel.
+  useEffect(() => {
+    if (!musicPanelOpen) setMusicPanelRemoveMode(false)
+  }, [musicPanelOpen])
+
+  function toggleMusicPanel() {
+    if (musicLongPressFiredRef.current) {
+      // The pointerup that follows a long-press also fires a click — this
+      // swallows that one so it doesn't immediately re-toggle what the
+      // long-press just opened.
+      musicLongPressFiredRef.current = false
+      return
+    }
+    setMusicPanelRemoveMode(false)
+    setMusicPanelOpen((open) => !open)
+  }
+
+  // No native "long press" event exists — this is the standard DIY version:
+  // a timer started on pointerdown, cancelled on pointerup/leave/cancel.
+  // Scoped to touch/pen only (pointerType check) since desktop already has
+  // its own removal affordance (hover-to-reveal the small X on each cell).
+  function handleMusicPointerDown(e) {
+    if (e.pointerType === 'mouse') return
+    musicLongPressFiredRef.current = false
+    musicLongPressTimerRef.current = setTimeout(() => {
+      musicLongPressFiredRef.current = true
+      setMusicPanelRemoveMode(true)
+      setMusicPanelOpen(true)
+    }, 500)
+  }
+
+  function cancelMusicLongPress() {
+    clearTimeout(musicLongPressTimerRef.current)
+  }
+
   function closePlanMenu() {
     setPlanMenuOpen(false)
     setPlanMenuScreen('root')
@@ -914,7 +975,7 @@ function App() {
   }
 
   return (
-    <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''} ${view === 'editPlan' ? 'is-edit-plan' : ''}`}>
+    <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''} ${view === 'editPlan' ? 'is-edit-plan' : ''}`} ref={pageRef}>
       {view !== 'editPlan' && (
       <header className="page-header">
         {view === 'chat' || view === 'timer' || view === 'workoutProfile' ? (
@@ -1113,9 +1174,33 @@ function App() {
 
         <div className="header-actions">
           {view !== 'settings' && musicProvider !== 'none' && (
-            <button type="button" className="music-provider-btn" aria-label="Music provider">
-              <MusicProviderIcon provider={musicProvider} size={28} />
-            </button>
+            <div className="music-provider-picker">
+              <button
+                type="button"
+                ref={musicButtonRef}
+                className={`music-provider-btn ${musicPanelOpen ? 'is-active' : ''}`}
+                onClick={toggleMusicPanel}
+                onPointerDown={handleMusicPointerDown}
+                onPointerUp={cancelMusicLongPress}
+                onPointerLeave={cancelMusicLongPress}
+                onPointerCancel={cancelMusicLongPress}
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label="Music provider"
+                aria-expanded={musicPanelOpen}
+              >
+                <MusicProviderIcon provider={musicProvider} size={28} />
+              </button>
+
+              {musicPanelOpen && (
+                <MusicProviderPanel
+                  userId={currentUser?.id}
+                  panelRef={musicPanelElRef}
+                  anchorRef={musicButtonRef}
+                  boundsRef={pageRef}
+                  removeMode={musicPanelRemoveMode}
+                />
+              )}
+            </div>
           )}
           {view !== 'settings' && (
             <div

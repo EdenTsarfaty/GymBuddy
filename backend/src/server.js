@@ -14,6 +14,7 @@ const streakGuardian = require('./streakGuardian')
 const exercisePhotos = require('./exercisePhotos')
 const push = require('./push')
 const { isTailscaleConnected } = require('./tailscale')
+const { resolveMusicLink, MusicLinkError } = require('./musicLinks')
 
 // Bundled at build time from wger.de's public exercise database (English
 // names only, deduped — see conversation history for how this was pulled:
@@ -448,6 +449,66 @@ fastify.delete('/api/day-plans/:day', async (request, reply) => {
 
   db.prepare('DELETE FROM day_plans WHERE user_id = ? AND day = ?').run(uid, day)
   return { day }
+})
+
+const MUSIC_LINK_SLOTS = 6
+
+fastify.get('/api/music-links', async (request) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  return db.prepare(
+    'SELECT slot_index, provider, url, type, title, thumbnail_url FROM music_links WHERE user_id = ? ORDER BY slot_index',
+  ).all(uid)
+})
+
+// Resolves the pasted link against the provider's own servers (currently
+// just Spotify) and upserts it into the slot in one call — the frontend
+// never sees an intermediate "preview before saving" state.
+fastify.put('/api/music-links/:slotIndex', async (request, reply) => {
+  const slotIndex = Number(request.params.slotIndex)
+  const { user_id, provider, url } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= MUSIC_LINK_SLOTS) {
+    reply.code(400)
+    return { error: 'Invalid slot' }
+  }
+  if (!provider || !url) {
+    reply.code(400)
+    return { error: 'provider and url are required' }
+  }
+
+  let resolved
+  try {
+    resolved = await resolveMusicLink(provider, url)
+  } catch (err) {
+    if (err instanceof MusicLinkError) {
+      reply.code(400)
+      return { error: err.message }
+    }
+    logError('PUT /api/music-links/:slotIndex', err)
+    reply.code(502)
+    return { error: 'Could not resolve that link right now — try again in a bit.' }
+  }
+
+  db.prepare(
+    `INSERT INTO music_links (user_id, slot_index, provider, url, type, title, thumbnail_url) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, slot_index) DO UPDATE SET provider = excluded.provider, url = excluded.url, type = excluded.type, title = excluded.title, thumbnail_url = excluded.thumbnail_url`,
+  ).run(uid, slotIndex, provider, resolved.resolvedUrl, resolved.type, resolved.title, resolved.thumbnail_url)
+
+  return { slot_index: slotIndex, provider, url: resolved.resolvedUrl, type: resolved.type, title: resolved.title, thumbnail_url: resolved.thumbnail_url }
+})
+
+fastify.delete('/api/music-links/:slotIndex', async (request, reply) => {
+  const slotIndex = Number(request.params.slotIndex)
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= MUSIC_LINK_SLOTS) {
+    reply.code(400)
+    return { error: 'Invalid slot' }
+  }
+
+  db.prepare('DELETE FROM music_links WHERE user_id = ? AND slot_index = ?').run(uid, slotIndex)
+  return { slot_index: slotIndex }
 })
 
 const PROFILE_COLUMNS =

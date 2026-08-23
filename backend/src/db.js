@@ -155,6 +155,23 @@ db.exec(`
   )
 `)
 
+// One row per filled slot in the home header's music-provider grid (6 slots,
+// indices 0-5) — an empty slot just has no row. `provider`/`type` are plain
+// text rather than enums so a future non-Spotify provider or content type
+// doesn't need a migration.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS music_links (
+    user_id       INTEGER NOT NULL,
+    slot_index    INTEGER NOT NULL,
+    provider      TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    type          TEXT,
+    title         TEXT,
+    thumbnail_url TEXT,
+    PRIMARY KEY (user_id, slot_index)
+  )
+`)
+
 
 const seedUser = (userId, exercises) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?').get(userId).count
