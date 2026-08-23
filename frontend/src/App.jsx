@@ -10,6 +10,7 @@ import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import FlameIcon from './components/icons/FlameIcon'
+import MusicProviderIcon from './components/icons/MusicProviderIcon'
 import WorkoutCompleteCelebration from './components/WorkoutCompleteCelebration'
 import PlugOffIcon from './components/icons/PlugOffIcon'
 import PlanGeneratingOverlay from './components/PlanGeneratingOverlay'
@@ -24,9 +25,10 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.1.1'
+const APP_VERSION = 'RC 0.8.1.2'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
+const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
 const STREAK_FREEZE_SUSPEND_STORAGE_KEY = 'gymbuddy-streak-freeze-suspended-until'
@@ -171,6 +173,10 @@ function getInitialBeginnerMode() {
   return localStorage.getItem(BEGINNER_MODE_STORAGE_KEY) === 'true'
 }
 
+function getInitialMusicProvider() {
+  return localStorage.getItem(MUSIC_PROVIDER_STORAGE_KEY) || 'none'
+}
+
 function getInitialThemeMode() {
   const stored = localStorage.getItem(THEME_MODE_STORAGE_KEY)
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
@@ -188,6 +194,7 @@ function App() {
   const [view, setView] = useState('home')
   const [themeMode, setThemeMode] = useState(getInitialThemeMode)
   const [beginnerMode, setBeginnerMode] = useState(getInitialBeginnerMode)
+  const [musicProvider, setMusicProvider] = useState(getInitialMusicProvider)
   const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(getInitialThemeMode()))
   const [users, setUsers] = useState([])
   const [currentUser, setCurrentUser] = useState(null)
@@ -1105,6 +1112,11 @@ function App() {
         )}
 
         <div className="header-actions">
+          {view !== 'settings' && musicProvider !== 'none' && (
+            <button type="button" className="music-provider-btn" aria-label="Music provider">
+              <MusicProviderIcon provider={musicProvider} size={28} />
+            </button>
+          )}
           {view !== 'settings' && (
             <div
               className={`streak-badge ${!streak.current_streak ? 'is-inactive' : ''}`}
@@ -1163,6 +1175,11 @@ function App() {
             }}
             onEditPlan={() => setView('editPlan')}
             onEditProfile={() => setView('workoutProfile')}
+            musicProvider={musicProvider}
+            onChangeMusicProvider={(id) => {
+              setMusicProvider(id)
+              localStorage.setItem(MUSIC_PROVIDER_STORAGE_KEY, id)
+            }}
             version={APP_VERSION}
             isOffline={isOffline}
             users={users}

@@ -106,6 +106,68 @@ function UserPicker({ users, currentUser, onChangeUser, disabled }) {
   )
 }
 
+const MUSIC_PROVIDERS = [
+  { id: 'none', name: 'None' },
+  { id: 'spotify', name: 'Spotify' },
+]
+
+// Same dropdown shape/behavior as UserPicker above (open state, click-outside
+// to close, filters the current selection out of its own menu) — just
+// pointed at a fixed option list instead of the users array.
+function MusicProviderPicker({ value, onChange, disabled }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const current = MUSIC_PROVIDERS.find((p) => p.id === value) || MUSIC_PROVIDERS[0]
+
+  return (
+    <div className="settings-row">
+      <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>Music Provider</span>
+      <div className="user-picker" ref={ref}>
+        <button
+          className={`user-picker-pill ${open ? 'is-open' : ''}`}
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          disabled={disabled}
+        >
+          <span>{current.name}</span>
+          <span className={`user-picker-chevron ${open ? 'is-open' : ''}`}>
+            <ChevronLeftIcon size={12} />
+          </span>
+        </button>
+
+        {open && (
+          <div className="user-picker-menu" role="listbox">
+            {MUSIC_PROVIDERS.filter((p) => p.id !== current.id).map((provider, i) => (
+              <div key={provider.id}>
+                {i > 0 && <div className="user-picker-separator" />}
+                <button
+                  className="user-picker-option"
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => { onChange(provider.id); setOpen(false) }}
+                >
+                  {provider.name}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const MINUTE_OPTIONS = ['00', '15', '30', '45']
 const PROTEIN_HOUR_OPTIONS = [0, 1, 2, 3]
 
@@ -432,7 +494,7 @@ function StreakFreezeModal({ onActivate, onClose, guardianEnabled, userId, onGua
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEditPlan, onEditProfile, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
+function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEditPlan, onEditProfile, musicProvider, onChangeMusicProvider, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
@@ -608,6 +670,14 @@ function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEd
           onGuardianChange={(enabled) => setProfile((p) => ({ ...p, streak_guardian_enabled: enabled }))}
         />
       )}
+
+      <div className="settings-separator" />
+
+      <MusicProviderPicker
+        value={musicProvider}
+        onChange={onChangeMusicProvider}
+        disabled={isOffline}
+      />
 
       <div className="settings-separator" />
 
