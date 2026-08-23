@@ -131,7 +131,10 @@ function MusicProviderPicker({ value, onChange, disabled }) {
 
   return (
     <div className="settings-row">
-      <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>Music Provider</span>
+      <div className="settings-row-label-group">
+        <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>Music Provider</span>
+        <span className={`settings-row-sublabel ${disabled ? 'is-disabled' : ''}`}>Lets you add homescreen shortcuts to your favorite playlists or podcasts</span>
+      </div>
       <div className="user-picker" ref={ref}>
         <button
           className={`user-picker-pill ${open ? 'is-open' : ''}`}

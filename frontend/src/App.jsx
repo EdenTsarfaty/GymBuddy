@@ -1194,6 +1194,7 @@ function App() {
               {musicPanelOpen && (
                 <MusicProviderPanel
                   userId={currentUser?.id}
+                  provider={musicProvider}
                   panelRef={musicPanelElRef}
                   anchorRef={musicButtonRef}
                   boundsRef={pageRef}

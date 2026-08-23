@@ -176,6 +176,24 @@
   gap: 20px;
 }
 
+/* Desktop already has a visible affordance (hover reveals the small X) — this
+   is only for touch, where the long-press-to-remove gesture has no other
+   hint that it exists. */
+.music-provider-tip {
+  display: none;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 26px 0 0;
+}
+
+@media (pointer: coarse) {
+  .music-provider-tip {
+    display: block;
+  }
+}
+
 .music-provider-add-btn {
   display: flex;
   align-items: center;
@@ -208,6 +226,18 @@
 
 .music-link-artwork-wrap {
   position: relative;
+}
+
+.music-link-artwork-link {
+  display: block;
+  border-radius: 10px;
+  transition: opacity 0.15s ease;
+}
+
+@media (hover: hover) {
+  .music-link-artwork-link:hover {
+    opacity: 0.8;
+  }
 }
 
 .music-link-artwork {
@@ -1873,13 +1903,13 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
 }
 
 .settings-row-sublabel {
   font-size: 12px;
   font-weight: 400;
   color: var(--text-muted);
-  white-space: nowrap;
 }
 
 .settings-row:has(.settings-row-label-group) {

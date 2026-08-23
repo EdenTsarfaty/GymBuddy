@@ -81,11 +81,20 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
     return (
       <div className="music-link-cell is-filled">
         <div className="music-link-artwork-wrap">
-          {slot.thumbnail_url ? (
-            <img src={slot.thumbnail_url} alt="" className="music-link-artwork" />
-          ) : (
-            <div className="music-link-artwork music-link-artwork-placeholder" />
-          )}
+          <a
+            href={slot.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="music-link-artwork-link"
+            aria-label={slot.title ? `Open ${slot.title}` : 'Open link'}
+            onClick={(e) => { if (removeMode) e.preventDefault() }}
+          >
+            {slot.thumbnail_url ? (
+              <img src={slot.thumbnail_url} alt="" className="music-link-artwork" />
+            ) : (
+              <div className="music-link-artwork music-link-artwork-placeholder" />
+            )}
+          </a>
           {/* Desktop: revealed on hover only (see the hover:hover media
               query in CSS — a touch device never matches it). */}
           <button
@@ -181,7 +190,8 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
 // Starts hidden and re-measures whenever the content that determines its
 // size changes (slot data loading in is the main one — the grid is a lot
 // wider once real artwork/titles replace the plain "+" buttons).
-function MusicProviderPanel({ userId, panelRef, anchorRef, boundsRef, removeMode }) {
+function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, removeMode }) {
+  const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Music Provider'
   const [slots, setSlots] = useState({})
   const [positionStyle, setPositionStyle] = useState({ visibility: 'hidden' })
   const [coneLeft, setConeLeft] = useState(0)
@@ -212,7 +222,7 @@ function MusicProviderPanel({ userId, panelRef, anchorRef, boundsRef, removeMode
 
     setConeLeft(anchorRect.left + anchorRect.width / 2 - left)
     setPositionStyle({ position: 'fixed', top: anchorRect.bottom + 14, left, visibility: 'visible' })
-  }, [slots])
+  }, [slots, removeMode])
 
   return (
     <div
@@ -237,6 +247,9 @@ function MusicProviderPanel({ userId, panelRef, anchorRef, boundsRef, removeMode
           />
         ))}
       </div>
+      {!removeMode && (
+        <p className="music-provider-tip">Tip: hold the {providerLabel} button to remove a link.</p>
+      )}
     </div>
   )
 }
