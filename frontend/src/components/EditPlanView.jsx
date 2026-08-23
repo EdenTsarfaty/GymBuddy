@@ -659,7 +659,7 @@ function DraggableDayPill({ day, label, active, draggable, onClick }) {
 // slot is itself draggable — pulling it back out to the day row removes it
 // from the chain, leaving a hole that must be refilled before the chain can
 // grow further.
-function ReorderBlueprintSlot({ index, day, activeTarget, colored, invalid, canDrop }) {
+function ReorderBlueprintSlot({ index, day, activeTarget, colored, invalid, canDrop, active, onSelect }) {
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `reorder-slot-${index}`,
     disabled: !canDrop,
@@ -677,7 +677,8 @@ function ReorderBlueprintSlot({ index, day, activeTarget, colored, invalid, canD
   return (
     <div
       ref={setRefs}
-      className={`edit-plan-reorder-slot ${day ? 'is-filled' : ''} ${activeTarget ? 'is-target' : ''} ${colored ? 'is-colored' : ''} ${isOver ? 'is-over' : ''} ${invalid && day ? 'is-invalid' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      className={`edit-plan-reorder-slot ${day ? 'is-filled' : ''} ${activeTarget ? 'is-target' : ''} ${colored ? 'is-colored' : ''} ${isOver ? 'is-over' : ''} ${invalid && day ? 'is-invalid' : ''} ${isDragging ? 'is-dragging' : ''} ${active ? 'is-selected' : ''}`}
+      onClick={day ? () => onSelect?.(day) : undefined}
       {...(day ? attributes : {})}
       {...(day ? listeners : {})}
     >
@@ -2296,6 +2297,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   function cancelReorder() {
     setDayReorderMode(false)
     setReorderChain([])
+    setShowMoreOptions(false)
   }
 
   // Reuses the existing 'fields' undo entry shape — this is just a multi-day
@@ -2322,7 +2324,15 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       after[destDay] = before[sourceDay].map((item) => ({ ...item, day: destDay }))
       titleAfter[destDay] = titleBefore[sourceDay]
     }
+    // Exiting reorder mode has to land in the very same render as the
+    // optimistic draft update below — otherwise there's a brief window
+    // where computeChainValidity re-reads the now-already-swapped draft
+    // against the still-unset reorderChain and misfires "day is not empty"
+    // on a perfectly legal chain.
     setDraft((current) => ({ ...current, ...after }))
+    setDayReorderMode(false)
+    setReorderChain([])
+    setShowMoreOptions(false)
     const updates = []
     for (const day of Object.keys(after)) {
       after[day].forEach((item, index) => {
@@ -2342,8 +2352,6 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           changedTitleDays.map((day) => [day, { before: titleBefore[day], after: titleAfter[day] }]),
         ),
       })
-      setDayReorderMode(false)
-      setReorderChain([])
     } catch {
       setDraft((current) => ({ ...current, ...before }))
       setActionError("Couldn't reorder days — check your connection and try again.")
@@ -2623,6 +2631,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                   colored={!!reorderHoleSpan && i >= reorderHoleSpan.start && i <= reorderHoleSpan.end}
                   invalid={chainValidity === false}
                   canDrop={isSlotDroppable(i)}
+                  active={!!reorderChain[i] && selectedDay === reorderChain[i]}
+                  onSelect={setSelectedDay}
                 />
               </div>
             ))}

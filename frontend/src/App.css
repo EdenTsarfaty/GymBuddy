@@ -3393,6 +3393,7 @@
   font-weight: 700;
   color: var(--text-h);
   margin: 0;
+  white-space: nowrap;
 }
 
 .edit-plan-day-subtitle {
@@ -3628,6 +3629,11 @@
   background: var(--chip-bg);
   cursor: grab;
   touch-action: none;
+}
+
+.edit-plan-reorder-slot.is-filled.is-selected {
+  color: var(--bg);
+  background: var(--accent);
 }
 
 .edit-plan-reorder-slot.is-dragging {
