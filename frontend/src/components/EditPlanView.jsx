@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { API_BASE } from '../apiBase'
@@ -557,10 +557,10 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
   )
 }
 
-function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onManualAdd, onPhotoAdd, userId }) {
+function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onManualAdd, onPhotoAdd, userId, readOnly }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item._key,
-    disabled: item.isPendingAdd,
+    disabled: item.isPendingAdd || readOnly,
   })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -587,27 +587,31 @@ function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onM
     <div
       ref={setNodeRef}
       style={style}
-      className={`edit-plan-card ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`}
-      onClick={() => onOpenEdit(item._key)}
+      className={`edit-plan-card ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''} ${readOnly ? 'is-readonly' : ''}`}
+      onClick={readOnly ? undefined : () => onOpenEdit(item._key)}
     >
-      <button
-        type="button"
-        className="edit-plan-drag-handle"
-        aria-label="Drag to reorder"
-        onClick={(e) => e.stopPropagation()}
-        {...attributes}
-        {...listeners}
-      >
-        <GripIcon size={16} />
-      </button>
-      <button
-        type="button"
-        className={`edit-plan-checkbox ${selected ? 'is-checked' : ''}`}
-        onClick={(e) => { e.stopPropagation(); onToggleSelect(item._key) }}
-        aria-label={selected ? 'Deselect exercise' : 'Select exercise'}
-      >
-        {selected && <CheckIcon size={12} />}
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          className="edit-plan-drag-handle"
+          aria-label="Drag to reorder"
+          onClick={(e) => e.stopPropagation()}
+          {...attributes}
+          {...listeners}
+        >
+          <GripIcon size={16} />
+        </button>
+      )}
+      {!readOnly && (
+        <button
+          type="button"
+          className={`edit-plan-checkbox ${selected ? 'is-checked' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(item._key) }}
+          aria-label={selected ? 'Deselect exercise' : 'Select exercise'}
+        >
+          {selected && <CheckIcon size={12} />}
+        </button>
+      )}
       {Icon && <Icon size={20} className="edit-plan-card-icon" />}
       <h3 className="edit-plan-card-title">{item.name}</h3>
       <div className="edit-plan-card-stats">
@@ -620,6 +624,88 @@ function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onM
           <span className="edit-plan-stat">{Math.round(item.weight)} kg</span>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+// Extracted so useDraggable can be called per-pill (hooks can't run inside
+// the existing .map() callback). Stays clickable for day preview even while
+// draggable — dnd-kit's shared PointerSensor activationConstraint (distance:
+// 4) already disambiguates a tap from a drag.
+function DraggableDayPill({ day, label, active, draggable, onClick }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `day-source-${day}`,
+    data: { source: 'day-collection', day },
+    disabled: !draggable,
+  })
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={`edit-plan-day-pill ${active ? 'is-active' : ''} ${isDragging ? 'is-dragging' : ''} ${draggable ? 'is-draggable' : ''}`}
+      onClick={onClick}
+      {...attributes}
+      {...listeners}
+    >
+      {label}
+    </button>
+  )
+}
+
+// One blueprint slot in the day-reorder chain. Only the single leftmost
+// unfilled slot (`activeTarget`) is a real droppable target — every other
+// empty slot is a muted, non-interactive placeholder that just communicates
+// "more room here" and enforces strict left-to-right fill order. A filled
+// slot is itself draggable — pulling it back out to the day row removes it
+// from the chain, leaving a hole that must be refilled before the chain can
+// grow further.
+function ReorderBlueprintSlot({ index, day, activeTarget, colored, invalid, canDrop }) {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `reorder-slot-${index}`,
+    disabled: !canDrop,
+  })
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `reorder-chain-${index}`,
+    data: { source: 'reorder-chain', chainIndex: index },
+    disabled: !day,
+  })
+  const setRefs = (node) => { setDropRef(node); setDragRef(node) }
+  // A truly empty element collapses its line box in most browsers, making
+  // unfilled slots shorter than filled ones — a non-breaking space keeps the
+  // same font metrics (and therefore height) as a real day label.
+  const label = day ? WEEKDAYS_SHORT[WEEKDAYS.indexOf(day)] : ' '
+  return (
+    <div
+      ref={setRefs}
+      className={`edit-plan-reorder-slot ${day ? 'is-filled' : ''} ${activeTarget ? 'is-target' : ''} ${colored ? 'is-colored' : ''} ${isOver ? 'is-over' : ''} ${invalid && day ? 'is-invalid' : ''} ${isDragging ? 'is-dragging' : ''}`}
+      {...(day ? attributes : {})}
+      {...(day ? listeners : {})}
+    >
+      {label}
+    </div>
+  )
+}
+
+// Droppable wrapper around the day-pills row — dropping a filled blueprint
+// slot here (dragging it back "to the collection of days") removes it from
+// the chain.
+function DayCollectionZone({ children, isEmpty }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'day-collection' })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`edit-plan-day-pills ${isEmpty ? 'is-empty' : ''} ${isOver ? 'is-drop-target' : ''}`}
+    >
+      {isEmpty ? (
+        // Invisible — reserves exactly a pill's box height (same padding,
+        // border, font metrics) via a real nbsp text node so the row never
+        // collapses when there's nothing left to show.
+        <span className="edit-plan-day-pill edit-plan-day-pills-hint" aria-hidden="true">
+          Drop here to remove a day
+        </span>
+      ) : (
+        children
+      )}
     </div>
   )
 }
@@ -1394,6 +1480,16 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const [dayGenerating, setDayGenerating] = useState(false)
   const [dayGenPhase, setDayGenPhase] = useState('thinking')
   const [dayGenStructure, setDayGenStructure] = useState(null)
+  // Day reordering: reorderChain is an ordered list of day names describing
+  // a flow — chain[i]'s exercises move to chain[i+1]. A closed loop
+  // (chain[0] === chain[last]) is a safe swap/rotation; an open chain empties
+  // chain[0] and requires chain[last] to have been empty beforehand.
+  const [dayReorderMode, setDayReorderMode] = useState(false)
+  const [reorderChain, setReorderChain] = useState([])
+  const [applyingReorder, setApplyingReorder] = useState(false)
+  const [activeDragDay, setActiveDragDay] = useState(null)
+  const [activeDragSource, setActiveDragSource] = useState(null)
+  const [activeDragIndex, setActiveDragIndex] = useState(null)
   // Tapping a card body (not its checkbox or drag handle) opens this single
   // exercise for field-level editing — distinct from selectedKeys, which is
   // the checkbox multi-select the bulk toolbar (Delete/Copy to/Move to) acts
@@ -1498,7 +1594,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     }
   }
 
-  async function applyFieldsSnapshot(days, useAfter) {
+  async function applyFieldsSnapshot(days, useAfter, titles) {
     setDraft((current) => {
       const next = { ...current }
       for (const day of Object.keys(days)) next[day] = useAfter ? days[day].after : days[day].before
@@ -1512,6 +1608,11 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       })
     }
     if (updates.length > 0) await persistPlan({ updates })
+    if (titles) {
+      await Promise.all(
+        Object.keys(titles).map((day) => setDayTitle(day, useAfter ? titles[day].after : titles[day].before)),
+      )
+    }
   }
 
   // Re-points `photo` at a previously-known value (a filename, a URL, or
@@ -1531,6 +1632,22 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       ...current,
       [day]: current[day].map((it) => (it._key === key ? { ...it, photo } : it)),
     }))
+  }
+
+  // The PUT endpoint rejects a blank title outright (it's meant for the
+  // header's rename field, which never submits empty) — clearing a title
+  // back to the "rest day"/"undefined" default goes through DELETE instead.
+  // Anywhere a title is being set from data rather than typed by the user
+  // (e.g. day reordering) needs to route through this, not applyDayTitle
+  // directly, since the new value might legitimately be ''.
+  async function setDayTitle(day, title) {
+    if (!title) {
+      const res = await track(fetch(`${API_BASE}/api/day-plans/${day}?user_id=${userId}`, { method: 'DELETE' }))
+      if (!res.ok) throw new Error('Clear failed')
+      onDayTitleSaved?.(day, '')
+      return
+    }
+    await applyDayTitle(day, title)
   }
 
   async function applyDayTitle(day, title) {
@@ -1635,7 +1752,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setSelectedKeys(new Set())
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'delete')
-      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false)
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false, entry.titles)
       else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.before)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.before)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, false)
@@ -1652,7 +1769,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setSelectedKeys(new Set())
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'create')
-      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true)
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true, entry.titles)
       else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.after)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.after)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, true)
@@ -1978,6 +2095,10 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const chainValidity = computeChainValidity(reorderChain)
+  const reorderActiveIndex = activeSlotIndex(reorderChain)
+  const reorderHoleSpan = firstHoleSpan(reorderChain)
+  const reorderSlotCount = Math.min(8, Math.max(3, lastFilledIndex(reorderChain) + 2))
 
   function toggleSelect(key) {
     setSelectedKeys((current) => {
@@ -2020,6 +2141,214 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     } catch {
       setDraft((current) => ({ ...current, [selectedDay]: list }))
       setActionError("Couldn't save the new order — check your connection and try again.")
+    }
+  }
+
+  // Index of the last filled (non-null) slot, or -1 if the chain is empty.
+  // Trailing nulls beyond this point are just unallocated buffer — never a
+  // "hole".
+  function lastFilledIndex(chain) {
+    for (let i = chain.length - 1; i >= 0; i--) if (chain[i] != null) return i
+    return -1
+  }
+
+  // The one real interactive target: the leftmost unfilled index before the
+  // end of the chain (a hole) if one exists, otherwise the next new slot
+  // right after the end. Enforces "fill holes first, then grow at the end"
+  // with no extra bookkeeping.
+  function activeSlotIndex(chain) {
+    const last = lastFilledIndex(chain)
+    for (let i = 0; i < last; i++) if (chain[i] == null) return i
+    return last + 1
+  }
+
+  // The contiguous run of empty cells starting at the first hole, or null if
+  // there's no hole (the active slot is just the next-to-grow position at
+  // the end). Only this first hole gets the colored highlight — any further
+  // hole stays muted until this one is filled.
+  function firstHoleSpan(chain) {
+    const last = lastFilledIndex(chain)
+    const start = activeSlotIndex(chain)
+    if (start >= last) return null
+    let end = start
+    while (end + 1 < last && chain[end + 1] == null) end++
+    return { start, end }
+  }
+
+  // A day can be dragged again as long as it hasn't already appeared as many
+  // times as it's allowed to: the chain's first day is allowed to reappear
+  // once more (to close a loop and become the final element), every other
+  // day only once. Pulling a day back out of the chain (leaving it null)
+  // naturally frees it up again here.
+  function isDayAvailableToDrag(day) {
+    const isFirst = reorderChain[0] === day
+    const usedCount = reorderChain.filter((d) => d === day).length
+    return usedCount < (isFirst ? 2 : 1)
+  }
+
+  // null = incomplete (fewer than 2 days picked yet, or a hole still needs
+  // filling), false = illegal, true = safe to apply. A closed loop
+  // (chain[0] === last) never destroys data since everything just rotates.
+  // An open chain empties chain[0] and only stays legal if the final day was
+  // already empty.
+  function computeChainValidity(chain) {
+    const last = lastFilledIndex(chain)
+    if (last < 1) return null
+    if (firstHoleSpan(chain)) return null
+    const filled = chain.slice(0, last + 1)
+    if (new Set(filled).size < 2) return false
+    const isLoop = filled[0] === filled[filled.length - 1]
+    if (!isLoop) {
+      const lastDay = filled[filled.length - 1]
+      if (draft[lastDay].some((it) => !it.isPendingAdd)) return false
+    }
+    return true
+  }
+
+  // Mirrors computeChainValidity's false-branches with a human-readable
+  // explanation — only ever shown once the chain is actually illegal, never
+  // while it's just incomplete.
+  function getChainInvalidReason(chain) {
+    const last = lastFilledIndex(chain)
+    if (last < 1 || firstHoleSpan(chain)) return null
+    const filled = chain.slice(0, last + 1)
+    if (new Set(filled).size < 2) return 'Self day move is not possible'
+    const isLoop = filled[0] === filled[filled.length - 1]
+    if (!isLoop) {
+      const lastDay = filled[filled.length - 1]
+      if (draft[lastDay].some((it) => !it.isPendingAdd)) {
+        return `${lastDay} is not empty`
+      }
+    }
+    return null
+  }
+
+  // While a drag is in progress, which blueprint slots are legal drop
+  // targets depends on where the drag started: a day pulled fresh from the
+  // day row must still land on the one strict "next gap" slot (fill holes
+  // before growing the end), but a day already placed in the chain can move
+  // to any other slot — into a hole, past the end, or onto another filled
+  // day to swap with it.
+  function isSlotDroppable(i) {
+    if (activeDragSource === 'reorder-chain') return i !== activeDragIndex
+    if (activeDragSource === 'day-collection') return i === reorderActiveIndex
+    return false
+  }
+
+  function handleReorderDragStart(event) {
+    const data = event.active.data.current
+    if (!data) { setActiveDragDay(null); setActiveDragSource(null); setActiveDragIndex(null); return }
+    const day = data.source === 'day-collection' ? data.day : reorderChain[data.chainIndex]
+    setActiveDragDay(day ?? null)
+    setActiveDragSource(data.source)
+    setActiveDragIndex(data.source === 'reorder-chain' ? data.chainIndex : null)
+  }
+
+  function handleReorderDragEnd(event) {
+    setActiveDragDay(null)
+    setActiveDragSource(null)
+    setActiveDragIndex(null)
+    const { active, over } = event
+    if (!over) return
+    const data = active.data.current
+    if (!data) return
+    if (data.source === 'day-collection') {
+      const day = data.day
+      const idx = activeSlotIndex(reorderChain)
+      if (over.id !== `reorder-slot-${idx}`) return
+      if (!isDayAvailableToDrag(day)) return
+      setReorderChain((chain) => {
+        const next = [...chain]
+        while (next.length <= idx) next.push(null)
+        next[idx] = day
+        return next
+      })
+    } else if (data.source === 'reorder-chain') {
+      const fromIdx = data.chainIndex
+      if (over.id === 'day-collection') {
+        setReorderChain((chain) => {
+          const next = [...chain]
+          next[fromIdx] = null
+          return next
+        })
+        return
+      }
+      const match = /^reorder-slot-(\d+)$/.exec(over.id)
+      if (!match) return
+      const toIdx = Number(match[1])
+      if (toIdx === fromIdx) return
+      setReorderChain((chain) => {
+        const next = [...chain]
+        while (next.length <= toIdx) next.push(null)
+        const displaced = next[toIdx] ?? null
+        next[toIdx] = next[fromIdx]
+        next[fromIdx] = displaced
+        return next
+      })
+    }
+  }
+
+  function toggleReorderMode() {
+    setDayReorderMode((v) => !v)
+    setReorderChain([])
+  }
+
+  function cancelReorder() {
+    setDayReorderMode(false)
+    setReorderChain([])
+  }
+
+  // Reuses the existing 'fields' undo entry shape — this is just a multi-day
+  // field/position change, the same primitive reorder and move already use
+  // — extended with a parallel `titles` snapshot so each day's title flows
+  // along the chain exactly like its exercises do.
+  async function applyReorderChain() {
+    if (computeChainValidity(reorderChain) !== true) return
+    const chain = reorderChain.slice(0, lastFilledIndex(reorderChain) + 1)
+    setApplyingReorder(true)
+    const uniqueDays = [...new Set(chain)]
+    const before = {}
+    const titleBefore = {}
+    for (const day of uniqueDays) {
+      before[day] = draft[day]
+      titleBefore[day] = dayTitles.get(day) || ''
+    }
+    const after = {}
+    const titleAfter = {}
+    for (let i = 0; i < chain.length - 1; i++) { after[chain[i]] = []; titleAfter[chain[i]] = '' }
+    for (let i = 0; i < chain.length - 1; i++) {
+      const sourceDay = chain[i]
+      const destDay = chain[i + 1]
+      after[destDay] = before[sourceDay].map((item) => ({ ...item, day: destDay }))
+      titleAfter[destDay] = titleBefore[sourceDay]
+    }
+    setDraft((current) => ({ ...current, ...after }))
+    const updates = []
+    for (const day of Object.keys(after)) {
+      after[day].forEach((item, index) => {
+        if (item.id != null) updates.push(toUpdatePayload(item, day, index))
+      })
+    }
+    try {
+      if (updates.length > 0) await persistPlan({ updates })
+      const changedTitleDays = uniqueDays.filter((day) => titleAfter[day] !== titleBefore[day])
+      if (changedTitleDays.length > 0) {
+        await Promise.all(changedTitleDays.map((day) => setDayTitle(day, titleAfter[day])))
+      }
+      pushUndo({
+        kind: 'fields',
+        days: Object.fromEntries(uniqueDays.map((day) => [day, { before: before[day], after: after[day] ?? before[day] }])),
+        titles: Object.fromEntries(
+          changedTitleDays.map((day) => [day, { before: titleBefore[day], after: titleAfter[day] }]),
+        ),
+      })
+      setDayReorderMode(false)
+      setReorderChain([])
+    } catch {
+      setDraft((current) => ({ ...current, ...before }))
+      setActionError("Couldn't reorder days — check your connection and try again.")
+    } finally {
+      setApplyingReorder(false)
     }
   }
 
@@ -2172,17 +2501,45 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           </button>
           {showMoreOptions ? (
             <>
-              {/* Placeholders — none of these are built yet, just staking
-                  out where they'll live once they are. */}
-              <button type="button" className="edit-plan-pill-btn" disabled>
+              {/* Import/Export are still placeholders. Day reordering is
+                  live — while active it swaps them for Apply/Cancel. */}
+              <button
+                type="button"
+                className={`edit-plan-pill-btn ${dayReorderMode ? 'is-filled' : ''}`}
+                onClick={toggleReorderMode}
+              >
                 <span>Day reordering</span>
               </button>
-              <button type="button" className="edit-plan-pill-btn" disabled>
-                <span>Import</span>
-              </button>
-              <button type="button" className="edit-plan-pill-btn" disabled>
-                <span>Export</span>
-              </button>
+              {dayReorderMode ? (
+                <>
+                  <button
+                    type="button"
+                    className="edit-plan-icon-btn"
+                    onClick={applyReorderChain}
+                    disabled={chainValidity !== true || applyingReorder}
+                    aria-label="Apply day reorder"
+                  >
+                    <CheckIcon size={17} />
+                  </button>
+                  <button
+                    type="button"
+                    className="edit-plan-icon-btn"
+                    onClick={cancelReorder}
+                    aria-label="Cancel day reorder"
+                  >
+                    <XIcon size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="edit-plan-pill-btn" disabled>
+                    <span>Import</span>
+                  </button>
+                  <button type="button" className="edit-plan-pill-btn" disabled>
+                    <span>Export</span>
+                  </button>
+                </>
+              )}
             </>
           ) : isSelecting ? (
             <>
@@ -2253,18 +2610,62 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         </div>
       </div>
 
-      <div className="edit-plan-day-pills">
-        {WEEKDAYS.map((day, i) => (
-          <button
-            key={day}
-            type="button"
-            className={`edit-plan-day-pill ${selectedDay === day ? 'is-active' : ''}`}
-            onClick={() => setSelectedDay(day)}
-          >
-            {WEEKDAYS_SHORT[i]}
-          </button>
-        ))}
-      </div>
+      {dayReorderMode ? (
+        <DndContext sensors={sensors} onDragStart={handleReorderDragStart} onDragEnd={handleReorderDragEnd}>
+          <div className={`edit-plan-reorder-blueprint ${chainValidity === false ? 'is-invalid' : ''}`}>
+            {Array.from({ length: reorderSlotCount }).map((_, i) => (
+              <div key={i} style={{ display: 'contents' }}>
+                {i > 0 && <span className="edit-plan-reorder-arrow">→</span>}
+                <ReorderBlueprintSlot
+                  index={i}
+                  day={reorderChain[i] ?? null}
+                  activeTarget={i === reorderActiveIndex}
+                  colored={!!reorderHoleSpan && i >= reorderHoleSpan.start && i <= reorderHoleSpan.end}
+                  invalid={chainValidity === false}
+                  canDrop={isSlotDroppable(i)}
+                />
+              </div>
+            ))}
+          </div>
+          {chainValidity === false && (
+            <p className="edit-plan-reorder-error">{getChainInvalidReason(reorderChain)}</p>
+          )}
+          <DayCollectionZone isEmpty={WEEKDAYS.every((day) => !isDayAvailableToDrag(day))}>
+            {WEEKDAYS.map((day, i) => (
+              isDayAvailableToDrag(day) && (
+                <DraggableDayPill
+                  key={day}
+                  day={day}
+                  label={WEEKDAYS_SHORT[i]}
+                  active={selectedDay === day}
+                  draggable
+                  onClick={() => setSelectedDay(day)}
+                />
+              )
+            ))}
+          </DayCollectionZone>
+          <DragOverlay dropAnimation={null} zIndex={2000}>
+            {activeDragDay ? (
+              <div className="edit-plan-day-pill is-drag-overlay">
+                {WEEKDAYS_SHORT[WEEKDAYS.indexOf(activeDragDay)]}
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <div className="edit-plan-day-pills">
+          {WEEKDAYS.map((day, i) => (
+            <button
+              key={day}
+              type="button"
+              className={`edit-plan-day-pill ${selectedDay === day ? 'is-active' : ''}`}
+              onClick={() => setSelectedDay(day)}
+            >
+              {WEEKDAYS_SHORT[i]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {actionError && <p className="edit-plan-save-error">{actionError}</p>}
 
@@ -2272,27 +2673,29 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         {dayExercises.length === 0 ? (
           <div className="edit-plan-empty-day">
             <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
-            <div className="edit-plan-empty-day-actions">
-              <button
-                type="button"
-                className="edit-plan-pill-btn is-filled"
-                onClick={() => handleInsertPlaceholder(selectedDay, 0)}
-              >
-                <PlusIcon size={16} />
-                <span>Add exercise</span>
-              </button>
-              <button type="button" className="edit-plan-pill-btn" disabled>
-                <TreadmillIcon size={16} />
-                <span>Set cardio day</span>
-              </button>
-            </div>
+            {!dayReorderMode && (
+              <div className="edit-plan-empty-day-actions">
+                <button
+                  type="button"
+                  className="edit-plan-pill-btn is-filled"
+                  onClick={() => handleInsertPlaceholder(selectedDay, 0)}
+                >
+                  <PlusIcon size={16} />
+                  <span>Add exercise</span>
+                </button>
+                <button type="button" className="edit-plan-pill-btn" disabled>
+                  <TreadmillIcon size={16} />
+                  <span>Set cardio day</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
               {dayExercises.map((item, i) => (
                 <div key={item._key} style={{ display: 'contents' }}>
-                  {editingKey === item._key && (
+                  {!dayReorderMode && editingKey === item._key && (
                     <InsertDivider bleedTop={i > 0} onInsert={() => handleInsertPlaceholder(selectedDay, i)} />
                   )}
                   <SortableCard
@@ -2304,8 +2707,9 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                     onManualAdd={handleManualAdd}
                     onPhotoAdd={handlePhotoAdd}
                     userId={userId}
+                    readOnly={dayReorderMode}
                   />
-                  {editingKey === item._key && (
+                  {!dayReorderMode && editingKey === item._key && (
                     <InsertDivider
                       bleedBottom={i < dayExercises.length - 1}
                       onInsert={() => handleInsertPlaceholder(selectedDay, i + 1)}

@@ -432,6 +432,22 @@ fastify.put('/api/day-plans/:day', async (request, reply) => {
   return { day, title: trimmed }
 })
 
+// Resets a day back to having no custom title (the "rest day"/"undefined"
+// default) — the PUT above deliberately rejects a blank title, so clearing
+// one needs its own endpoint rather than PUT with title: ''.
+fastify.delete('/api/day-plans/:day', async (request, reply) => {
+  const { day } = request.params
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+
+  if (!VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  db.prepare('DELETE FROM day_plans WHERE user_id = ? AND day = ?').run(uid, day)
+  return { day }
+})
+
 const PROFILE_COLUMNS =
   'age, height, weight, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
 

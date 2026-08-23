@@ -3512,6 +3512,7 @@
 
 .edit-plan-day-pills {
   display: flex;
+  align-items: center;
   gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -3520,6 +3521,13 @@
 
 .edit-plan-day-pills::-webkit-scrollbar {
   display: none;
+}
+
+.edit-plan-day-pill.edit-plan-day-pills-hint {
+  border-color: transparent;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .edit-plan-day-pill {
@@ -3542,10 +3550,115 @@
   border-color: var(--accent);
 }
 
+/* Overrides the generic pill hover above — this one isn't clickable, so it
+   shouldn't visually react to a mouse hover at all. Must come after the
+   rule it's overriding: same specificity, and CSS ties go to source order. */
+.edit-plan-day-pill.edit-plan-day-pills-hint:hover {
+  color: var(--text-muted);
+  border-color: transparent;
+}
+
 .edit-plan-day-pill.is-active {
   color: var(--bg);
   background: var(--accent);
   border-color: var(--accent);
+}
+
+.edit-plan-day-pill.is-draggable {
+  touch-action: none;
+}
+
+.edit-plan-day-pill.is-dragging {
+  opacity: 0.3;
+}
+
+.edit-plan-day-pill.is-drag-overlay {
+  flex: 0 0 auto;
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  cursor: grabbing;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.edit-plan-reorder-blueprint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 4px;
+  margin-bottom: 6px;
+}
+
+.edit-plan-reorder-arrow {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-size: 13px;
+}
+
+.edit-plan-reorder-slot {
+  /* Matches .edit-plan-day-pill's rendered width exactly: both rows share
+     the same parent width, and a day pill is 1 of 7 flex:1 items split
+     across a 6px gap — same formula here, independent of screen size. */
+  flex: 0 0 calc((100% - 36px) / 7);
+  text-align: center;
+  padding: 7px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  border-radius: 999px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-reorder-slot.is-target,
+.edit-plan-reorder-slot.is-colored {
+  border-color: var(--accent);
+}
+
+.edit-plan-reorder-slot.is-target.is-over {
+  background: var(--chip-bg);
+}
+
+.edit-plan-reorder-slot.is-filled {
+  color: var(--accent);
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--chip-bg);
+  cursor: grab;
+  touch-action: none;
+}
+
+.edit-plan-reorder-slot.is-dragging {
+  opacity: 0.3;
+}
+
+.edit-plan-reorder-slot.is-invalid {
+  color: #e5484d;
+  border-color: #e5484d;
+}
+
+.edit-plan-reorder-blueprint.is-invalid .edit-plan-reorder-arrow {
+  color: #e5484d;
+  opacity: 0.7;
+}
+
+.edit-plan-day-pills.is-empty {
+  background: var(--chip-bg);
+  border-radius: 12px;
+}
+
+.edit-plan-day-pills.is-drop-target {
+  background: color-mix(in srgb, var(--accent) 20%, var(--chip-bg));
+  border-radius: 12px;
+}
+
+.edit-plan-reorder-error {
+  color: #e5484d;
+  font-size: 12px;
+  font-weight: 600;
+  margin: -2px 0 6px;
 }
 
 .edit-plan-list {
@@ -3620,9 +3733,12 @@
 
 .edit-plan-empty {
   text-align: center;
-  color: var(--text-muted);
-  font-size: 14px;
+  color: var(--accent);
+  opacity: 0.55;
+  font-size: 15px;
+  font-weight: 700;
   font-style: italic;
+  line-height: 1.4;
   margin-top: 24px;
 }
 
@@ -3650,6 +3766,11 @@
 .edit-plan-card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.edit-plan-card.is-readonly {
+  padding-left: 14px;
+  cursor: default;
 }
 
 .edit-plan-drag-handle {
