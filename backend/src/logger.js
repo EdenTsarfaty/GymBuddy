@@ -2,6 +2,10 @@ const fs = require('fs')
 const path = require('path')
 const readline = require('node:readline')
 
+// `--quiet` / `-q`: suppress console log output while still writing to
+// the log files on disk (server.log / llm.log).
+const QUIET = process.argv.includes('--quiet') || process.argv.includes('-q')
+
 // Owns terminal echo/redraw so log lines never garble in-progress CLI input.
 const cli = readline.createInterface({
   input: process.stdin,
@@ -82,11 +86,17 @@ function appendServerLog(line) {
 
 // Clears any in-progress CLI input, prints the given lines, then redraws
 // whatever the user had typed so far — so log output never garbles it.
-function writeLines(lines) {
+function printLines(lines) {
   readline.clearLine(process.stdout, 0)
   readline.cursorTo(process.stdout, 0)
   for (const line of lines) console.log(line)
   cli.prompt(true)
+}
+
+// Ambient logging (requests/errors/info/warn) — silenced by --quiet.
+function writeLines(lines) {
+  if (QUIET) return
+  printLines(lines)
 }
 
 function levelForStatus(status) {
@@ -136,16 +146,18 @@ function logWarn(message) {
   writeLines([`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.yellow}${COLOR.bold}[WARN]${COLOR.reset} ${message}`])
 }
 
+// Direct replies to a typed command — always shown, even with --quiet,
+// since the user is actively asking for this output.
 function logCli(message) {
   const ts = timestamp()
   appendServerLog(`[${ts}] [CLI] ${message}`)
-  writeLines([`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.magenta}${COLOR.bold}[CLI]${COLOR.reset} ${message}`])
+  printLines([`${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.magenta}${COLOR.bold}[CLI]${COLOR.reset} ${message}`])
 }
 
 function logCliBlock(title, items) {
   const ts = timestamp()
   appendServerLog(`[${ts}] [CLI] ${title}\n${items.map((i) => `  ${i}`).join('\n')}`)
-  writeLines([
+  printLines([
     `${COLOR.dim}[${ts}]${COLOR.reset} ${COLOR.magenta}${COLOR.bold}[CLI]${COLOR.reset} ${title}`,
     ...items.map((i) => `  ${COLOR.dim}${i}${COLOR.reset}`),
   ])

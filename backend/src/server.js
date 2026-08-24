@@ -63,14 +63,56 @@ checkOpenAIHealth().then((result) => {
   }
 })
 
+const API_KEY_PROVIDERS = {
+  openai: 'OPENAI_API_KEY',
+  youtube: 'YOUTUBE_API_KEY',
+  serper: 'SERPER_API_KEY',
+}
+
 const CLI_COMMANDS = [
-  'add user <name>',
-  'remove user <name>',
-  'rename user <old> <new>',
-  'restart',
-  'exit',
-  'help',
+  { cmd: 'user add <name>', desc: 'Create a new user' },
+  { cmd: 'user remove <name>', desc: 'Delete a user and all their data (asks to confirm)' },
+  { cmd: 'user rename <old> <new>', desc: 'Rename a user' },
+  { cmd: `api-key <${Object.keys(API_KEY_PROVIDERS).join('|')}> <key>`, desc: 'Set a provider API key (asks to confirm if one is already set)' },
+  { cmd: 'restart', desc: 'Restart the server' },
+  { cmd: 'exit', desc: 'Shut down the server' },
+  { cmd: 'help', desc: 'List available commands' },
 ]
+
+// Formats a subset of CLI_COMMANDS (matched by cmd prefix) into aligned
+// "cmd — description" lines for both the full help listing and per-group
+// usage hints shown after a partial/invalid command.
+function formatCommandHelp(commands) {
+  const width = Math.max(...commands.map((c) => c.cmd.length))
+  return commands.map((c) => `${c.cmd.padEnd(width)}  — ${c.desc}`)
+}
+
+function showUserUsage() {
+  logCliBlock('Usage:', formatCommandHelp(CLI_COMMANDS.filter((c) => c.cmd.startsWith('user '))))
+}
+
+function showApiKeyUsage() {
+  logCliBlock('Usage:', formatCommandHelp(CLI_COMMANDS.filter((c) => c.cmd.startsWith('api-key '))))
+}
+
+const ENV_PATH = path.join(__dirname, '..', '.env')
+
+// Updates (or adds) a KEY=value line in .env and applies it to the running
+// process immediately — every call site reads process.env at request time,
+// not a module-load-time const, so no restart is needed for it to take effect.
+function setEnvKey(envKey, value) {
+  let content = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : ''
+  const line = `${envKey}=${value}`
+  const regex = new RegExp(`^${envKey}=.*$`, 'm')
+  if (regex.test(content)) {
+    content = content.replace(regex, () => line)
+  } else {
+    if (content && !content.endsWith('\n')) content += '\n'
+    content += `${line}\n`
+  }
+  fs.writeFileSync(ENV_PATH, content, 'utf8')
+  process.env[envKey] = value
+}
 
 let pendingConfirm = null
 
@@ -92,7 +134,7 @@ cli.on('line', (line) => {
   if (!trimmed) return
 
   if (/^help$/i.test(trimmed)) {
-    logCliBlock('Available commands:', CLI_COMMANDS)
+    logCliBlock('Available commands:', formatCommandHelp(CLI_COMMANDS))
     return
   }
 
@@ -108,48 +150,80 @@ cli.on('line', (line) => {
     return
   }
 
-  const addMatch = trimmed.match(/^add user (.+)$/i)
-  if (addMatch) {
-    const name = addMatch[1].trim()
-    if (!name) {
-      logCli('Usage: add user <name>')
+  if (/^user\b/i.test(trimmed)) {
+    const addMatch = trimmed.match(/^user add (.+)$/i)
+    if (addMatch) {
+      const name = addMatch[1].trim()
+      if (!name) {
+        showUserUsage()
+        return
+      }
+      const result = db.prepare('INSERT INTO users (name) VALUES (?)').run(name)
+      db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (?)').run(result.lastInsertRowid)
+      logCli(`Added user "${name}" (id ${result.lastInsertRowid})`)
       return
     }
-    const result = db.prepare('INSERT INTO users (name) VALUES (?)').run(name)
-    db.prepare('INSERT OR IGNORE INTO user_profile (id) VALUES (?)').run(result.lastInsertRowid)
-    logCli(`Added user "${name}" (id ${result.lastInsertRowid})`)
+
+    const removeMatch = trimmed.match(/^user remove (.+)$/i)
+    if (removeMatch) {
+      const name = removeMatch[1].trim()
+      const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(name)
+      if (!user) {
+        logCli(`No user named "${name}"`)
+        return
+      }
+      logCli(`Remove user "${user.name}" (id ${user.id}) and all their data? (y/n)`)
+      pendingConfirm = () => {
+        db.prepare('DELETE FROM exercises WHERE user_id = ?').run(user.id)
+        db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(user.id)
+        db.prepare('DELETE FROM user_profile WHERE id = ?').run(user.id)
+        db.prepare('DELETE FROM users WHERE id = ?').run(user.id)
+        logCli(`Removed user "${user.name}" (id ${user.id}) and all their data`)
+      }
+      return
+    }
+
+    const renameMatch = trimmed.match(/^user rename (\S+) (\S+)$/i)
+    if (renameMatch) {
+      const [, oldName, newName] = renameMatch
+      const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(oldName)
+      if (!user) {
+        logCli(`No user named "${oldName}"`)
+        return
+      }
+      db.prepare('UPDATE users SET name = ? WHERE id = ?').run(newName, user.id)
+      logCli(`Renamed user "${user.name}" to "${newName}" (id ${user.id})`)
+      return
+    }
+
+    showUserUsage()
     return
   }
 
-  const removeMatch = trimmed.match(/^remove user (.+)$/i)
-  if (removeMatch) {
-    const name = removeMatch[1].trim()
-    const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(name)
-    if (!user) {
-      logCli(`No user named "${name}"`)
+  if (/^api-key\b/i.test(trimmed)) {
+    const apiKeyMatch = trimmed.match(/^api-key (\S+) (\S+)$/i)
+    if (apiKeyMatch) {
+      const [, providerArg, newKey] = apiKeyMatch
+      const envKey = API_KEY_PROVIDERS[providerArg.toLowerCase()]
+      if (!envKey) {
+        logCli(`Unknown provider "${providerArg}".`)
+        showApiKeyUsage()
+        return
+      }
+      const apply = () => {
+        setEnvKey(envKey, newKey)
+        logCli(`Updated ${envKey}`)
+      }
+      if (process.env[envKey]) {
+        logCli(`${envKey} is already set. Overwrite? (y/n)`)
+        pendingConfirm = apply
+      } else {
+        apply()
+      }
       return
     }
-    logCli(`Remove user "${user.name}" (id ${user.id}) and all their data? (y/n)`)
-    pendingConfirm = () => {
-      db.prepare('DELETE FROM exercises WHERE user_id = ?').run(user.id)
-      db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(user.id)
-      db.prepare('DELETE FROM user_profile WHERE id = ?').run(user.id)
-      db.prepare('DELETE FROM users WHERE id = ?').run(user.id)
-      logCli(`Removed user "${user.name}" (id ${user.id}) and all their data`)
-    }
-    return
-  }
 
-  const renameMatch = trimmed.match(/^rename user (\S+) (\S+)$/i)
-  if (renameMatch) {
-    const [, oldName, newName] = renameMatch
-    const user = db.prepare('SELECT id, name FROM users WHERE name = ? COLLATE NOCASE').get(oldName)
-    if (!user) {
-      logCli(`No user named "${oldName}"`)
-      return
-    }
-    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(newName, user.id)
-    logCli(`Renamed user "${user.name}" to "${newName}" (id ${user.id})`)
+    showApiKeyUsage()
     return
   }
 
