@@ -10,6 +10,28 @@ const CHAT_CONTEXT_WINDOW = 400000
 const CHAT_MAX_COMPLETION_TOKENS = 2000
 const CHAT_SAFETY_MARGIN = 1000
 
+// Matches the slugs react-muscle-highlighter accepts, restricted to the
+// subset that are actually muscles (the library's full Slug type also has
+// body landmarks like head/hands/feet/knees/ankles/hair, which an exercise
+// can't meaningfully "work"). Shared by every schema below that asks the
+// model for a muscles list, so the frontend's body diagram can feed a
+// generated exercise's muscles straight into the highlighter with no
+// mapping step.
+const MUSCLE_GROUPS = [
+  'abs', 'adductors', 'biceps', 'calves', 'chest', 'deltoids', 'forearm',
+  'gluteal', 'hamstring', 'lower-back', 'neck', 'obliques', 'quadriceps',
+  'tibialis', 'trapezius', 'triceps', 'upper-back',
+]
+
+const MUSCLES_PROPERTY = {
+  type: 'array',
+  items: { type: 'string', enum: MUSCLE_GROUPS },
+  minItems: 1,
+  maxItems: 5,
+  uniqueItems: true,
+  description: 'The muscles this exercise engages, most-worked first. Only use values from the closed list — never invent a new one, and never repeat one.',
+}
+
 const GOAL_LABELS = {
   lose_weight:   'I want to lose weight',
   stay_healthy:  'I want to stay healthy',
@@ -743,8 +765,9 @@ const EXERCISE_SCHEMA = {
       enum: ['free_weight', 'body_weight', 'machine', 'warm_up', 'stretch'],
       description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
+    muscles: MUSCLES_PROPERTY,
   },
-  required: ['description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category'],
+  required: ['description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category', 'muscles'],
   additionalProperties: false,
 }
 
@@ -791,8 +814,9 @@ const SWAP_SCHEMA = {
       enum: ['free_weight', 'body_weight', 'machine', 'warm_up', 'stretch'],
       description: 'Exercise category. free_weight: requires external weight (dumbbells, barbells, kettlebells). body_weight: uses only your own bodyweight (push-up, pull-up, plank, dead bug, lunge, dip, etc.). machine: strength machines only (cable, seated resistance, smith) — never cardio equipment. warm_up: cardio equipment (treadmill, rowing machine, bike, elliptical) and mobility work at the start of a session. stretch: flexibility work.',
     },
+    muscles: MUSCLES_PROPERTY,
   },
-  required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category'],
+  required: ['name', 'description', 'bullets', 'weight', 'duration', 'sets', 'reps', 'video_id', 'category', 'muscles'],
   additionalProperties: false,
 }
 

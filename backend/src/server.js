@@ -212,6 +212,7 @@ function parseExerciseRow(row) {
     ...row,
     bullets: JSON.parse(row.bullets),
     adjustments: row.adjustments ? JSON.parse(row.adjustments) : [],
+    muscles: row.muscles ? JSON.parse(row.muscles) : [],
   }
 }
 
@@ -271,7 +272,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
   const nextOrder = (maxOrderRow?.m ?? -1) + 1
 
   const insert = db.prepare(
-    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, muscles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
   const result = insert.run(
     uid,
@@ -286,6 +287,7 @@ fastify.post('/api/exercises/generate', async (request, reply) => {
     generated.video_id || null,
     generated.category || null,
     nextOrder,
+    JSON.stringify(generated.muscles || []),
   )
 
   const created = db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)
@@ -628,8 +630,8 @@ fastify.post('/api/exercises/:id/swap', async (request, reply) => {
   }
 
   db.prepare(
-    'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ? WHERE id = ?',
-  ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', id)
+    'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ?, muscles = ? WHERE id = ?',
+  ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', JSON.stringify(generated.muscles || []), id)
 
   // The exercise identity effectively changed — old chat history and any
   // per-exercise adjustment notes no longer apply.
@@ -726,13 +728,13 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
   const { user_id, deletes, updates, copies, creates } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
 
-  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category } of updates || []) {
+  for (const { id, day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category, muscles } of updates || []) {
     if (!VALID_DAYS.includes(day)) continue
     db.prepare(
       `UPDATE exercises
-       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?
+       SET day = ?, sort_order = ?, name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, muscles = ?
        WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, category ?? null, id, uid)
+    ).run(day, sort_order, name, sets, reps, weight, duration, description, JSON.stringify(bullets), video_id ?? null, category ?? null, JSON.stringify(muscles || []), id, uid)
   }
 
   const copied = []
@@ -741,9 +743,9 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
     const source = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(sourceId, uid)
     if (!source) continue
     const result = db.prepare(
-      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
-    ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order)
+      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo, muscles)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, ?)`,
+    ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order, source.muscles)
     copied.push(parseExerciseRow(db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)))
   }
 
@@ -751,13 +753,13 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
   // copy from, unlike `copies`. Starts with the same clean adjustments/photo
   // slate as a copy does, since there's nothing prior to carry over here either.
   const created = []
-  for (const { day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category } of creates || []) {
+  for (const { day, sort_order, name, sets, reps, weight, duration, description, bullets, video_id, category, muscles } of creates || []) {
     if (!VALID_DAYS.includes(day)) continue
     if (!name || !name.trim()) continue
     const result = db.prepare(
-      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL)`,
-    ).run(uid, name.trim(), day, sets ?? null, reps ?? null, weight ?? null, duration ?? null, description || '', JSON.stringify(bullets || []), video_id ?? null, category ?? null, sort_order)
+      `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo, muscles)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, ?)`,
+    ).run(uid, name.trim(), day, sets ?? null, reps ?? null, weight ?? null, duration ?? null, description || '', JSON.stringify(bullets || []), video_id ?? null, category ?? null, sort_order, JSON.stringify(muscles || []))
     created.push(parseExerciseRow(db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)))
   }
 
@@ -1185,8 +1187,8 @@ fastify.post('/api/exercises/:id/chat/confirm', async (request, reply) => {
     }
 
     db.prepare(
-      'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ? WHERE id = ?',
-    ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', id)
+      'UPDATE exercises SET name = ?, sets = ?, reps = ?, weight = ?, duration = ?, description = ?, bullets = ?, video_id = ?, category = ?, adjustments = ?, muscles = ? WHERE id = ?',
+    ).run(generated.name, generated.sets ?? null, generated.reps ?? null, generated.weight ?? null, generated.duration ?? null, generated.description, JSON.stringify(generated.bullets), generated.video_id || null, generated.category || null, '[]', JSON.stringify(generated.muscles || []), id)
 
     db.prepare('DELETE FROM chat_messages WHERE exercise_id = ?').run(id)
 

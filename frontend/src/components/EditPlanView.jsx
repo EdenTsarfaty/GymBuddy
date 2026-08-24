@@ -1798,6 +1798,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
         bullets: stagedItem.bullets,
         video_id: stagedItem.video_id,
         category: stagedItem.category,
+        muscles: stagedItem.muscles,
       }],
     })
     const createdRow = result.created?.[0]
@@ -2118,6 +2119,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       id: item.id, day, sort_order,
       name: item.name, sets: item.sets, reps: item.reps, weight: item.weight, duration: item.duration,
       description: item.description, bullets: item.bullets, video_id: item.video_id, category: item.category,
+      muscles: item.muscles,
     }
   }
 

@@ -57,6 +57,9 @@ try { db.exec('ALTER TABLE exercises ADD COLUMN sort_order INTEGER') } catch {}
 // any more; every read that lists/looks up exercises must exclude rows
 // where this is set.
 try { db.exec('ALTER TABLE exercises ADD COLUMN deleted_at INTEGER') } catch {}
+// JSON array of muscle-highlighter slugs (see MUSCLE_GROUPS in openai.js) —
+// null for exercises created before this existed or entered manually.
+try { db.exec('ALTER TABLE exercises ADD COLUMN muscles TEXT') } catch {}
 {
   const needsBackfill = db.prepare('SELECT COUNT(*) AS c FROM exercises WHERE sort_order IS NULL').get().c
   if (needsBackfill > 0) {
