@@ -15,7 +15,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "lottie-web": "^5.13.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-muscle-highlighter": "^1.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

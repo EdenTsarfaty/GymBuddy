@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { API_BASE } from '../apiBase'
 import LottiePlayer from './LottiePlayer'
+import MuscleDiagram from './MuscleDiagram'
 import ChatIcon from './icons/ChatIcon'
 import CheckIcon from './icons/CheckIcon'
 import ChevronDownIcon from './icons/ChevronDownIcon'
@@ -15,6 +16,7 @@ import SwapIcon from './icons/SwapIcon'
 import TreadmillIcon from './icons/TreadmillIcon'
 import PlankIcon from './icons/PlankIcon'
 import YouTubeIcon from './icons/YouTubeIcon'
+import MuscleIcon from './icons/MuscleIcon'
 import StopwatchIcon from './icons/StopwatchIcon'
 import CompleteIcon from './icons/CompleteIcon'
 import UncompleteIcon from './icons/UncompleteIcon'
@@ -155,6 +157,13 @@ function durationStepFor(seconds) {
   return 30
 }
 
+// "lower-back" -> "Lower back" — matches how MuscleDiagram's slugs
+// (see MUSCLE_GROUPS in backend/src/openai.js) read as plain English.
+function formatMuscleName(slug) {
+  const spaced = slug.replace(/-/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
@@ -162,13 +171,14 @@ function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, photo, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0, isReverting = false }) {
+function WorkoutCard({ exercise, sets, reps, weight, duration, description, bullets, adjustments = [], videoId, category, photo, muscles = [], sex, isOffline, pendingFields = [], initiallyExpanded = false, onSave, onSwap, onChat, onOpenTimer, completed = false, onToggleComplete, cascadeToken = 0, cascadeIndex = 0, isReverting = false }) {
   const hasDuration = duration !== null && duration !== undefined
   const hasSets = sets > 0
   const hasReps = reps > 0
   const photoUrl = photo ? (photo.startsWith('https://') ? photo : `${API_BASE}/api/exercise-photos/${photo}`) : null
   const [photoFailed, setPhotoFailed] = useState(false)
   const [expanded, setExpanded] = useState(initiallyExpanded)
+  const [showMuscles, setShowMuscles] = useState(false)
   const photoExpandActive = expanded && !!photoUrl && !photoFailed
   const isGifPhoto = !!photoUrl && /\.gif(\?|$)/i.test(photoUrl)
   const [gifStaticFrame, setGifStaticFrame] = useState(null)
@@ -450,10 +460,15 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
           </div>
         )}
         <div className={`workout-card-header-content ${photoExpandActive ? 'is-stacked' : ''}`}>
-        <h3
-          className="workout-card-title"
-          style={{ '--title-len': exercise.length }}
-        >{exercise}</h3>
+        <div className="workout-card-title-group">
+          <h3
+            className="workout-card-title"
+            style={{ '--title-len': exercise.length }}
+          >{exercise}</h3>
+          {expanded && muscles.length > 0 && (
+            <p className="workout-card-muscles-line">{muscles.map(formatMuscleName).join(', ')}</p>
+          )}
+        </div>
 
         <div className="workout-card-main-right">
           {/* Animated ref lives on this inner wrapper, not workout-card-main-right
@@ -616,7 +631,8 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
       <div className={`details-collapse ${expanded ? 'is-open' : ''}`}>
         <div className="details-collapse-inner" inert={!expanded}>
           <div className="workout-card-details">
-            <div className="workout-card-info">
+            <div className="workout-card-info-stack">
+            <div className={`workout-card-info ${showMuscles ? 'is-swapped-out' : ''}`}>
               {category && CATEGORY_META[category] && (() => {
                 const { label, Icon } = CATEGORY_META[category]
                 return (
@@ -677,6 +693,11 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
               ) : null}
             </div>
 
+            <div className={`workout-card-muscle-view ${showMuscles ? 'is-swapped-in' : ''}`}>
+              <MuscleDiagram muscles={muscles} sex={sex} />
+            </div>
+            </div>
+
             <div className="workout-card-actions">
               {!editing ? (
                 <button type="button" className="icon-btn" onClick={startEditing} aria-label="Edit exercise">
@@ -721,6 +742,15 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                     onClick={() => videoId && window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
                   >
                     <YouTubeIcon size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`icon-btn muscle-toggle-btn ${showMuscles ? 'is-active' : ''}`}
+                    aria-label={showMuscles ? 'Show description' : 'Show muscles worked'}
+                    aria-pressed={showMuscles}
+                    onClick={() => setShowMuscles((v) => !v)}
+                  >
+                    <MuscleIcon size={22} />
                   </button>
                   {hasDuration && (
                     <button

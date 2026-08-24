@@ -28,7 +28,10 @@ const MUSCLES_PROPERTY = {
   items: { type: 'string', enum: MUSCLE_GROUPS },
   minItems: 1,
   maxItems: 5,
-  uniqueItems: true,
+  // uniqueItems is NOT supported by OpenAI's structured-outputs schema
+  // validator (unlike minItems/maxItems, which are fine) — it's a hard 400
+  // on every request if present, not just ignored. "Never repeat one" in
+  // the description is the only enforcement available for that part.
   description: 'The muscles this exercise engages, most-worked first. Only use values from the closed list — never invent a new one, and never repeat one.',
 }
 

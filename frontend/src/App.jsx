@@ -26,7 +26,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.2.3'
+const APP_VERSION = 'RC 0.8.3'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -250,6 +250,7 @@ function App() {
   const [dayTitles, setDayTitles] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
+  const [userSex, setUserSex] = useState(null)
   const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
   const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0, streak_freeze_until: null })
   const [freezeSuspendedUntil, setFreezeSuspendedUntil] = useState(0)
@@ -542,6 +543,19 @@ function App() {
       .catch(() => {})
     return () => controller.abort()
   }, [currentUser, workoutLogRefreshKey])
+
+  // Only used to pick the muscle-diagram model (male/female) on a workout
+  // card — not worth lifting the rest of the profile up here too, since
+  // nothing else on this screen needs it.
+  useEffect(() => {
+    if (!currentUser) return
+    const controller = new AbortController()
+    fetch(`${API_BASE}/api/profile?user_id=${currentUser.id}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setUserSex(data?.sex || null))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [currentUser])
 
   useEffect(() => {
     if (!currentUser) return
@@ -1345,6 +1359,8 @@ function App() {
                   duration={item.duration}
                   category={item.category}
                   photo={item.photo}
+                  muscles={item.muscles}
+                  sex={userSex}
                   isOffline={isOffline}
                   pendingFields={pendingEdits.get(item.id)?.changedFields ?? []}
                   initiallyExpanded={item.id === chatReturnExerciseId}

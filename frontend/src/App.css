@@ -1208,6 +1208,20 @@
   gap: 6px;
 }
 
+.workout-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workout-card-muscles-line {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .workout-card-title {
   font-size: clamp(15px, calc(26px - var(--title-len) * 0.22px), 20px);
   font-weight: 600;
@@ -1395,12 +1409,67 @@
   transition: opacity 0.25s ease 0.05s;
 }
 
-.workout-card-info {
+/* Both the text content and the muscle diagram occupy the same grid cell at
+   all times (just one is visibility:hidden) so the stack's height is always
+   the max of the two — toggling between them never changes the card's
+   height, since both are already contributing to that height beforehand. */
+.workout-card-info-stack {
   flex: 1;
+  min-width: 0;
+  display: grid;
+}
+
+.workout-card-info-stack > .workout-card-info,
+.workout-card-info-stack > .workout-card-muscle-view {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.workout-card-info {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 0;
+}
+
+.workout-card-info.is-swapped-out {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.workout-card-muscle-view {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.workout-card-muscle-view.is-swapped-in {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.muscle-diagram {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+/* react-muscle-highlighter hardcodes cursor: pointer inline on every muscle
+   path regardless of whether onBodyPartPress is passed (we don't use it) —
+   only an !important rule can beat an inline style. */
+.muscle-diagram path {
+  cursor: default !important;
+}
+
+/* The library renders each body at a fixed px size (from the scale prop) —
+   this lets it shrink proportionally on narrow phones instead of forcing
+   the card wider than its column. */
+.muscle-diagram svg {
+  max-width: 45%;
+  height: auto;
 }
 
 .exercise-category {
@@ -1597,8 +1666,19 @@
   height: 16px;
 }
 
+.muscle-toggle-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
 .icon-btn:hover {
   color: var(--accent);
+  border-color: var(--accent);
+}
+
+.icon-btn.is-active {
+  color: var(--bg);
+  background: var(--accent);
   border-color: var(--accent);
 }
 
@@ -3113,6 +3193,11 @@
   .icon-btn svg {
     width: 20px;
     height: 20px;
+  }
+
+  .muscle-toggle-btn svg {
+    width: 26px;
+    height: 26px;
   }
 
   .stepper-btn {
