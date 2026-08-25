@@ -10,6 +10,7 @@ const { sweepDeletedExercises } = require('./exerciseSweep')
 const photoSweep = require('./photoSweep')
 const { countTokens } = require('./tokenizer')
 const streak = require('./streak')
+const workoutHistory = require('./workoutHistory')
 const streakGuardian = require('./streakGuardian')
 const exercisePhotos = require('./exercisePhotos')
 const push = require('./push')
@@ -307,6 +308,10 @@ fastify.get('/api/exercises', async (request, reply) => {
     ? db.prepare('SELECT * FROM exercises WHERE day = ? AND user_id = ? AND deleted_at IS NULL ORDER BY sort_order, id').all(day, uid)
     : db.prepare('SELECT * FROM exercises WHERE user_id = ? AND deleted_at IS NULL ORDER BY sort_order, id').all(uid)
 
+  // Same "sync on every read" pattern streak.js's getHistory uses for
+  // workout_log — cheap and idempotent, so it's fine to run on every load.
+  workoutHistory.syncRoster(uid)
+
   return rows.map(parseExerciseRow)
 })
 
@@ -588,7 +593,7 @@ fastify.delete('/api/music-links/:slotIndex', async (request, reply) => {
 })
 
 const PROFILE_COLUMNS =
-  'age, height, weight, sex, medical_notes, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until'
+  'age, height, weight, sex, medical_notes, goals, beginner_mode, workout_reminder, protein_reminder, workout_reminder_time, protein_reminder_delay_minutes, streak_freeze_until, streak_freeze_from'
 
 // Never select streak_guardian_hash/salt into an API response — the hash is
 // derived here into a plain enabled/disabled boolean instead.
@@ -609,8 +614,20 @@ fastify.put('/api/profile', async (request) => {
     streak_freeze_until,
   } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
+
+  // A transition into a new freeze window stamps `from` as today, so
+  // protection only covers dates from the moment of activation onward —
+  // not every missed day up through `until`. Deactivating clears it.
+  const current = db.prepare('SELECT streak_freeze_until, streak_freeze_from FROM user_profile WHERE id = ?').get(uid)
+  const nextUntil = streak_freeze_until || null
+  const nextFrom = !nextUntil
+    ? null
+    : nextUntil !== current?.streak_freeze_until
+      ? streak.todayISODate()
+      : (current?.streak_freeze_from ?? null)
+
   db.prepare(
-    `UPDATE user_profile SET age = ?, height = ?, weight = ?, sex = ?, medical_notes = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ?, streak_freeze_until = ? WHERE id = ?`,
+    `UPDATE user_profile SET age = ?, height = ?, weight = ?, sex = ?, medical_notes = ?, goals = ?, beginner_mode = ?, workout_reminder = ?, protein_reminder = ?, workout_reminder_time = ?, protein_reminder_delay_minutes = ?, streak_freeze_until = ?, streak_freeze_from = ? WHERE id = ?`,
   ).run(
     age !== undefined ? age : null,
     height !== undefined ? height : null,
@@ -623,7 +640,8 @@ fastify.put('/api/profile', async (request) => {
     protein_reminder !== undefined ? (protein_reminder ? 1 : 0) : 0,
     workout_reminder_time || '08:00',
     protein_reminder_delay_minutes !== undefined ? protein_reminder_delay_minutes : 60,
-    streak_freeze_until || null,
+    nextUntil,
+    nextFrom,
     uid,
   )
   streak.recomputeStreak(uid)
@@ -1361,9 +1379,67 @@ fastify.post('/api/workout-log/uncomplete', async (request, reply) => {
   return result
 })
 
+// Per-exercise completion record, independent of the day-level workout_log
+// above — fired for every individual completion (including a single card
+// finished by dragging, not just a whole day finishing). See workoutHistory.js.
+fastify.post('/api/workout-log/exercise-complete', async (request, reply) => {
+  const { user_id, exercise_id } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  const exerciseId = Number(exercise_id)
+
+  if (!exerciseId) {
+    reply.code(400)
+    return { error: 'exercise_id is required' }
+  }
+
+  const row = workoutHistory.recordCompletion(uid, exerciseId)
+  if (!row) {
+    reply.code(404)
+    return { error: 'Exercise not found' }
+  }
+
+  return row
+})
+
+// Reverses the above for a same-day uncheck — see recordUncompletion for why
+// this can't touch a real_date that's already in the past.
+fastify.post('/api/workout-log/exercise-uncomplete', async (request, reply) => {
+  const { user_id, exercise_id } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+  const exerciseId = Number(exercise_id)
+
+  if (!exerciseId) {
+    reply.code(400)
+    return { error: 'exercise_id is required' }
+  }
+
+  const row = workoutHistory.recordUncompletion(uid, exerciseId)
+  if (!row) {
+    reply.code(404)
+    return { error: 'No history row for that exercise today' }
+  }
+
+  return row
+})
+
 fastify.get('/api/workout-log/streak', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
   return streak.recomputeStreak(uid)
+})
+
+// Full per-exercise roster for one real date — every exercise scheduled that
+// day, completed or not, each flagged with whether it's still safe to show
+// live-enriched (see getDay in workoutHistory.js).
+fastify.get('/api/workout-log/day', async (request, reply) => {
+  const { user_id, date } = request.query
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    reply.code(400)
+    return { error: 'date is required (YYYY-MM-DD)' }
+  }
+
+  return workoutHistory.getDay(uid, date)
 })
 
 fastify.get('/api/workout-log/history', async (request) => {

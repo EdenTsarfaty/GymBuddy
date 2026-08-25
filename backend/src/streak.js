@@ -75,21 +75,32 @@ function recomputeStreak(userId) {
   syncScheduledWorkouts(userId, today)
 
   const rows = db.prepare(
-    'SELECT scheduled_date, performed_date FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
+    'SELECT id, scheduled_date, performed_date, frozen FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
   ).all(userId)
 
-  const profile = db.prepare('SELECT longest_streak, streak_freeze_until FROM user_profile WHERE id = ?').get(userId)
+  const profile = db.prepare('SELECT longest_streak, streak_freeze_until, streak_freeze_from FROM user_profile WHERE id = ?').get(userId)
   const freezeUntil = profile?.streak_freeze_until || null
+  const freezeFrom = profile?.streak_freeze_from || null
+  const markFrozen = db.prepare('UPDATE workout_log SET frozen = 1 WHERE id = ?')
 
   let streak = 0
+  const protectedDates = []
   for (const row of rows) {
     if (row.performed_date) {
       streak += 1
       continue
     }
+    const withinLiveFreeze = freezeUntil && freezeFrom && row.scheduled_date >= freezeFrom && row.scheduled_date <= freezeUntil
     // A missed date covered by an active streak freeze neither breaks the
     // streak nor extends it — the count just holds until the freeze lifts.
-    if (freezeUntil && row.scheduled_date <= freezeUntil) {
+    // `frozen`, once set on this row, stays set regardless of what
+    // user_profile's freeze fields become later (they get overwritten on
+    // every reactivation, so reading them live here would silently
+    // un-protect a date that was genuinely frozen under an earlier window)
+    // — same durability pattern performed_date already has.
+    if (row.frozen || withinLiveFreeze) {
+      if (withinLiveFreeze && !row.frozen) markFrozen.run(row.id)
+      protectedDates.push(row.scheduled_date)
       continue
     }
     const nextDate = nextScheduledDateAfter(userId, row.scheduled_date)
@@ -103,7 +114,13 @@ function recomputeStreak(userId) {
 
   db.prepare('UPDATE user_profile SET current_streak = ?, longest_streak = ? WHERE id = ?').run(streak, longest, userId)
 
-  return { current_streak: streak, longest_streak: longest, streak_freeze_until: freezeUntil }
+  return {
+    current_streak: streak,
+    longest_streak: longest,
+    streak_freeze_until: freezeUntil,
+    streak_freeze_from: freezeFrom,
+    protected_dates: protectedDates,
+  }
 }
 
 // Returns null if `scheduledDate` has no workout_log row for this user (either it

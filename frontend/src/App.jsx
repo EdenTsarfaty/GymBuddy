@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import ChatView from './components/ChatView'
 import TimerView from './components/TimerView'
 import WorkoutCard from './components/WorkoutCard'
+import HistoryWorkoutCard from './components/HistoryWorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
 import BugIcon from './components/icons/BugIcon'
@@ -26,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.3.5'
+const APP_VERSION = 'RC 0.8.4'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -121,6 +122,21 @@ function weekdayNameFromISO(dateStr) {
   return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
 }
 
+function formatHistoryDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// The most recent date (today or earlier, within the last 6 days) whose
+// weekday name is `day` — used by the weekday picker to resolve "Monday" to
+// an actual calendar date so it can decide whether that's today (live plan)
+// or already passed (history).
+function mostRecentOccurrenceISO(day, todayISO) {
+  const todayIdx = weekdays.indexOf(weekdayNameFromISO(todayISO))
+  const dayIdx = weekdays.indexOf(day)
+  const diff = (todayIdx - dayIdx + 7) % 7
+  return addDaysISO(todayISO, -diff)
+}
+
 // Next date after `dateStr` whose weekday is in `scheduledDays` — mirrors the
 // backend's grace-window boundary (backend/src/streak.js) so a missed day only
 // reads as "missed" once its grace window has actually closed.
@@ -136,7 +152,7 @@ function nextScheduledDateAfter(dateStr, scheduledDays) {
 // Maps ISO date -> 'green' (performed, on time or late) | 'orange' (grace-period
 // trail between a missed scheduled day and its late completion) | 'red' (missed,
 // grace window closed, never performed). Dates absent from the map get no dot.
-function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr) {
+function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr, protectedDates) {
   const map = new Map()
 
   for (const row of workoutLog) {
@@ -151,6 +167,17 @@ function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr) {
         cursor = addDaysISO(cursor, 1)
       }
     } else if (!row.performed_date) {
+      // Mirrors recomputeStreak's own freeze check (backend/src/streak.js) —
+      // a missed date the streak freeze covers never breaks the streak, so
+      // it's shown as saved rather than orange/red. protectedDates comes
+      // straight from workout_log's own `frozen` column (durable per row,
+      // same as performed_date), not a live from/until comparison — a date
+      // stays protected even after a later freeze reactivation overwrites
+      // the current window.
+      if (protectedDates.has(row.scheduled_date)) {
+        if (!map.has(row.scheduled_date)) map.set(row.scheduled_date, 'purple')
+        continue
+      }
       const nextDate = nextScheduledDateAfter(row.scheduled_date, scheduledDays)
       if (nextDate && todayStr >= nextDate) {
         if (!map.has(row.scheduled_date)) map.set(row.scheduled_date, 'red')
@@ -217,23 +244,40 @@ function App() {
   const [justRevertedIds, setJustRevertedIds] = useState(() => new Set())
   const [streakUndoTick, setStreakUndoTick] = useState(null)
 
+  // Fires the per-exercise history record alongside the local toggle —
+  // independent of the whole-day workout-log/complete call, which only fires
+  // once every card in the day is done (see the effect below).
+  function recordExerciseCompletion(id, completed) {
+    if (!currentUser) return
+    const endpoint = completed ? 'exercise-complete' : 'exercise-uncomplete'
+    fetch(`${API_BASE}/api/workout-log/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id, exercise_id: id }),
+    }).catch(() => {})
+  }
+
   function toggleCompleted(id) {
+    const wasCompleted = completedExerciseIds.has(id)
     // Un-completing while a stale non-zero cascadeToken lingers would replay
     // the whole cascade the next time this card remounts (e.g. leaving and
     // returning from Settings) — WorkoutCard's cascade effect only checks
     // "is cascadeToken truthy and am I not completed", it has no memory of
     // having already run for this token across a remount.
-    if (completedExerciseIds.has(id)) setCascadeToken(0)
+    if (wasCompleted) setCascadeToken(0)
     setCompletedExerciseIds((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
+    recordExerciseCompletion(id, !wasCompleted)
   }
 
   function markCompleted(id) {
+    if (completedExerciseIds.has(id)) return
     setCompletedExerciseIds((current) => (current.has(id) ? current : new Set(current).add(id)))
+    recordExerciseCompletion(id, true)
   }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -246,13 +290,21 @@ function App() {
   const [planView, setPlanView] = useState('week')
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [selectedDay, setSelectedDay] = useState(today)
+  // Non-null when viewing a specific past date's frozen record instead of
+  // the live plan for selectedDay — set by clicking a past date in month
+  // view, or a weekday whose most recent occurrence this week has already
+  // passed. Always null for today/future dates, which just show the live
+  // plan as before.
+  const [historyDate, setHistoryDate] = useState(null)
+  const [historyEntries, setHistoryEntries] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
   const [dayTitles, setDayTitles] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
   const [userSex, setUserSex] = useState(null)
   const [workoutLogRefreshKey, setWorkoutLogRefreshKey] = useState(0)
-  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0, streak_freeze_until: null })
+  const [streak, setStreak] = useState({ current_streak: 0, longest_streak: 0, streak_freeze_until: null, streak_freeze_from: null, protected_dates: [] })
   const [freezeSuspendedUntil, setFreezeSuspendedUntil] = useState(0)
   const [settingsFlashToken, setSettingsFlashToken] = useState(0)
   const showFreezeScreen = !!streak.streak_freeze_until && Date.now() >= freezeSuspendedUntil
@@ -348,7 +400,7 @@ function App() {
   }, [workoutLog, daysWithWorkouts])
 
   const catchUpWeekday = pendingCatchUp ? weekdayNameFromISO(pendingCatchUp.scheduled_date) : null
-  const isShowingCatchUp = selectedDay === today && !!catchUpWeekday
+  const isShowingCatchUp = !historyDate && selectedDay === today && !!catchUpWeekday
   const effectiveDay = isShowingCatchUp ? catchUpWeekday : selectedDay
   const catchUpTooltipText = catchUpWeekday
     ? `Catching up: ${catchUpWeekday}${dayTitles.get(catchUpWeekday) ? ` — ${dayTitles.get(catchUpWeekday)}` : ''}`
@@ -362,8 +414,8 @@ function App() {
   )
 
   const workoutIndicators = useMemo(
-    () => buildWorkoutIndicators(workoutLog, daysWithWorkouts, toISODate(new Date())),
-    [workoutLog, daysWithWorkouts],
+    () => buildWorkoutIndicators(workoutLog, daysWithWorkouts, toISODate(new Date()), new Set(streak.protected_dates)),
+    [workoutLog, daysWithWorkouts, streak.protected_dates],
   )
 
   // Earliest month the month-view calendar can navigate back to — the month of
@@ -558,6 +610,21 @@ function App() {
   }, [currentUser])
 
   useEffect(() => {
+    if (!currentUser || !historyDate) {
+      setHistoryEntries([])
+      return
+    }
+    const controller = new AbortController()
+    setHistoryLoading(true)
+    fetch(`${API_BASE}/api/workout-log/day?user_id=${currentUser.id}&date=${historyDate}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setHistoryEntries)
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false))
+    return () => controller.abort()
+  }, [currentUser, historyDate])
+
+  useEffect(() => {
     if (!currentUser) return
     const controller = new AbortController()
     fetch(`${API_BASE}/api/workout-log/streak?user_id=${currentUser.id}`, { signal: controller.signal })
@@ -601,7 +668,7 @@ function App() {
   }, [completedExerciseIds, exercises])
 
   useEffect(() => {
-    if (!currentUser || selectedDay !== today || exercises.length === 0) return
+    if (!currentUser || historyDate || selectedDay !== today || exercises.length === 0) return
     if (!exercises.every((item) => completedExerciseIds.has(item.id))) return
 
     const todayISO = toISODate(new Date())
@@ -639,7 +706,7 @@ function App() {
     // Deliberately excludes `streak` — it's only read to snapshot the
     // pre-completion value at the moment this fires, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp])
+  }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp, historyDate])
 
   function handleUndoComplete() {
     if (!lastCompletionBatch || !currentUser) return
@@ -658,6 +725,7 @@ function App() {
           ids.forEach((id) => next.delete(id))
           return next
         })
+        ids.forEach((id) => recordExerciseCompletion(id, false))
         // See toggleCompleted's comment — leaving this non-zero would replay
         // the cascade on a future remount (e.g. Settings and back).
         setCascadeToken(0)
@@ -770,9 +838,29 @@ function App() {
     })
   }
 
-  function selectDay(day) {
+  // Weekday picker: resolves "Monday" to its most recent actual date. Today
+  // or a day that hasn't happened yet this week shows the live plan, same as
+  // before; an already-passed occurrence shows that date's history instead.
+  function selectWeekday(day) {
+    const todayISO = toISODate(new Date())
+    const occurrence = mostRecentOccurrenceISO(day, todayISO)
     setSelectedDay(day)
+    setHistoryDate(occurrence < todayISO ? occurrence : null)
     closePlanMenu()
+  }
+
+  // Month view: an explicit date, so today/future always means live, and any
+  // past date always means history — no "most recent occurrence" ambiguity.
+  function selectMonthDay(date) {
+    const iso = toISODate(date)
+    const todayISO = toISODate(new Date())
+    setSelectedDay(weekdayNameFromISO(iso))
+    setHistoryDate(iso < todayISO ? iso : null)
+    closePlanMenu()
+  }
+
+  function viewCurrentPlan() {
+    setHistoryDate(null)
   }
 
   function markEditPending(id, updates, changedFields) {
@@ -1038,6 +1126,8 @@ function App() {
               </span>
               {isShowingCatchUp ? (
                 <span className="today-subtitle catchup-mobile-label">{catchUpTooltipText}</span>
+              ) : historyDate ? (
+                <span className="today-subtitle">{formatHistoryDate(historyDate)}</span>
               ) : dayTitles.get(selectedDay) && (
                 <span className="today-subtitle">{dayTitles.get(selectedDay)}</span>
               )}
@@ -1133,7 +1223,6 @@ function App() {
                             const gridColumn = cellIndex + 1
                             const gridRow = weekIndex + 2
                             if (!cell) return <span key={`${weekIndex}-${cellIndex}`} className="month-grid-day is-blank" style={{ gridColumn, gridRow }} />
-                            const weekdayName = cell.date.toLocaleDateString(undefined, { weekday: 'long' })
                             const isToday = cell.date.toDateString() === new Date().toDateString()
                             const indicator = workoutIndicators.get(toISODate(cell.date))
                             return (
@@ -1142,7 +1231,7 @@ function App() {
                                 key={`${weekIndex}-${cellIndex}`}
                                 className={`month-grid-day ${isToday ? 'is-today' : ''}`}
                                 style={{ gridColumn, gridRow }}
-                                onClick={() => selectDay(weekdayName)}
+                                onClick={() => selectMonthDay(cell.date)}
                               >
                                 <span className="month-grid-day-num">{cell.day}</span>
                                 <span className={`month-grid-day-dot ${indicator ? `is-${indicator}` : 'is-empty'}`} aria-hidden="true" />
@@ -1175,7 +1264,7 @@ function App() {
                       role="menuitem"
                       aria-checked={day === selectedDay}
                       className={`plan-menu-option ${day === today ? 'is-today' : ''} ${day === selectedDay ? 'is-picked-day' : ''} ${day !== today && !daysWithWorkouts.has(day) ? 'is-empty-day' : ''}`}
-                      onClick={() => selectDay(day)}
+                      onClick={() => selectWeekday(day)}
                     >
                       {day}
                     </button>
@@ -1313,6 +1402,24 @@ function App() {
           />
         ) : (
           <main className="card-list">
+            {historyDate ? (
+              <>
+                <button type="button" className="view-current-plan-btn" onClick={viewCurrentPlan}>
+                  View current plan
+                </button>
+                {historyLoading && <p className="loading-message">Loading history...</p>}
+                {!historyLoading && historyEntries.length === 0 && (
+                  <div className="empty-day">
+                    <ZzzIcon className="empty-day-zzz" />
+                    <p className="empty-day-message">Nothing recorded for this day.</p>
+                  </div>
+                )}
+                {!historyLoading && historyEntries.map((entry) => (
+                  <HistoryWorkoutCard key={entry.exercise_id ?? entry.name} entry={entry} />
+                ))}
+              </>
+            ) : (
+              <>
             {loading && <p className="loading-message">Loading exercises...</p>}
             {!loading && serverDown && (
               <div className="empty-day">
@@ -1410,6 +1517,8 @@ function App() {
                 </div>
               )
             })()}
+              </>
+            )}
           </main>
         )}
       </div>

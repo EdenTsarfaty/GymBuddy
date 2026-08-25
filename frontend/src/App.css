@@ -930,6 +930,10 @@
   background: #da9734;
 }
 
+.month-grid-day-dot.is-purple {
+  background: #9b6fd8;
+}
+
 [data-theme='light'] .month-grid-column-bg {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
@@ -944,6 +948,10 @@
 
 [data-theme='light'] .month-grid-day-dot.is-orange {
   background: #e99b23;
+}
+
+[data-theme='light'] .month-grid-day-dot.is-purple {
+  background: #8a5cd0;
 }
 
 /* Comes after .has-workout so today's stronger highlight always wins when a
@@ -1213,6 +1221,45 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+/* HistoryWorkoutCard — read-only, so no hover-lift/drag affordance implying
+   interactivity, and no accent tint for a missed exercise (that's reserved
+   for "completed" everywhere else in the app). */
+.history-card {
+  cursor: default;
+}
+
+.history-card:hover {
+  transform: none;
+  box-shadow: var(--shadow);
+}
+
+.history-card.is-missed {
+  opacity: 0.65;
+  border-color: var(--border);
+  background: var(--card-bg);
+}
+
+.history-card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-card.is-completed .history-card-status {
+  color: var(--accent);
+}
+
+.history-card.is-missed .history-card-status {
+  color: var(--text-muted);
+}
+
+.history-card-note {
+  margin: 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-muted);
 }
 
 .workout-card-muscles-line {
@@ -2493,6 +2540,29 @@
 .complete-workout-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.view-current-plan-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.view-current-plan-btn:hover {
+  color: var(--text-h);
+  border-color: var(--text-muted);
 }
 
 .goals-save-btn {

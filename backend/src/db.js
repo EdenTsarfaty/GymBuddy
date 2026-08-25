@@ -133,6 +133,49 @@ db.exec(`
     UNIQUE(user_id, scheduled_date)
   )
 `)
+// Set once, the moment this row is first evaluated while within the live
+// [streak_freeze_from, streak_freeze_until] window on user_profile (see
+// recomputeStreak in streak.js) — same durability pattern performed_date
+// already has: once set, a row keeps it regardless of what user_profile's
+// freeze fields become later (they get overwritten on every reactivation,
+// so reading them live at display time would silently un-protect a date
+// that was genuinely frozen under an earlier window). No retroactive
+// backfill for freezes that predate this column — it only ever gets set
+// going forward.
+try { db.exec('ALTER TABLE workout_log ADD COLUMN frozen INTEGER DEFAULT 0') } catch {}
+
+// One row per exercise scheduled on a given real date — a frozen snapshot of
+// its collapsed-card fields (title + basic stats), independent of the
+// day-level workout_log/streak bookkeeping above. `completed_at` is NULL
+// until the exercise is actually completed, so a missed day still shows its
+// full roster as uncompleted, not just silence. Rows for a real date that's
+// already in the past are never edited again once completed (or once that
+// date has passed) — see workoutHistory.js. `day` is the exercise's own
+// plan-day at the time its row was created (used later to detect drift —
+// e.g. the exercise moved to a different day since); `real_date` is always
+// the literal calendar date, not whatever date it was originally scheduled
+// for (a late catch-up logs under the day it was actually done).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS workout_history (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    day          TEXT NOT NULL,
+    real_date    TEXT NOT NULL,
+    exercise_id  INTEGER,
+    name         TEXT NOT NULL,
+    sets         INTEGER,
+    reps         INTEGER,
+    weight       REAL,
+    duration     INTEGER,
+    completed_at TEXT,
+    UNIQUE(user_id, exercise_id, real_date)
+  )
+`)
+db.exec('CREATE INDEX IF NOT EXISTS idx_workout_history_date ON workout_history(user_id, real_date)')
+// Cursor for the roster backfill (see workoutHistory.js's syncRoster) — same
+// "no retroactive history before this ever ran" boundary as streak.js's
+// syncScheduledWorkouts.
+try { db.exec('ALTER TABLE user_profile ADD COLUMN history_synced_until TEXT') } catch {}
 
 try { db.exec('ALTER TABLE user_profile ADD COLUMN current_streak INTEGER DEFAULT 0') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN longest_streak INTEGER DEFAULT 0') } catch {}
@@ -143,6 +186,10 @@ try { db.exec("ALTER TABLE user_profile ADD COLUMN workout_reminder_time TEXT DE
 try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_delay_minutes INTEGER DEFAULT 60') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN protein_reminder_pending_at TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_freeze_until TEXT') } catch {}
+// Date the freeze was actually activated — protection only covers
+// [streak_freeze_from, streak_freeze_until], not every missed day up
+// through `until` regardless of when the freeze was turned on.
+try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_freeze_from TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_guardian_hash TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN streak_guardian_salt TEXT') } catch {}
 try { db.exec('ALTER TABLE user_profile ADD COLUMN sex TEXT') } catch {}
