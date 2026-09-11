@@ -4307,6 +4307,13 @@
   font-size: 14px;
 }
 
+.edit-plan-add-exercise-btn {
+  align-self: center;
+  margin-top: 8px;
+  padding: 7px 13px;
+  font-size: 14px;
+}
+
 .edit-plan-card {
   display: flex;
   align-items: center;

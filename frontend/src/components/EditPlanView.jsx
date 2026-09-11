@@ -1529,6 +1529,12 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   // on. editingKey and selectedKeys can be active independently.
   const [editingKey, setEditingKey] = useState(null)
   const [editPanelExpanded, setEditPanelExpanded] = useState(false)
+  // Whether the currently-editing card also shows its insert-exercise
+  // dividers (add-before/add-after) — true for a normal card tap, false
+  // when the edit pane was opened by checking a lone selection checkbox
+  // instead (see toggleSelect), since that shouldn't also act like the
+  // card itself was opened for full editing.
+  const [editingShowsDividers, setEditingShowsDividers] = useState(true)
   const newKeyCounter = useRef(0)
 
   // Count of in-flight persist requests, driving the header's cloud sync
@@ -1846,6 +1852,11 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
 
   const dayExercises = draft[selectedDay]
   const isSelecting = selectedKeys.size > 0
+  // A pending-add card (Manual/Title search/Photo search, not yet resolved
+  // into a real exercise) is scaffolding, not a real list item — while one's
+  // on screen, "Add exercise" is disabled so repeated clicks can't stack up
+  // several unresolved placeholders at once.
+  const hasPendingAdd = dayExercises.some((it) => it.isPendingAdd)
 
   function findItem(key) {
     for (const day of WEEKDAYS) {
@@ -1857,7 +1868,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
 
   const editingEntry = editingKey ? findItem(editingKey) : null
 
-  function handleOpenEdit(key) {
+  function handleOpenEdit(key, { showDividers = true } = {}) {
     // The temporary add-exercise card is scaffolding for the add flow, not a
     // real draft item — if one's left sitting open (mode picker, title
     // search, etc.) and the user taps a different card instead, drop it
@@ -1873,11 +1884,30 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       return changed ? next : current
     })
     if (editingKey === key) {
-      setEditingKey(null)
-      setEditPanelExpanded(false)
+      if (!editingShowsDividers && showDividers) {
+        // Already open in checkbox-only mode (see toggleSelect) — a real
+        // card tap on the same card promotes it to full editing instead of
+        // closing it, since that's what tapping an open card would do for
+        // any other card too.
+        setEditingShowsDividers(true)
+      } else if (selectedKeys.size === 1 && selectedKeys.has(key)) {
+        // This card is the sole box checked, and the checkbox alone is
+        // reason enough to keep the pane open (see toggleSelect) — a tap
+        // here can drop it back to checkbox-only mode (no dividers) but
+        // shouldn't fully close it. Unchecking the box (or checking any
+        // other) is what actually closes it. Deliberately not just
+        // selectedKeys.has(key) — with two-or-more boxes checked, this
+        // card being one of them isn't the reason the pane is open, so
+        // there's nothing to preserve here.
+        setEditingShowsDividers(false)
+      } else {
+        setEditingKey(null)
+        setEditPanelExpanded(false)
+      }
     } else {
       setEditingKey(key)
       setEditPanelExpanded(false)
+      setEditingShowsDividers(showDividers)
     }
   }
 
@@ -2135,12 +2165,23 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const reorderSlotCount = Math.min(8, Math.max(3, lastFilledIndex(reorderChain) + 2))
 
   function toggleSelect(key) {
-    setSelectedKeys((current) => {
-      const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    const next = new Set(selectedKeys)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setSelectedKeys(next)
+
+    // Exactly one box checked opens that exercise's edit pane, same as
+    // tapping the card itself would — but without the add-before/add-after
+    // dividers a real card-open shows, since checking a box isn't the same
+    // as opening the card for full editing. Going back to zero or more than
+    // one selected closes it again (only if a checkbox is what opened it —
+    // a pane opened by an actual card tap is left alone here).
+    if (next.size === 1) {
+      const [soleKey] = next
+      if (editingKey !== soleKey) handleOpenEdit(soleKey, { showDividers: false })
+    } else if (!editingShowsDividers && editingKey) {
+      closeEditPanel()
+    }
   }
 
   // Builds an `updates` entry with the full field set persistPlan expects —
@@ -2719,6 +2760,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                   type="button"
                   className="edit-plan-pill-btn is-filled"
                   onClick={() => handleInsertPlaceholder(selectedDay, 0)}
+                  disabled={hasPendingAdd}
                 >
                   <PlusIcon size={16} />
                   <span>Add exercise</span>
@@ -2735,7 +2777,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
               {dayExercises.map((item, i) => (
                 <div key={item._key} style={{ display: 'contents' }}>
-                  {!dayReorderMode && editingKey === item._key && (
+                  {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
                     <InsertDivider bleedTop={i > 0} onInsert={() => handleInsertPlaceholder(selectedDay, i)} />
                   )}
                   <SortableCard
@@ -2749,7 +2791,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                     userId={userId}
                     readOnly={dayReorderMode}
                   />
-                  {!dayReorderMode && editingKey === item._key && (
+                  {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
                     <InsertDivider
                       bleedBottom={i < dayExercises.length - 1}
                       onInsert={() => handleInsertPlaceholder(selectedDay, i + 1)}
@@ -2759,6 +2801,17 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
               ))}
             </SortableContext>
           </DndContext>
+        )}
+        {dayExercises.length > 0 && !dayReorderMode && (
+          <button
+            type="button"
+            className="edit-plan-pill-btn is-filled edit-plan-add-exercise-btn"
+            onClick={() => handleInsertPlaceholder(selectedDay, dayExercises.length)}
+            disabled={hasPendingAdd}
+          >
+            <PlusIcon size={16} />
+            <span>Add exercise</span>
+          </button>
         )}
       </div>
 
