@@ -4823,13 +4823,31 @@ button.edit-plan-pending-camera-btn {
   position: fixed;
   left: max(0px, calc(50vw - 240px));
   right: max(0px, calc(50vw - 240px));
-  bottom: 0;
+  /* Extends 55px past the viewport edge at all times (compensated back up
+     with matching padding, so the visible top of the panel sits exactly
+     where bottom:0 would've put it) — pure buffer so the overshoot bounce
+     below never reveals a gap under the panel's bottom edge. */
+  bottom: -55px;
+  padding-bottom: 55px;
   z-index: 55;
   background: var(--card-bg);
   border: 1.5px solid var(--border);
   border-bottom: none;
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  animation: edit-panel-rise-in 0.45s cubic-bezier(0.32, 2, 0.6, 1);
+}
+
+/* Rises in with a touch of overshoot (past its resting position, then
+   settles back down) rather than just popping into place — feedback was
+   that the panel appearing at the bottom of the screen went unnoticed
+   entirely without some motion to draw the eye. Same overshoot curve the
+   workout-card swipe-release snap already uses elsewhere, just with a
+   stronger overshoot factor and a longer travel distance for a more
+   noticeable rise. */
+@keyframes edit-panel-rise-in {
+  from { transform: translateY(55px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
 }
 
 .edit-plan-edit-bar {
