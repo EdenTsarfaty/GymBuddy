@@ -75,6 +75,14 @@ function dayLabel(title, hasExercises) {
   return hasExercises ? 'Undefined' : 'Rest day'
 }
 
+// True whenever the title and the exercise list disagree about whether this
+// day is "real" — exercises with no title ("Undefined") or a leftover title
+// on a day with no exercises (e.g. after moving/removing them all). Flagged
+// so drift like this is visually obvious rather than silently wrong.
+function isDayLabelMismatched(title, hasExercises) {
+  return (!title && hasExercises) || (!!title && !hasExercises)
+}
+
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
@@ -759,7 +767,9 @@ function DayPickerSheet({ title, currentDay, dayTitles, draft, onPick, onCancel 
                 onClick={() => onPick(day)}
               >
                 <span>{day}</span>
-                <span className="edit-plan-sheet-day-title">{dayLabel(dayTitles.get(day), hasExercises)}</span>
+                <span className={`edit-plan-sheet-day-title ${isDayLabelMismatched(dayTitles.get(day), hasExercises) ? 'is-mismatched' : ''}`}>
+                  {dayLabel(dayTitles.get(day), hasExercises)}
+                </span>
               </button>
             )
           })}
@@ -1673,12 +1683,12 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     }))
   }
 
-  // The PUT endpoint rejects a blank title outright (it's meant for the
-  // header's rename field, which never submits empty) — clearing a title
-  // back to the "rest day"/"undefined" default goes through DELETE instead.
-  // Anywhere a title is being set from data rather than typed by the user
-  // (e.g. day reordering) needs to route through this, not applyDayTitle
-  // directly, since the new value might legitimately be ''.
+  // The PUT endpoint rejects a blank title outright — clearing one back to
+  // the "rest day"/"undefined" default goes through DELETE instead. The
+  // header's own rename field submits blank on purpose now (to clear a
+  // title), so it routes through here too, same as anywhere else a title is
+  // being set from data rather than typed (e.g. day reordering) — never call
+  // applyDayTitle directly, since the new value might legitimately be ''.
   async function setDayTitle(day, title) {
     if (!title) {
       const res = await track(fetch(`${API_BASE}/api/day-plans/${day}?user_id=${userId}`, { method: 'DELETE' }))
@@ -1792,7 +1802,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'delete')
       else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false, entry.titles)
-      else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.before)
+      else if (entry.kind === 'dayTitle') await setDayTitle(entry.day, entry.before)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.before)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, false)
     } catch {
@@ -1809,7 +1819,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'create')
       else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true, entry.titles)
-      else if (entry.kind === 'dayTitle') await applyDayTitle(entry.day, entry.after)
+      else if (entry.kind === 'dayTitle') await setDayTitle(entry.day, entry.after)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.after)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, true)
     } catch {
@@ -2140,7 +2150,6 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   // shows without a refetch.
   async function confirmEditDayTitle() {
     const trimmed = dayTitleDraft.trim()
-    if (!trimmed) return
     const before = dayTitles.get(selectedDay) || ''
     if (before === trimmed) {
       setEditingDayTitle(false)
@@ -2148,7 +2157,10 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     }
     setSavingDayTitle(true)
     try {
-      await applyDayTitle(selectedDay, trimmed)
+      // Empty is a legitimate value here (clears the title back to
+      // "Rest day"/"Undefined") — setDayTitle routes that through DELETE
+      // instead of PUT, which the backend rejects for a blank title.
+      await setDayTitle(selectedDay, trimmed)
       pushUndo({ kind: 'dayTitle', day: selectedDay, before, after: trimmed })
       setEditingDayTitle(false)
     } catch {
@@ -2543,7 +2555,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                 type="button"
                 className="edit-plan-day-title-confirm"
                 onClick={confirmEditDayTitle}
-                disabled={savingDayTitle || !dayTitleDraft.trim()}
+                disabled={savingDayTitle}
                 aria-label="Save day title"
               >
                 <CheckIcon size={13} />
@@ -2559,7 +2571,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             </div>
           ) : (
             <div className="edit-plan-day-title-row">
-              <span className="edit-plan-day-subtitle">
+              <span className={`edit-plan-day-subtitle ${isDayLabelMismatched(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd)) ? 'is-mismatched' : ''}`}>
                 {dayLabel(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd))}
               </span>
               <button

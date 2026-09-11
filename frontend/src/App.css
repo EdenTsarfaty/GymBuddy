@@ -3956,6 +3956,10 @@
   color: var(--text-muted);
 }
 
+.edit-plan-day-subtitle.is-mismatched {
+  color: color-mix(in srgb, #e5484d 65%, var(--text-muted));
+}
+
 .edit-plan-day-title-row {
   display: flex;
   align-items: center;
@@ -4780,6 +4784,10 @@ button.edit-plan-pending-camera-btn {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.edit-plan-sheet-day-title.is-mismatched {
+  color: color-mix(in srgb, #e5484d 65%, var(--text-muted));
 }
 
 .edit-plan-sheet-cancel {
