@@ -274,6 +274,8 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
+  const [titleGenerating, setTitleGenerating] = useState(false)
+  const [titleError, setTitleError] = useState('')
   const debounceRef = useRef(null)
 
   // 'pick' (upload/camera buttons) -> 'uploading' (identify-photo in
@@ -320,6 +322,32 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
     setQuery('')
     setSuggestions([])
     setSearching(false)
+  }
+
+  // Picking a suggestion (or confirming the raw typed text) generates the
+  // exercise the same way Photo search's confirm step does, then hands it to
+  // the same onPhotoConfirmed callback — the parent (handlePhotoAdd) doesn't
+  // care where `generated` came from, and just no-ops the photo-attach step
+  // when photoFile is null.
+  async function confirmTitleSearch(name) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    clearTimeout(debounceRef.current)
+    setTitleError('')
+    setTitleGenerating(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/generate-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed, day, user_id: userId }),
+      })
+      if (!res.ok) throw new Error()
+      const generated = await res.json()
+      onPhotoConfirmed(generated, null)
+    } catch {
+      setTitleError("Couldn't generate exercise data — try again.")
+      setTitleGenerating(false)
+    }
   }
 
   function closePhotoSearch() {
@@ -412,14 +440,18 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
             placeholder="Search exercise name…"
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') confirmTitleSearch(query) }}
+            disabled={titleGenerating}
             autoFocus
           />
-          {query.trim() && (
+          {titleGenerating && <div className="edit-plan-pending-suggestion-status is-generating">Generating…</div>}
+          {titleError && <div className="edit-plan-pending-suggestion-status">{titleError}</div>}
+          {!titleGenerating && query.trim() && (
             <div className="edit-plan-pending-suggestions">
               <button
                 type="button"
                 className="edit-plan-pending-suggestion"
-                onClick={() => setSuggestions([])}
+                onClick={() => confirmTitleSearch(query)}
               >
                 {query.trim()}
               </button>
@@ -435,7 +467,7 @@ function PendingAddCard({ onManual, onPhotoConfirmed, day, userId }) {
                         key={name}
                         type="button"
                         className="edit-plan-pending-suggestion"
-                        onClick={() => { setQuery(name); setSuggestions([]) }}
+                        onClick={() => confirmTitleSearch(name)}
                       >
                         <strong>{pre}</strong>{match}<strong>{post}</strong>
                       </button>

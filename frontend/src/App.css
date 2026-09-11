@@ -4614,6 +4614,10 @@ button.edit-plan-pending-camera-btn {
   padding: 8px 10px;
 }
 
+.edit-plan-pending-suggestion-status.is-generating {
+  color: var(--accent);
+}
+
 .edit-plan-stat {
   font-size: 14px;
   font-weight: 600;
