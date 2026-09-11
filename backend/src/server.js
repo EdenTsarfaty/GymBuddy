@@ -604,6 +604,10 @@ function loadProfile(uid) {
 
 fastify.get('/api/profile', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  // Clears an expired streak freeze before reading, so Settings reflects
+  // that regardless of whether the home screen's own streak fetch already
+  // ran this session (see recomputeStreak's auto-deactivate).
+  streak.recomputeStreak(uid)
   return loadProfile(uid)
 })
 

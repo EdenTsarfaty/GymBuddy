@@ -79,8 +79,8 @@ function recomputeStreak(userId) {
   ).all(userId)
 
   const profile = db.prepare('SELECT longest_streak, streak_freeze_until, streak_freeze_from FROM user_profile WHERE id = ?').get(userId)
-  const freezeUntil = profile?.streak_freeze_until || null
-  const freezeFrom = profile?.streak_freeze_from || null
+  let freezeUntil = profile?.streak_freeze_until || null
+  let freezeFrom = profile?.streak_freeze_from || null
   const markFrozen = db.prepare('UPDATE workout_log SET frozen = 1 WHERE id = ?')
 
   let streak = 0
@@ -111,6 +111,17 @@ function recomputeStreak(userId) {
   }
 
   const longest = Math.max(profile?.longest_streak ?? 0, streak)
+
+  // Auto-deactivate an expired freeze — nothing else clears these once
+  // `until` passes, so without this Settings would keep showing "Deactivate"
+  // and the freeze notice would keep blocking the home screen indefinitely.
+  // Every date the freeze actually covered is already durably protected via
+  // workout_log.frozen above, so clearing these here loses nothing.
+  if (freezeUntil && today > freezeUntil) {
+    db.prepare('UPDATE user_profile SET streak_freeze_until = NULL, streak_freeze_from = NULL WHERE id = ?').run(userId)
+    freezeUntil = null
+    freezeFrom = null
+  }
 
   db.prepare('UPDATE user_profile SET current_streak = ?, longest_streak = ? WHERE id = ?').run(streak, longest, userId)
 
