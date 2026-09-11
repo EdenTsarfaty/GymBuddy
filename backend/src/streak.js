@@ -23,8 +23,15 @@ function addDays(dateStr, days) {
   return toISODate(date)
 }
 
+// A weekday counts as "scheduled" purely by having exercises on it — NOT by
+// having a day_plans row. day_plans only ever holds a day's display title
+// (see server.js's day-plans endpoints); a day can have exercises but no
+// title (shown as "Undefined" in Edit Plan) or a title but no exercises
+// (an empty labeled day), and neither should affect whether it's scheduled.
+// Matches how the frontend already derives its own daysWithWorkouts
+// (App.jsx) straight from the exercises list.
 function getScheduledWeekdays(userId) {
-  const rows = db.prepare('SELECT day FROM day_plans WHERE user_id = ?').all(userId)
+  const rows = db.prepare('SELECT DISTINCT day FROM exercises WHERE user_id = ? AND deleted_at IS NULL').all(userId)
   return new Set(rows.map((r) => r.day))
 }
 

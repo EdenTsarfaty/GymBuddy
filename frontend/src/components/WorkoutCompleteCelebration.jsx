@@ -16,7 +16,7 @@ function WorkoutCompleteCelebration({ message, oldStreak, newStreak, isNewBest, 
       <div className="celebration-bottom-row">
         <div className="celebration-coins">+20</div>
         <div className="celebration-streak">
-          <span className="celebration-streak-number">
+          <span className={`celebration-streak-number ${isNewBest ? 'is-active' : ''}`}>
             <span className="celebration-streak-roll">
               <span className="celebration-streak-digit">{oldStreak}</span>
               <span className="celebration-streak-digit">{newStreak}</span>

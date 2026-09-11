@@ -27,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.3'
+const APP_VERSION = 'RC 0.8.4.4'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -1308,8 +1308,10 @@ function App() {
           )}
           {view !== 'settings' && (
             <div
-              className={`streak-badge ${!streak.current_streak ? 'is-inactive' : ''}`}
-              title={streak.current_streak ? `${streak.current_streak}-day streak` : 'No active streak'}
+              className={`streak-badge ${streak.current_streak > 0 && streak.current_streak === streak.longest_streak ? '' : 'is-inactive'}`}
+              // Native title tooltip — desktop-hover only, no equivalent
+              // surfaced on mobile yet (maybe a dedicated screen later).
+              title={`${streak.current_streak ? `${streak.current_streak}-day streak` : 'No active streak'}\nBest streak: ${streak.longest_streak} day${streak.longest_streak === 1 ? '' : 's'}`}
               onMouseEnter={() => {
                 if (streak.current_streak > 0 && streak.current_streak === streak.longest_streak) triggerFlameFlare()
               }}

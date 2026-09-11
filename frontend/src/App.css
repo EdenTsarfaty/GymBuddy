@@ -582,6 +582,10 @@
   font-size: 40px;
   font-weight: 800;
   -webkit-text-stroke: 0.6px currentColor;
+  color: var(--text-muted);
+}
+
+.celebration-streak-number.is-active {
   color: var(--accent);
 }
 
