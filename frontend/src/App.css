@@ -16,6 +16,14 @@
      flashes the overlay scrollbars. Clip (not hidden) so it doesn't turn this
      into a scroll container of its own. */
   overflow-x: clip;
+  /* Makes this a stacking context so the easter egg's negative-z layers
+     (see .nyan-spark-overlay) resolve *inside* here — painting under this
+     page's content but still over the page background. Without it they'd
+     land behind body's own opaque background and vanish, since html sets a
+     background too and body's therefore paints as a normal block instead of
+     propagating to the canvas. Fixed descendants are unaffected: isolation
+     doesn't make this a containing block for them. */
+  isolation: isolate;
 }
 
 .page-header {
@@ -74,10 +82,16 @@
    frames rather than eased, plus a continuous leftward "woosh" scroll) —
    recolored to var(--accent) and tiled into rows to cover any viewport
    height. Runs until the logo is tapped again (see handleLogoTap). */
+/* Negative z-index, not 0: a fixed element at z-index 0 still sits in the
+   positioned paint layer, which covers every non-positioned element in the
+   interface. Going negative drops both this and the rainbow beneath all of
+   .page's content while staying above the body background (body owns --bg,
+   .page paints none, and nothing between them opens a stacking context).
+   Sparks sit one level below the rainbow so the rainbow reads on top. */
 .nyan-spark-overlay {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -2;
   overflow: hidden;
   pointer-events: none;
   display: flex;
@@ -218,6 +232,100 @@
     background-size: 0 0, 0 0, 400px 6px, 400px 6px;
     background-position: 0 0, 0 0, 6px 17px, 23px 17px;
   }
+}
+
+/* Framework for a sprite crossing the screen left-to-right with a rainbow
+   trail growing behind it — see the nyanCats spawn effect in App.jsx for
+   where the image file itself is expected to live, and for each cat's own
+   random size/speed/vertical slot (passed in here as --cross-duration plus
+   inline top/height). Each cat is its own freshly-mounted element removed
+   once its crossing finishes, so the animation plays once, not infinite —
+   the "release a new one" behavior lives entirely in that spawn effect. */
+.nyan-cat-crossing {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 40px;
+  transform: translateY(-50%);
+  z-index: -1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.nyan-cat-trail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  overflow: hidden;
+  animation: nyan-cat-trail-grow var(--cross-duration, 14s) linear forwards;
+}
+
+/* The zigzag "wiggle": two identical copies of the full six-band ribbon,
+   each masked to show only alternating half-cycle segments along x (A on
+   the even ones, B on the odd), then offset from each other vertically.
+   Scanning left to right you therefore alternate between two heights, so
+   every boundary — outer edges and all five internal ones — steps in
+   lockstep instead of running flat. The two copies run the same 700ms
+   stepped animation 350ms apart, which keeps them in opposite states at
+   all times and flips which segment sits high twice a second.
+   --wave-band/--wave-step/--wave-seg are the only numbers to tune. */
+.nyan-rainbow-wave {
+  --wave-band: 5px;
+  --wave-step: 3px;
+  --wave-seg: 22px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: calc(var(--wave-band) * 6);
+  margin-top: calc(var(--wave-band) * -3);
+  background-image: linear-gradient(
+    to bottom,
+    #ff2222 0 calc(var(--wave-band) * 1),
+    #ff9922 calc(var(--wave-band) * 1) calc(var(--wave-band) * 2),
+    #ffee22 calc(var(--wave-band) * 2) calc(var(--wave-band) * 3),
+    #33dd33 calc(var(--wave-band) * 3) calc(var(--wave-band) * 4),
+    #2299ff calc(var(--wave-band) * 4) calc(var(--wave-band) * 5),
+    #7744ff calc(var(--wave-band) * 5) calc(var(--wave-band) * 6)
+  );
+}
+
+.nyan-wave-a {
+  -webkit-mask-image: repeating-linear-gradient(to right, #000 0 var(--wave-seg), transparent var(--wave-seg) calc(var(--wave-seg) * 2));
+  mask-image: repeating-linear-gradient(to right, #000 0 var(--wave-seg), transparent var(--wave-seg) calc(var(--wave-seg) * 2));
+  animation: nyan-wavy 700ms 0ms steps(2, jump-none) infinite both;
+}
+
+.nyan-wave-b {
+  -webkit-mask-image: repeating-linear-gradient(to right, transparent 0 var(--wave-seg), #000 var(--wave-seg) calc(var(--wave-seg) * 2));
+  mask-image: repeating-linear-gradient(to right, transparent 0 var(--wave-seg), #000 var(--wave-seg) calc(var(--wave-seg) * 2));
+  animation: nyan-wavy 700ms 350ms steps(2, jump-none) infinite both;
+}
+
+@keyframes nyan-wavy {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(var(--wave-step)); }
+}
+
+.nyan-cat-sprite {
+  position: absolute;
+  top: 50%;
+  left: -80px;
+  width: auto;
+  transform: translateY(-50%);
+  animation: nyan-cat-cross var(--cross-duration, 14s) linear forwards;
+}
+
+@keyframes nyan-cat-cross {
+  from { left: -80px; }
+  to { left: 100%; }
+}
+
+@keyframes nyan-cat-trail-grow {
+  from { width: 0; }
+  to { width: 100%; }
 }
 
 .plan-picker {

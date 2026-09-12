@@ -27,7 +27,14 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.10'
+const APP_VERSION = 'RC 0.8.4.11'
+// Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
+// near handleLogoTap) — a new cat claims a random *free* slot (with a bit
+// of jitter added on top so it's not perfectly on the gridline) and holds
+// it until it finishes crossing, which is what keeps simultaneous cats from
+// ever sharing a vertical band.
+const NYAN_CAT_SLOT_PERCENTS = [10, 26, 42, 58, 74, 90]
+const NYAN_CAT_SPAWN_INTERVAL_MS = 8000
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -963,8 +970,55 @@ function App() {
   const [logoTapCount, setLogoTapCount] = useState(0)
   const [logoSpinToken, setLogoSpinToken] = useState(0)
   const [logoSparksActive, setLogoSparksActive] = useState(false)
+  const [nyanCats, setNyanCats] = useState([])
   const lastLogoTapRef = useRef(0)
   const nyanAudioRef = useRef(null)
+  const nyanCatIdRef = useRef(0)
+
+  // Releases a new cat into a random free vertical slot every ~8s while
+  // active, and removes each one once its own crossing animation finishes
+  // (matching --cross-duration below). Picking only from slots nothing else
+  // currently holds is what prevents two cats overlapping vertically — if
+  // every slot is taken this round, the spawn is just skipped.
+  useEffect(() => {
+    if (!logoSparksActive) {
+      setNyanCats([])
+      return
+    }
+
+    const timeoutIds = []
+
+    function spawnCat() {
+      setNyanCats((current) => {
+        const usedSlots = new Set(current.map((cat) => cat.slot))
+        const freeSlots = NYAN_CAT_SLOT_PERCENTS.map((_, i) => i).filter((i) => !usedSlots.has(i))
+        if (freeSlots.length === 0) return current
+        const slot = freeSlots[Math.floor(Math.random() * freeSlots.length)]
+        const top = NYAN_CAT_SLOT_PERCENTS[slot] + (Math.random() * 6 - 3)
+        const height = 20 + Math.random() * 14
+        const duration = 12 + Math.random() * 6
+        const id = ++nyanCatIdRef.current
+        timeoutIds.push(setTimeout(() => {
+          setNyanCats((c) => c.filter((cat) => cat.id !== id))
+        }, duration * 1000))
+        return [...current, { id, slot, top, height, duration }]
+      })
+    }
+
+    function scheduleNext() {
+      timeoutIds.push(setTimeout(() => {
+        spawnCat()
+        scheduleNext()
+      }, NYAN_CAT_SPAWN_INTERVAL_MS + (Math.random() * 2000 - 1000)))
+    }
+
+
+
+    spawnCat()
+    scheduleNext()
+
+    return () => timeoutIds.forEach(clearTimeout)
+  }, [logoSparksActive])
 
   // Streamed straight from the Internet Archive at play time — nothing is
   // downloaded into this repo or served by our own backend.
@@ -1164,6 +1218,27 @@ function App() {
           ))}
         </div>
       )}
+      {nyanCats.map((cat) => (
+        // Framework only — the sprite file itself isn't in the repo (see
+        // the img's src). Drop an image at frontend/public/nyan-cat.gif
+        // (or .png) and it renders here automatically, no code change
+        // needed. A GIF plays its own frame animation natively in <img>;
+        // this component only handles this cat's crossing motion, size,
+        // and the rainbow trail growing behind it (spawn timing, random
+        // slot, size, and speed all come from the effect above).
+        <div
+          key={cat.id}
+          className="nyan-cat-crossing"
+          style={{ top: `${cat.top}%`, '--cross-duration': `${cat.duration}s` }}
+          aria-hidden="true"
+        >
+          <div className="nyan-cat-trail">
+            <div className="nyan-rainbow-wave nyan-wave-a" />
+            <div className="nyan-rainbow-wave nyan-wave-b" />
+          </div>
+          <img src="/nyan-cat.gif" alt="" className="nyan-cat-sprite" style={{ height: `${cat.height}px` }} />
+        </div>
+      ))}
       <audio
         ref={nyanAudioRef}
         src="https://archive.org/download/NyanCatoriginal/Nyan%20Cat%20%5Boriginal%5D.mp3"
