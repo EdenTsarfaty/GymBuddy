@@ -410,6 +410,21 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
     }
   }
 
+  // The expanded card's own Complete/Uncomplete button — plays the same
+  // swipe reveal (in whichever direction: the reveal icon already flips on
+  // `completed`, same as a real swipe) instead of toggling silently, since
+  // swiping to complete wasn't discoverable enough on its own.
+  function triggerSwipeComplete() {
+    setIsSwiping(true)
+    setDragPx(Math.min(COMPLETE_THRESHOLD_PX + SNAP_NUDGE_PX, MAX_REVEAL_PX))
+    navigator.vibrate?.(15)
+    setTimeout(() => {
+      onToggleComplete?.()
+      setDragPx(0)
+      setIsSwiping(false)
+    }, CASCADE_HOLD_MS)
+  }
+
   // "Complete Workout" replays this card's own swipe-to-complete animation
   // programmatically — same dragPx/isSwiping state a real swipe drives, just
   // scripted instead of following a pointer, staggered by list position for the
@@ -579,7 +594,7 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
                 </div>
               ) : (
                 <div className="edit-field">
-                  <span className="stat-label">Weight (kg)</span>
+                  <span className="stat-label">Weight <span className="stat-label-arrow">↔</span></span>
                   <div
                     className="weight-picker"
                     onPointerDown={handleWeightPointerDown}
@@ -699,6 +714,17 @@ function WorkoutCard({ exercise, sets, reps, weight, duration, description, bull
             </div>
 
             <div className="workout-card-actions">
+              {!editing && (
+                <button
+                  type="button"
+                  className={`icon-btn complete-toggle-btn ${completed ? 'is-active' : ''}`}
+                  aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
+                  aria-pressed={completed}
+                  onClick={triggerSwipeComplete}
+                >
+                  {completed ? <UncompleteIcon size={16} /> : <CompleteIcon size={16} />}
+                </button>
+              )}
               {!editing ? (
                 <button type="button" className="icon-btn" onClick={startEditing} aria-label="Edit exercise">
                   <PencilIcon size={16} />

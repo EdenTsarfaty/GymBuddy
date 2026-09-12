@@ -579,6 +579,36 @@ fastify.put('/api/music-links/:slotIndex', async (request, reply) => {
   return { slot_index: slotIndex, provider, url: resolved.resolvedUrl, type: resolved.type, title: resolved.title, thumbnail_url: resolved.thumbnail_url }
 })
 
+// The frontend's own live Spotify oEmbed check (see MusicProviderPanel) is
+// what actually re-fetches from Spotify — this just persists whatever it
+// found, so the stored snapshot (what GET serves first, before that live
+// check resolves) drifts toward current over time instead of staying
+// frozen at whenever the link was originally added. Deliberately no
+// server-side re-fetch here: trusting the client's own already-fetched
+// result is fine for display metadata like this, and avoids a second
+// redundant Spotify call for every panel open.
+fastify.patch('/api/music-links/:slotIndex/metadata', async (request, reply) => {
+  const slotIndex = Number(request.params.slotIndex)
+  const { user_id, title, thumbnail_url } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= MUSIC_LINK_SLOTS) {
+    reply.code(400)
+    return { error: 'Invalid slot' }
+  }
+
+  const result = db.prepare(
+    'UPDATE music_links SET title = ?, thumbnail_url = ? WHERE user_id = ? AND slot_index = ?',
+  ).run(title || null, thumbnail_url || null, uid, slotIndex)
+
+  if (result.changes === 0) {
+    reply.code(404)
+    return { error: 'No link in that slot' }
+  }
+
+  return { slot_index: slotIndex, title: title || null, thumbnail_url: thumbnail_url || null }
+})
+
 fastify.delete('/api/music-links/:slotIndex', async (request, reply) => {
   const slotIndex = Number(request.params.slotIndex)
   const uid = request.query.user_id ? Number(request.query.user_id) : 1

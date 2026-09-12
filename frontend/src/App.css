@@ -1357,6 +1357,18 @@
   letter-spacing: 0.4px;
 }
 
+/* The arrow reads as a barely-visible squiggle at the label's own 10px size
+   — sized up on its own so it's actually legible as "drag to adjust", not
+   just decorative noise. text-transform:uppercase has no effect on it, so
+   no need to un-uppercase. */
+.stat-label-arrow {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  vertical-align: middle;
+  line-height: 1;
+}
+
 .stat-value {
   position: relative;
   font-size: 14px;

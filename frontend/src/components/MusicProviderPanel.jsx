@@ -228,6 +228,19 @@ function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, 
                   [row.slot_index]: { ...current[row.slot_index], title: oembed.title, thumbnail_url: oembed.thumbnail_url },
                 }
               })
+
+              // Syncs the DB's stored snapshot toward what we just found —
+              // best-effort, not blocking on it — so the *next* time this
+              // (or any other device's) panel loads, GET /api/music-links
+              // already serves this instead of whatever was frozen at
+              // add-time. Only bothers if it actually changed.
+              if (oembed.title !== row.title || oembed.thumbnail_url !== row.thumbnail_url) {
+                fetch(`${API_BASE}/api/music-links/${row.slot_index}/metadata`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: userId, title: oembed.title, thumbnail_url: oembed.thumbnail_url }),
+                }).catch(() => {})
+              }
             })
             .catch(() => {})
         }
