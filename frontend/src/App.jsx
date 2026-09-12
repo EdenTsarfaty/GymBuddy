@@ -28,7 +28,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.5'
+const APP_VERSION = 'RC 0.8.5.1'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -1226,9 +1226,10 @@ function App() {
         </div>
       )}
       {nyanCats.map((cat) => (
-        // The sprite file itself isn't in the repo — the img reads it from
-        // frontend/public/nyan-cat.gif, and a GIF plays its own frames
-        // natively in <img>. Only the crossing is scripted here: the
+        // Sprite is hotlinked from nyan.cat's own hosting rather than a
+        // file in this repo — nothing to store or redistribute here, the
+        // browser fetches it live at view time (same pattern as the
+        // streamed song below). Only the crossing is scripted here: the
         // runner is the single moving element, with the trail anchored to
         // its right edge, so the rainbow cannot drift out of sync with the
         // sprite no matter the duration. Size is a fixed constant; only
@@ -1244,7 +1245,7 @@ function App() {
               <div className="nyan-rainbow-wave nyan-wave-a" />
               <div className="nyan-rainbow-wave nyan-wave-b" />
             </div>
-            <img src="/nyan-cat.gif" alt="" className="nyan-cat-sprite" />
+            <img src="https://www.nyan.cat/cats/original.gif" alt="" className="nyan-cat-sprite" />
           </div>
         </div>
       ))}

@@ -2588,6 +2588,42 @@
   gap: 16px;
 }
 
+/* Same technique as Edit Plan's own .edit-plan-sync-status/-label: the icon
+   transitions color (muted -> accent) while the label grows in beside it
+   via max-width + opacity, rather than both sweeping/fading as one unit.
+   These are transitions, not a keyframe animation, so they only play when
+   .is-synced/.is-visible are added *after* mount — NotesSavedPill (in
+   WorkoutProfilePage.jsx) mounts without them and flips them on a frame
+   later via rAF, and is re-keyed on every save so that mount, and the
+   transition it triggers, happens again each time. */
+.notes-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  transition: color 0.35s ease;
+}
+
+.notes-sync-status.is-synced {
+  color: var(--accent);
+}
+
+.notes-sync-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 0.35s ease, opacity 0.2s ease;
+}
+
+.notes-sync-label.is-visible {
+  max-width: 48px;
+  opacity: 1;
+}
+
 .settings-notes-textarea {
   width: 100%;
   font: inherit;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import CheckIcon from './icons/CheckIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
+import CloudIcon from './icons/CloudIcon'
 import FemaleIcon from './icons/FemaleIcon'
 import MaleIcon from './icons/MaleIcon'
 import XIcon from './icons/XIcon'
@@ -57,6 +58,43 @@ function GoalsModal({ initialGoals, onSave, onClose }) {
       </div>
     </div>,
     document.body
+  )
+}
+
+// Mirrors Edit Plan's own sync pill exactly: the icon transitions color
+// (muted -> accent) while the label grows in via max-width + opacity — not
+// a single fade/sweep across both. Re-keying this component on every save
+// (see notesSaveToken in WorkoutProfilePage) mounts a fresh instance each
+// time, which is what makes the reveal replay on every save rather than
+// only the first: it starts unrevealed, then flips a frame later via rAF,
+// so the CSS transitions below always have a real before/after to animate
+// between instead of mounting straight into their end state.
+// `dirty` (from the parent, recomputed on every keystroke) mutes the icon
+// and collapses the label immediately via the existing CSS transitions —
+// no remount involved, since the component itself doesn't change identity
+// while the user is just typing. `revealed` only governs the one-time
+// entrance animation on mount/remount (see the key on this component in
+// the parent); once true it stays true, so re-typing after a save can mute
+// the pill back out without also resetting/replaying that entrance.
+function NotesSavedPill({ dirty }) {
+  const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  const synced = revealed && !dirty
+
+  return (
+    <span
+      className={`notes-sync-status ${synced ? 'is-synced' : 'is-pending'}`}
+      role="status"
+      aria-label={synced ? 'Saved' : 'Unsaved changes'}
+    >
+      <CloudIcon size={16} />
+      <span className={`notes-sync-label ${synced ? 'is-visible' : ''}`}>Saved</span>
+    </span>
   )
 }
 
@@ -122,6 +160,19 @@ function WorkoutProfilePage({ beginnerMode, onChangeBeginnerMode, isOffline, cur
   })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
+  // Drives the cloud/"Saved" pill next to the notes field. Absent entirely
+  // until the first successful save — a fresh visit shouldn't claim
+  // anything's saved before the user has done anything. After that it
+  // stays mounted, but mutes back to the pending look (and "Saved" hides)
+  // the moment the draft goes dirty again, same as notesDirty below.
+  const [notesSyncedOnce, setNotesSyncedOnce] = useState(false)
+  // Bumped on every completed save (not just the first) and used as the
+  // pill's key below — remounting it is what replays the reveal animation
+  // each time a save actually lands, the same key-forces-remount trick the
+  // logo spin uses. Going dirty doesn't touch this: that's a plain prop
+  // change on the same mounted instance, so it just transitions via CSS.
+  const [notesSaveToken, setNotesSaveToken] = useState(0)
+  const notesDirty = notesDraft !== (profile.medical_notes || '')
 
   useEffect(() => {
     if (!currentUser) return
@@ -150,6 +201,23 @@ function WorkoutProfilePage({ beginnerMode, onChangeBeginnerMode, isOffline, cur
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated),
     }).catch(() => {})
+  }
+
+  async function saveNotes() {
+    if (isOffline || !notesDirty) return
+    const updated = { ...profile, medical_notes: notesDraft, user_id: currentUser?.id }
+    try {
+      await fetch(`${API_BASE}/api/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      })
+    } catch {
+      return
+    }
+    setProfile(updated)
+    setNotesSyncedOnce(true)
+    setNotesSaveToken((t) => t + 1)
   }
 
   return (
@@ -255,11 +323,14 @@ function WorkoutProfilePage({ beginnerMode, onChangeBeginnerMode, isOffline, cur
 
       <div className="settings-notes-field">
         <div className="settings-notes-field-header">
-          <span className="settings-row-label">Medical conditions / injuries</span>
+          <div className="edit-plan-title-row">
+            <span className="settings-row-label">Medical conditions / injuries</span>
+            {notesSyncedOnce && <NotesSavedPill key={notesSaveToken} dirty={notesDirty} />}
+          </div>
           <button
             className="bio-edit-btn regen-settings-btn"
-            disabled={isOffline || notesDraft === (profile.medical_notes || '')}
-            onClick={() => saveField('medical_notes', notesDraft)}
+            disabled={isOffline || !notesDirty}
+            onClick={saveNotes}
           >
             Save
           </button>
