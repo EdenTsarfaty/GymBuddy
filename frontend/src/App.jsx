@@ -27,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.6'
+const APP_VERSION = 'RC 0.8.4.7'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -775,6 +775,23 @@ function App() {
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [musicPanelOpen])
+
+  // The panel's position is measured once, against its anchor icon, when it
+  // opens (see MusicProviderPanel) — it doesn't track the anchor across a
+  // scroll, so it'd otherwise end up floating over whatever content happens
+  // to have scrolled underneath it. Simplest fix is to just close it, same
+  // as a click outside would. `capture: true` catches scrolling on any
+  // scrollable element, not just the window.
+  useEffect(() => {
+    if (!musicPanelOpen) return
+
+    function handleScroll() {
+      setMusicPanelOpen(false)
+    }
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', handleScroll, { capture: true })
   }, [musicPanelOpen])
 
   // Remove-mode is only ever entered via the long-press below — closing the

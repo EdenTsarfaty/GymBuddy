@@ -58,7 +58,11 @@ function trimServerLog() {
 }
 
 function timestamp() {
-  return new Date().toLocaleTimeString('en-GB', { hour12: false })
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d} ${now.toLocaleTimeString('en-GB', { hour12: false })}`
 }
 
 function methodColor(method) {
@@ -86,11 +90,15 @@ function appendServerLog(line) {
 
 // Clears any in-progress CLI input, prints the given lines, then redraws
 // whatever the user had typed so far — so log output never garbles it.
+// Ctrl+C races this: node's own readline SIGINT handling can close `cli`
+// before a SIGINT-triggered log line (e.g. the shutdown message) gets here,
+// and prompting a closed interface throws — skip the redraw in that case,
+// there's no input left to preserve anyway.
 function printLines(lines) {
   readline.clearLine(process.stdout, 0)
   readline.cursorTo(process.stdout, 0)
   for (const line of lines) console.log(line)
-  cli.prompt(true)
+  if (!cli.closed) cli.prompt(true)
 }
 
 // Ambient logging (requests/errors/info/warn) — silenced by --quiet.

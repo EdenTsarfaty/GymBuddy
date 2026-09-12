@@ -1487,6 +1487,11 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
     process.exit(1)
   }
   logStartup(PORT)
+  // Explicit, dated entry in server.log (logStartup above is just the
+  // pretty console banner — it never touches the log file) — this is what
+  // makes a "was the server even running at 8am" question answerable from
+  // the log alone instead of having to infer it from indirect timing.
+  logInfo(`Server started (pid ${process.pid}, port ${PORT})`)
   if (isTailscaleConnected()) {
     logInfo('Tailscale: connected')
   } else {
@@ -1494,3 +1499,14 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   }
   push.startScheduler()
 })
+
+// Catches Ctrl+C, a `kill`, and node --watch's restart-on-file-change (which
+// sends SIGTERM to the old process before starting the new one) — without
+// this, any shutdown that isn't the CLI's own `restart`/`exit` commands left
+// no trace at all in the log.
+function handleShutdownSignal(signal) {
+  logInfo(`Server shutting down (${signal})`)
+  fastify.close(() => process.exit(0))
+}
+process.on('SIGINT', () => handleShutdownSignal('SIGINT'))
+process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'))

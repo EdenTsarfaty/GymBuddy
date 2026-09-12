@@ -867,7 +867,7 @@ function RegenerateDayModal({ dayTitle, onClose, onConfirm }) {
 // once, on blur, not per keystroke.
 function ExerciseEditPanel({
   item, expanded, onToggleExpanded, onClose, onCommitField, onDelete, onPhotoChange,
-  canUndo, canRedo, onUndo, onRedo, track,
+  canUndo, canRedo, onUndo, onRedo, track, pendingCount, showSaved,
 }) {
   const [form, setForm] = useState(item)
   const [uploading, setUploading] = useState(false)
@@ -1150,7 +1150,21 @@ function ExerciseEditPanel({
       {expanded && (
         <div className="edit-plan-edit-form">
           <div className="edit-plan-edit-form-header">
-            <h3>Edit exercise</h3>
+            <div className="edit-plan-edit-form-header-title">
+              <h3>Edit exercise</h3>
+              {/* Mirrors the header's own sync-status pill, mobile-only —
+                  the keyboard opening pushes the page up and hides that one
+                  while this panel (and its inputs) are what's actually in
+                  view. */}
+              <span
+                className={`edit-plan-sync-status edit-plan-sync-status-mirror ${pendingCount > 0 ? 'is-pending' : 'is-synced'}`}
+                role="status"
+                aria-label={pendingCount > 0 ? 'Saving…' : 'Saved'}
+              >
+                <CloudIcon size={16} />
+                <span className={`edit-plan-sync-label ${showSaved ? 'is-visible' : ''}`}>Saved</span>
+              </span>
+            </div>
             <div className="edit-plan-edit-form-header-actions">
               <button type="button" className="edit-plan-icon-btn" onClick={onDelete} aria-label="Delete exercise">
                 <TrashIcon size={17} />
@@ -2841,6 +2855,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           onUndo={handleUndo}
           onRedo={handleRedo}
           track={track}
+          pendingCount={pendingCount}
+          showSaved={showSaved}
         />
       )}
 

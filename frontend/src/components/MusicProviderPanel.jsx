@@ -204,6 +204,33 @@ function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, 
         const map = {}
         for (const row of rows) map[row.slot_index] = row
         setSlots(map)
+
+        // The stored title/thumbnail is a snapshot from whenever the link
+        // was added — fine for a track/album, but a podcast show's oEmbed
+        // reflects its *latest episode*, so that snapshot goes stale the
+        // moment a new one airs. Refresh live, straight from Spotify's own
+        // oEmbed (confirmed to allow cross-origin browser fetches) rather
+        // than trusting the backend's copy — falls back to the stored
+        // snapshot per-slot if the live fetch fails, so a Spotify hiccup
+        // just means "not updated this time," never a blank slot.
+        for (const row of rows) {
+          if (row.provider !== 'spotify') continue
+          fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(row.url)}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((oembed) => {
+              if (!oembed) return
+              setSlots((current) => {
+                // The slot may have been cleared while this was in flight —
+                // nothing to refresh onto in that case.
+                if (!current[row.slot_index]) return current
+                return {
+                  ...current,
+                  [row.slot_index]: { ...current[row.slot_index], title: oembed.title, thumbnail_url: oembed.thumbnail_url },
+                }
+              })
+            })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
   }, [userId])

@@ -4893,11 +4893,29 @@ button.edit-plan-pending-camera-btn {
   border-bottom: 1px solid var(--border);
 }
 
+.edit-plan-edit-form-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .edit-plan-edit-form-header h3 {
   font-size: 19px;
   font-weight: 700;
   color: var(--text-h);
   margin: 0;
+}
+
+/* Desktop never needs this — it's a mobile-only stand-in for the header's
+   own sync-status pill, which the on-screen keyboard pushes out of view. */
+.edit-plan-sync-status-mirror {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .edit-plan-sync-status-mirror {
+    display: flex;
+  }
 }
 
 .edit-plan-edit-form-header-actions {
