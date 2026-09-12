@@ -45,6 +45,181 @@
   color: var(--text-h);
 }
 
+/* display:contents keeps the button out of the box tree entirely, so
+   .page-logo's absolute positioning behaves exactly as if this wrapper
+   didn't exist — it's purely a click target for the Settings-logo easter
+   egg (see handleLogoTap in App.jsx), not a layout element. */
+.logo-btn {
+  all: unset;
+  /* Deliberately no cursor: pointer — a hand cursor on hover would give away
+     that this is clickable, which defeats the point of a hidden egg. */
+  display: contents;
+}
+
+/* Plays once per remount (see logoSpinToken forcing a fresh <Logo> key) —
+   translateY(-50%) has to stay in the animated transform too, or the spin
+   would fight the logo's own vertical centering. */
+@keyframes logo-spin-360 {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to   { transform: translateY(-50%) rotate(360deg); }
+}
+
+.page-logo.is-spinning {
+  animation: logo-spin-360 1s ease;
+}
+
+/* 5th tap: fills the screen with nyan cat's own pixel-sparkle effect,
+   ported from https://github.com/cristurm/nyan-cat's less/nyan-sparks.less
+   (layered gradient dashes forming a small pixel sparkle, stepped through
+   frames rather than eased, plus a continuous leftward "woosh" scroll) —
+   recolored to var(--accent) and tiled into rows to cover any viewport
+   height. Runs until the logo is tapped again (see handleLogoTap). */
+.nyan-spark-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.nyan-spark-row {
+  position: relative;
+  flex: 0 0 300px;
+  width: 200%;
+  animation: nyan-spark-woosh 700ms 0ms linear infinite both;
+}
+
+.nyan-spark {
+  position: absolute;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x;
+}
+
+.nyan-spark::before,
+.nyan-spark::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.nyan-spark::before {
+  background:
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 5px, transparent 5px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 5px, transparent 5px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 5px, transparent 5px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 5px, transparent 5px, transparent 400px) repeat-x;
+}
+
+.nyan-spark::after {
+  background:
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 6px, transparent 6px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 11px, transparent 11px, transparent 400px) repeat-x,
+    linear-gradient(to right, var(--accent) 0px, var(--accent) 11px, transparent 11px, transparent 400px) repeat-x;
+}
+
+.nyan-spark:nth-child(1) {
+  z-index: 3;
+  top: 0;
+  left: 20px;
+  animation: nyan-sparkly 700ms 0ms steps(1) infinite both;
+}
+.nyan-spark:nth-child(1)::before { animation: nyan-sparkly-before 700ms 0ms steps(1) infinite both; }
+.nyan-spark:nth-child(1)::after { animation: nyan-sparkly-after 700ms 0ms steps(1) infinite both; }
+
+.nyan-spark:nth-child(2) {
+  top: 40px;
+  left: 170px;
+  animation: nyan-sparkly 700ms 200ms steps(1) infinite both;
+}
+.nyan-spark:nth-child(2)::before { animation: nyan-sparkly-before 700ms 200ms steps(1) infinite both; }
+.nyan-spark:nth-child(2)::after { animation: nyan-sparkly-after 700ms 200ms steps(1) infinite both; }
+
+.nyan-spark:nth-child(3) {
+  top: 100px;
+  left: 320px;
+  animation: nyan-sparkly 700ms 400ms steps(1) infinite both;
+}
+.nyan-spark:nth-child(3)::before { animation: nyan-sparkly-before 700ms 400ms steps(1) infinite both; }
+.nyan-spark:nth-child(3)::after { animation: nyan-sparkly-after 700ms 400ms steps(1) infinite both; }
+
+.nyan-spark:nth-child(4) {
+  top: 150px;
+  left: 200px;
+  animation: nyan-sparkly 700ms 600ms steps(1) infinite both;
+}
+.nyan-spark:nth-child(4)::before { animation: nyan-sparkly-before 700ms 600ms steps(1) infinite both; }
+.nyan-spark:nth-child(4)::after { animation: nyan-sparkly-after 700ms 600ms steps(1) infinite both; }
+
+@keyframes nyan-spark-woosh {
+  0% { left: 0px; }
+  100% { left: -400px; }
+}
+
+@keyframes nyan-sparkly {
+  0% {
+    background-size: 400px 6px, 0 0, 0 0, 0 0;
+    background-position: 17px 17px, 0 0, 0 0, 0 0;
+  }
+  16% {
+    background-size: 400px 6px, 400px 6px, 400px 6px, 400px 6px;
+    background-position: 17px 0, 34px 17px, 17px 34px, 0 17px;
+  }
+  33% {
+    background-size: 400px 6px, 400px 6px, 400px 6px, 400px 6px;
+    background-position: 17px 0, 34px 17px, 17px 34px, 0 17px;
+  }
+  50% {
+    background-size: 400px 6px, 0 0, 0 0, 0 0;
+    background-position: 17px 17px, 0 0, 0 0, 0 0;
+  }
+  66% {
+    background-size: 400px 11px, 400px 11px, 0 0, 0 0;
+    background-position: 17px 6px, 17px 23px, 0 0, 0 0;
+  }
+  83% {
+    background-size: 0 0, 0 0, 400px 5px, 400px 5px;
+    background-position: 0 0, 0 0, 11px 17px, 22px 17px;
+  }
+  100% {
+    background-size: 400px 6px, 0 0, 0 0, 0 0;
+    background-position: 17px 17px, 0 0, 0 0, 0 0;
+  }
+}
+
+@keyframes nyan-sparkly-before {
+  0%, 16%, 50%, 66%, 100% { background-size: 0 0, 0 0, 0 0, 0 0; background-position: 0 0, 0 0, 0 0, 0 0; }
+  33% {
+    background-size: 400px 5px, 400px 5px, 400px 5px, 400px 5px;
+    background-position: 6px 6px, 29px 6px, 29px 29px, 6px 29px;
+  }
+  83% {
+    background-size: 0 0, 0 0, 400px 5px, 400px 5px;
+    background-position: 0 0, 0 0, 17px 12px, 17px 22px;
+  }
+}
+
+@keyframes nyan-sparkly-after {
+  0%, 16%, 33%, 83%, 100% { background-size: 0 0, 0 0, 0 0, 0 0; background-position: 0 0, 0 0, 0 0, 0 0; }
+  50% {
+    background-size: 400px 11px, 400px 11px, 400px 6px, 400px 6px;
+    background-position: 17px 0, 17px 29px, 0 17px, 29px 17px;
+  }
+  66% {
+    background-size: 0 0, 0 0, 400px 6px, 400px 6px;
+    background-position: 0 0, 0 0, 6px 17px, 23px 17px;
+  }
+}
+
 .plan-picker {
   position: relative;
   grid-column: 2;

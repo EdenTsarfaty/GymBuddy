@@ -27,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.8'
+const APP_VERSION = 'RC 0.8.4.9'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -956,6 +956,14 @@ function App() {
   const [regenOpen, setRegenOpen] = useState(false)
   const [settingsClosing, setSettingsClosing] = useState(false)
   const [settingsOpening, setSettingsOpening] = useState(false)
+  // Easter egg: tapping the Settings logo 5 times in a row triggers nyan cat
+  // (see https://github.com/cristurm/nyan-cat — not wired up yet, just the
+  // click-counting framework for now). 3 taps plays a one-shot 360° spin as
+  // a "you're getting warmer" cue along the way.
+  const [logoTapCount, setLogoTapCount] = useState(0)
+  const [logoSpinToken, setLogoSpinToken] = useState(0)
+  const [logoSparksActive, setLogoSparksActive] = useState(false)
+  const lastLogoTapRef = useRef(0)
   const [chatExercise, setChatExercise] = useState(null)
   const [chatReturnExerciseId, setChatReturnExerciseId] = useState(null)
   const chatScrollYRef = useRef(0)
@@ -1093,8 +1101,55 @@ function App() {
     }
   }
 
+  // Only counts on the Settings screen — tapping the logo elsewhere is a
+  // no-op. Resets if taps are too spread out (over 1.5s apart), since this
+  // is meant to be a deliberate quick-tap sequence, not something that can
+  // accumulate by accident across an entire visit.
+  function handleLogoTap() {
+    if (view !== 'settings') return
+
+    // While the spark screen is running, any tap on the logo is "stop",
+    // not another step toward re-triggering it.
+    if (logoSparksActive) {
+      setLogoSparksActive(false)
+      setLogoTapCount(0)
+      return
+    }
+
+    const now = Date.now()
+    const next = now - lastLogoTapRef.current > 1500 ? 1 : logoTapCount + 1
+    lastLogoTapRef.current = now
+    setLogoTapCount(next)
+
+    if (next === 3) {
+      setLogoSpinToken((t) => t + 1)
+    } else if (next === 5) {
+      // TODO: full nyan cat run (https://github.com/cristurm/nyan-cat) — for
+      // now the 5th tap starts the spark screen, running until tapped again.
+      setLogoSparksActive(true)
+      setLogoTapCount(0)
+    }
+  }
+
   return (
     <div className={`page ${view === 'chat' ? 'is-chat' : ''} ${view === 'timer' ? 'is-timer' : ''} ${view === 'editPlan' ? 'is-edit-plan' : ''}`} ref={pageRef}>
+      {logoSparksActive && (
+        // Nyan cat's prelude — replicates less/nyan-sparks.less's own
+        // technique (layered gradient dashes forming a pixel sparkle,
+        // stepped through frames, scrolling via the same "woosh" motion)
+        // from https://github.com/cristurm/nyan-cat, recolored to accent.
+        // pointer-events:none so the logo tap that stops it still lands.
+        <div className="nyan-spark-overlay" aria-hidden="true">
+          {Array.from({ length: 8 }).map((_, row) => (
+            <div className="nyan-spark-row" key={row}>
+              <span className="nyan-spark" />
+              <span className="nyan-spark" />
+              <span className="nyan-spark" />
+              <span className="nyan-spark" />
+            </div>
+          ))}
+        </div>
+      )}
       {view !== 'editPlan' && (
       <header className="page-header">
         {view === 'chat' || view === 'timer' || view === 'workoutProfile' ? (
@@ -1115,7 +1170,13 @@ function App() {
           </>
         ) : (
           <>
-        <Logo height={64} className="page-logo" />
+        <button type="button" className="logo-btn" onClick={handleLogoTap} aria-label="GymBuddy logo">
+          <Logo
+            key={logoSpinToken}
+            height={64}
+            className={`page-logo ${logoSpinToken > 0 ? 'is-spinning' : ''}`}
+          />
+        </button>
 
         {view === 'settings' ? (
           <div className="plan-picker">
