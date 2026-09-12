@@ -27,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.9'
+const APP_VERSION = 'RC 0.8.4.10'
 const THEME_MODE_STORAGE_KEY = 'gymbuddy-theme-mode'
 const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
@@ -964,6 +964,20 @@ function App() {
   const [logoSpinToken, setLogoSpinToken] = useState(0)
   const [logoSparksActive, setLogoSparksActive] = useState(false)
   const lastLogoTapRef = useRef(0)
+  const nyanAudioRef = useRef(null)
+
+  // Streamed straight from the Internet Archive at play time — nothing is
+  // downloaded into this repo or served by our own backend.
+  useEffect(() => {
+    const el = nyanAudioRef.current
+    if (!el) return
+    if (logoSparksActive) {
+      el.currentTime = 0
+      el.play().catch(() => {})
+    } else {
+      el.pause()
+    }
+  }, [logoSparksActive])
   const [chatExercise, setChatExercise] = useState(null)
   const [chatReturnExerciseId, setChatReturnExerciseId] = useState(null)
   const chatScrollYRef = useRef(0)
@@ -1150,6 +1164,12 @@ function App() {
           ))}
         </div>
       )}
+      <audio
+        ref={nyanAudioRef}
+        src="https://archive.org/download/NyanCatoriginal/Nyan%20Cat%20%5Boriginal%5D.mp3"
+        loop
+        preload="none"
+      />
       {view !== 'editPlan' && (
       <header className="page-header">
         {view === 'chat' || view === 'timer' || view === 'workoutProfile' ? (
