@@ -2293,7 +2293,7 @@
   padding: 3px;
   border-radius: 999px;
   border: 1.5px solid var(--accent-border-light);
-  background: none;
+  background: var(--bg);
 }
 
 .theme-toggle-thumb {

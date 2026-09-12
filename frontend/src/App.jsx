@@ -25,9 +25,10 @@ import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
 import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
+import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.12'
+const APP_VERSION = 'RC 0.8.5'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -1017,6 +1018,13 @@ function App() {
     scheduleNext()
 
     return () => timeoutIds.forEach(clearTimeout)
+  }, [logoSparksActive])
+
+  // Every word on screen becomes "meow" for as long as the egg runs; the
+  // returned restore function puts the real copy back on cleanup.
+  useEffect(() => {
+    if (!logoSparksActive) return
+    return meowifyDocument()
   }, [logoSparksActive])
 
   // Streamed straight from the Internet Archive at play time — nothing is
