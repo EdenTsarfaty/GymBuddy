@@ -234,32 +234,58 @@
   }
 }
 
-/* Framework for a sprite crossing the screen left-to-right with a rainbow
-   trail growing behind it — see the nyanCats spawn effect in App.jsx for
-   where the image file itself is expected to live, and for each cat's own
-   random size/speed/vertical slot (passed in here as --cross-duration plus
-   inline top/height). Each cat is its own freshly-mounted element removed
-   once its crossing finishes, so the animation plays once, not infinite —
-   the "release a new one" behavior lives entirely in that spawn effect. */
+/* Framework for a sprite crossing the screen left-to-right trailing a
+   rainbow — see the nyanCats spawn effect in App.jsx for where the image
+   file is expected to live and for each cat's own speed/vertical slot
+   (passed in as --cross-duration plus inline top). Each cat is its own
+   freshly-mounted element removed once its crossing finishes, so the
+   animation plays once, not infinite — the "release a new one" behavior
+   lives entirely in that spawn effect. Clipped so the trail, which hangs a
+   full viewport off to the left, can't widen the document. */
 .nyan-cat-crossing {
+  /* Sized just over the rainbow's own height (--wave-band * 6 = 30px) so the
+     sprite stands marginally taller than the ribbon it trails. --cat-inset
+     is how far the sprite sits left of the rainbow's leading edge, i.e. how
+     deep the ribbon tucks under it; the source image also carries ~8px of
+     transparent padding per side (~1.6px at this scale) which eats into the
+     overlap, so this is a few px more than the visible seam needs. */
+  --cat-size: 34px;
+  --cat-inset: 12px;
   position: fixed;
   left: 0;
   width: 100%;
-  height: 40px;
+  height: 44px;
   transform: translateY(-50%);
   z-index: -1;
   pointer-events: none;
-  overflow: visible;
+  overflow: hidden;
 }
 
-.nyan-cat-trail {
+/* The only element that actually moves. Both the sprite and the trail are
+   positioned against it, which is what guarantees they travel as one rigid
+   unit: animating them separately meant the sprite covered viewport+80px
+   while the trail's edge covered only viewport, so the rainbow ran ahead
+   early on and the cat spent the whole crossing catching up to it. Width
+   is zero — it's just a moving anchor point at the cat's leading edge. */
+.nyan-cat-runner {
   position: absolute;
   top: 0;
-  left: 0;
-  height: 100%;
+  bottom: 0;
+  left: calc(var(--cat-size) * -2);
   width: 0;
-  overflow: hidden;
-  animation: nyan-cat-trail-grow var(--cross-duration, 14s) linear forwards;
+  animation: nyan-cat-cross var(--cross-duration, 14s) linear forwards;
+}
+
+/* Hangs one full viewport to the left of the runner and ends slightly
+   inside the sprite, so the rainbow reads as coming out from under the
+   cat's rear rather than butting up against it with a seam. */
+.nyan-cat-trail {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 100vw;
+  height: 100%;
+  transform: translateY(-50%);
 }
 
 /* The zigzag "wiggle": two identical copies of the full six-band ribbon,
@@ -309,23 +335,22 @@
   100% { transform: translateY(var(--wave-step)); }
 }
 
+/* Fixed size, deliberately not randomized per spawn. No animation of its
+   own — .nyan-cat-runner carries it. Nearest-neighbour scaling keeps a
+   pixel-art source crisp instead of smoothing it into mush. */
 .nyan-cat-sprite {
   position: absolute;
   top: 50%;
-  left: -80px;
+  left: calc(var(--cat-inset) * -1);
+  height: var(--cat-size);
   width: auto;
   transform: translateY(-50%);
-  animation: nyan-cat-cross var(--cross-duration, 14s) linear forwards;
+  image-rendering: pixelated;
 }
 
 @keyframes nyan-cat-cross {
-  from { left: -80px; }
+  from { left: calc(var(--cat-size) * -2); }
   to { left: 100%; }
-}
-
-@keyframes nyan-cat-trail-grow {
-  from { width: 0; }
-  to { width: 100%; }
 }
 
 .plan-picker {

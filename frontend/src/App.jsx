@@ -27,7 +27,7 @@ import UndoIcon from './components/icons/UndoIcon'
 import { API_BASE } from './apiBase'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.4.11'
+const APP_VERSION = 'RC 0.8.4.12'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -995,13 +995,12 @@ function App() {
         if (freeSlots.length === 0) return current
         const slot = freeSlots[Math.floor(Math.random() * freeSlots.length)]
         const top = NYAN_CAT_SLOT_PERCENTS[slot] + (Math.random() * 6 - 3)
-        const height = 20 + Math.random() * 14
         const duration = 12 + Math.random() * 6
         const id = ++nyanCatIdRef.current
         timeoutIds.push(setTimeout(() => {
           setNyanCats((c) => c.filter((cat) => cat.id !== id))
         }, duration * 1000))
-        return [...current, { id, slot, top, height, duration }]
+        return [...current, { id, slot, top, duration }]
       })
     }
 
@@ -1219,24 +1218,26 @@ function App() {
         </div>
       )}
       {nyanCats.map((cat) => (
-        // Framework only — the sprite file itself isn't in the repo (see
-        // the img's src). Drop an image at frontend/public/nyan-cat.gif
-        // (or .png) and it renders here automatically, no code change
-        // needed. A GIF plays its own frame animation natively in <img>;
-        // this component only handles this cat's crossing motion, size,
-        // and the rainbow trail growing behind it (spawn timing, random
-        // slot, size, and speed all come from the effect above).
+        // The sprite file itself isn't in the repo — the img reads it from
+        // frontend/public/nyan-cat.gif, and a GIF plays its own frames
+        // natively in <img>. Only the crossing is scripted here: the
+        // runner is the single moving element, with the trail anchored to
+        // its right edge, so the rainbow cannot drift out of sync with the
+        // sprite no matter the duration. Size is a fixed constant; only
+        // slot, vertical jitter, and speed vary per spawn (effect above).
         <div
           key={cat.id}
           className="nyan-cat-crossing"
           style={{ top: `${cat.top}%`, '--cross-duration': `${cat.duration}s` }}
           aria-hidden="true"
         >
-          <div className="nyan-cat-trail">
-            <div className="nyan-rainbow-wave nyan-wave-a" />
-            <div className="nyan-rainbow-wave nyan-wave-b" />
+          <div className="nyan-cat-runner">
+            <div className="nyan-cat-trail">
+              <div className="nyan-rainbow-wave nyan-wave-a" />
+              <div className="nyan-rainbow-wave nyan-wave-b" />
+            </div>
+            <img src="/nyan-cat.gif" alt="" className="nyan-cat-sprite" />
           </div>
-          <img src="/nyan-cat.gif" alt="" className="nyan-cat-sprite" style={{ height: `${cat.height}px` }} />
         </div>
       ))}
       <audio
