@@ -27,7 +27,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.6.1'
+const APP_VERSION = 'RC 0.8.6.2'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -649,6 +649,25 @@ function App() {
       .catch(() => {})
     return () => controller.abort()
   }, [currentUser, workoutLogRefreshKey])
+
+  // Seeds completedExerciseIds from what's already persisted for today —
+  // recordExerciseCompletion writes each checkbox toggle to workout_history
+  // right away, but without this nothing ever reads it back, so a reload
+  // (or just switching users) showed every exercise as uncompleted again
+  // even though the backend had it recorded all along.
+  useEffect(() => {
+    if (!currentUser) return
+    const controller = new AbortController()
+    const todayISO = toISODate(new Date())
+    fetch(`${API_BASE}/api/workout-log/day?user_id=${currentUser.id}&date=${todayISO}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const ids = rows.filter((row) => row.completed && row.exercise_id != null).map((row) => row.exercise_id)
+        setCompletedExerciseIds(new Set(ids))
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [currentUser])
 
   // Only used to pick the muscle-diagram model (male/female) on a workout
   // card — not worth lifting the rest of the profile up here too, since
