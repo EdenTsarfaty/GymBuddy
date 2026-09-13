@@ -251,7 +251,11 @@ async function generatePlanStructure(profile, settings, onLog) {
     },
   ]
 
-  const r1 = await callOpenAI({ model: PLAN_MODEL, messages: stage1Messages })
+  // Highest effort in the file: cyclic 7-day spacing math, split design from
+  // goals/experience/days-per-week, and weekly muscle-group balance all get
+  // decided here — everything downstream (structure, exercise lists)
+  // inherits whatever quality this stage settles on.
+  const r1 = await callOpenAI({ model: PLAN_MODEL, messages: stage1Messages, reasoning_effort: 'high' })
   const reasoning = r1.choices[0].message.content
   if (onLog) onLog('plan_reasoning', reasoning)
 
@@ -286,10 +290,14 @@ async function generatePlanStructure(profile, settings, onLog) {
     },
   ]
 
+  // Still has to independently re-verify the cyclic spacing constraint while
+  // committing to specific days (not just restate stage 1's reasoning) —
+  // enough real logic left here to warrant the same effort as stage 1.
   const r2 = await callOpenAI({
     model: PLAN_MODEL,
     messages: stage2Messages,
     response_format: { type: 'json_schema', json_schema: { name: 'plan_days', strict: true, schema: PLAN_DAYS_SCHEMA } },
+    reasoning_effort: 'high',
   })
   const structureText = r2.choices[0].message.content
 
@@ -319,10 +327,13 @@ ${settings.includeStretch ? '- The stretches MUST be the very last exercises in 
     },
   ]
 
+  // More domain pattern-matching against the given examples than open-ended
+  // reasoning — the hard combinatorial work already happened in stages 1-2.
   const r3 = await callOpenAI({
     model: PLAN_MODEL,
     messages: stage3Messages,
     response_format: { type: 'json_schema', json_schema: { name: 'plan_exercises', strict: true, schema: PLAN_EXERCISES_SCHEMA } },
+    reasoning_effort: 'medium',
   })
 
   return JSON.parse(r3.choices[0].message.content)
@@ -427,7 +438,11 @@ async function generateDayExercises(profile, dayTitle, { currentExercises, comme
     { role: 'user', content: [...context, '', '## Task', ...reasoningAsk].join('\n') },
   ]
 
-  const r1 = await callOpenAI({ model: PLAN_MODEL, messages: stage1Messages })
+  // Same kind of reasoning as the full-plan's stage 1, just scoped to one
+  // day — mapping feedback to specific swaps, or designing one day from
+  // scratch — so it doesn't need the weekly cyclic-spacing math that earns
+  // that call 'high'.
+  const r1 = await callOpenAI({ model: PLAN_MODEL, messages: stage1Messages, reasoning_effort: 'medium' })
   const reasoning = r1.choices[0].message.content
   if (onLog) onLog('day_regen_reasoning', reasoning)
 
@@ -454,6 +469,7 @@ async function generateDayExercises(profile, dayTitle, { currentExercises, comme
     model: PLAN_MODEL,
     messages: stage2Messages,
     response_format: { type: 'json_schema', json_schema: { name: 'day_exercises', strict: true, schema: DAY_EXERCISES_SCHEMA } },
+    reasoning_effort: 'medium',
   })
 
   return JSON.parse(r2.choices[0].message.content).exercises
@@ -639,6 +655,13 @@ async function runChatWithTools(messages) {
       tools: CHAT_TOOLS,
       tool_choice: 'auto',
       max_completion_tokens: CHAT_MAX_COMPLETION_TOKENS,
+      // gpt-5.6-luna defaults to a non-'none' reasoning effort, which
+      // /v1/chat/completions rejects outright when `tools` is present
+      // ("Function tools with reasoning_effort are not supported ... set
+      // reasoning_effort to 'none'"). Scoped to this tool-calling path only —
+      // other callOpenAI call sites (e.g. photo identification) don't pass
+      // tools and still benefit from real reasoning effort.
+      reasoning_effort: 'none',
     })
 
     const choice = data.choices[0]
@@ -716,6 +739,11 @@ async function runWithTools(messages, schema, schemaName) {
       messages,
       tools: [YOUTUBE_TOOL],
       tool_choice: isFirst ? 'required' : 'auto',
+      // Same tools+reasoning_effort incompatibility as runChatWithTools — see
+      // the comment there. This path backs generateExerciseData/
+      // generateSwapExercise (new-exercise add, exercise swap), so it was
+      // presumably failing with the same 400 in production already.
+      reasoning_effort: 'none',
       response_format: {
         type: 'json_schema',
         json_schema: { name: schemaName, strict: true, schema },
