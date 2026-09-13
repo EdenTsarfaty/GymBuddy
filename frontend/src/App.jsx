@@ -27,7 +27,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.6'
+const APP_VERSION = 'RC 0.8.6.1'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -131,6 +131,18 @@ function weekdayNameFromISO(dateStr) {
 
 function formatHistoryDate(dateStr) {
   return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// Used by the "View <date>" link into a recorded workout — built from three
+// separate toLocaleDateString calls rather than one call with all three
+// options, since a locale's own weekday/day/month ordering (e.g. "Sat,
+// Sep 12" in en-US) wouldn't reliably come out as weekday-day-month.
+function formatRecordedWorkoutDate(dateStr) {
+  const date = new Date(`${dateStr}T00:00:00`)
+  const weekday = date.toLocaleDateString(undefined, { weekday: 'short' })
+  const day = date.toLocaleDateString(undefined, { day: 'numeric' })
+  const month = date.toLocaleDateString(undefined, { month: 'short' })
+  return `${weekday} ${day} ${month}`
 }
 
 // The most recent date (today or earlier, within the last 6 days) whose
@@ -1644,7 +1656,7 @@ function App() {
               <>
             {canViewRecordedWorkout && (
               <button type="button" className="view-current-plan-btn" onClick={viewRecordedWorkout}>
-                View {formatHistoryDate(selectedOccurrenceISO)}
+                View {formatRecordedWorkoutDate(selectedOccurrenceISO)}
               </button>
             )}
             {loading && <p className="loading-message">Loading exercises...</p>}
