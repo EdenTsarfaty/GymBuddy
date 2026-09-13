@@ -5,7 +5,6 @@ import WorkoutCard from './components/WorkoutCard'
 import HistoryWorkoutCard from './components/HistoryWorkoutCard'
 import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
-import BugIcon from './components/icons/BugIcon'
 import CalendarIcon from './components/icons/CalendarIcon'
 import OfflineIcon from './components/icons/OfflineIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
@@ -28,7 +27,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.5.1'
+const APP_VERSION = 'RC 0.8.5.2'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -1555,6 +1554,7 @@ function App() {
               localStorage.setItem(MUSIC_PROVIDER_STORAGE_KEY, id)
             }}
             version={APP_VERSION}
+            reportBugUrl={REPORT_BUG_URL}
             isOffline={isOffline}
             users={users}
             currentUser={currentUser}
@@ -1711,16 +1711,6 @@ function App() {
       {view !== 'editPlan' && (
       <footer className="page-footer">
         <span>{APP_VERSION}</span>
-        <a
-          className="report-bug-link"
-          href={REPORT_BUG_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Report a bug"
-        >
-          <BugIcon size={21} />
-          Report bug
-        </a>
       </footer>
       )}
 

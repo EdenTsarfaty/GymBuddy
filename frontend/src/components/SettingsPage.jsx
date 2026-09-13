@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import BugIcon from './icons/BugIcon'
 import ChevronLeftIcon from './icons/ChevronLeftIcon'
 import EyeIcon from './icons/EyeIcon'
 import EyeOffIcon from './icons/EyeOffIcon'
@@ -497,7 +498,7 @@ function StreakFreezeModal({ onActivate, onClose, guardianEnabled, userId, onGua
   )
 }
 
-function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEditPlan, onEditProfile, musicProvider, onChangeMusicProvider, version, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
+function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEditPlan, onEditProfile, musicProvider, onChangeMusicProvider, version, reportBugUrl, isOffline, users, currentUser, onChangeUser, flashStreakFreeze, onStreakFreezeChange }) {
   const activeIndex = THEME_MODES.indexOf(themeMode)
   const [profile, setProfile] = useState({
     age: null, height: null, weight: null, goals: [],
@@ -692,6 +693,20 @@ function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEd
           target="_blank"
           rel="noopener noreferrer"
         >{version}</a>
+      </div>
+
+      <div className="settings-row">
+        <span className="settings-row-label">Report bug</span>
+        <a
+          className="bio-edit-btn report-bug-btn"
+          href={reportBugUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Report a bug"
+        >
+          <BugIcon size={16} />
+          Report
+        </a>
       </div>
     </div>
   )

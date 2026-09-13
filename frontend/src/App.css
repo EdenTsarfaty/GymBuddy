@@ -2528,6 +2528,16 @@
   padding: 5px 16px;
 }
 
+.report-bug-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: auto;
+  padding: 5px 14px;
+  text-decoration: none;
+}
+
 .streak-freeze-btn {
   width: auto;
   padding: 5px 14px;
@@ -3235,6 +3245,15 @@
   font-size: 15px;
   font-weight: 500;
   color: var(--text-muted);
+  /* The version link below this rule is plain text against the row's own
+     right edge, while the "Report" pill in the row underneath it has 14px
+     of its own right padding — so even though both boxes line up exactly,
+     the version's digits used to reach further right than "Report"'s
+     visible text does. Matching that same padding here (rather than
+     tightening the button, which would make it inconsistent with every
+     other pill in Settings) makes the two rows' text actually end in the
+     same place. */
+  padding-right: 9px;
 }
 
 .settings-row-link {
