@@ -2925,7 +2925,12 @@
   border: 1.5px solid var(--border);
   border-radius: 999px;
   padding: 6px 16px;
-  margin-bottom: 12px;
+  /* .card-list's own 16px gap above this (its first child) reads as bigger
+     than it should — the pill's thin border and rounded shape make the
+     whitespace above it look heavier than the same 16px gap between denser
+     elements like exercise cards. Pulling it up tightens that illusion
+     without touching the gap value itself, which every other row relies on. */
+  margin-top: -20px;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }

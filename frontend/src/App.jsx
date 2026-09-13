@@ -27,7 +27,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.5.2'
+const APP_VERSION = 'RC 0.8.6'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -142,6 +142,25 @@ function mostRecentOccurrenceISO(day, todayISO) {
   const dayIdx = weekdays.indexOf(day)
   const diff = (todayIdx - dayIdx + 7) % 7
   return addDaysISO(todayISO, -diff)
+}
+
+// The date this current calendar week started on (locale's first day of
+// week, same convention getOrderedWeekdays uses for the tab order) — the
+// boundary for "preceding today" in the weekday picker. Deliberately not
+// just "occurrence < today": mostRecentOccurrenceISO wraps a day that's
+// later in the week (e.g. Friday, with today Thursday) around to last
+// week's date, which is technically before today but isn't this week —
+// that tab should read as "hasn't happened yet", not offer last week's
+// history.
+function startOfWeekISO(todayISO) {
+  const date = new Date(`${todayISO}T00:00:00`)
+  // Same first-day-of-week convention as getOrderedWeekdays, so the button's
+  // week boundary always matches whatever week is actually on screen in the
+  // tabs. If today happens to be the locale's first day of the week, that
+  // correctly means no earlier day exists yet this week — not a bug.
+  const firstDayJs = getFirstDayOfWeek() % 7 // 1..7 (Mon..Sun) -> JS's 1..6,0
+  const daysSinceStart = (date.getDay() - firstDayJs + 7) % 7
+  return addDaysISO(todayISO, -daysSinceStart)
 }
 
 // Next date after `dateStr` whose weekday is in `scheduledDays` — mirrors the
@@ -412,6 +431,22 @@ function App() {
   const catchUpTooltipText = catchUpWeekday
     ? `Catching up: ${catchUpWeekday}${dayTitles.get(catchUpWeekday) ? ` — ${dayTitles.get(catchUpWeekday)}` : ''}`
     : ''
+
+  // Week view now defaults to the plan for every day, including ones already
+  // past — only the month calendar (selectMonthDay) jumps straight into
+  // history. The gate is "resolves to a date within THIS week and before
+  // today", not just "before today": mostRecentOccurrenceISO wraps a day
+  // later in the week (e.g. Friday, with today Thursday) around to last
+  // week's occurrence, which is technically before today but isn't what
+  // "days preceding today" means for a still-upcoming tab — those should
+  // just show the plan, no history link, same as today itself. historyDate
+  // being set means the user's already followed that link, so there's
+  // nothing to offer here.
+  const todayISOForWeek = toISODate(new Date())
+  const selectedOccurrenceISO = historyDate ? null : mostRecentOccurrenceISO(selectedDay, todayISOForWeek)
+  const canViewRecordedWorkout = !!selectedOccurrenceISO
+    && selectedOccurrenceISO >= startOfWeekISO(todayISOForWeek)
+    && selectedOccurrenceISO < todayISOForWeek
 
   const exercises = useMemo(
     () => allExercises
@@ -862,14 +897,12 @@ function App() {
     })
   }
 
-  // Weekday picker: resolves "Monday" to its most recent actual date. Today
-  // or a day that hasn't happened yet this week shows the live plan, same as
-  // before; an already-passed occurrence shows that date's history instead.
+  // Weekday picker: always shows that day's plan, even for a day that's
+  // already passed this week — canViewRecordedWorkout (derived above from
+  // selectedDay) is what offers a link into its recorded history instead.
   function selectWeekday(day) {
-    const todayISO = toISODate(new Date())
-    const occurrence = mostRecentOccurrenceISO(day, todayISO)
     setSelectedDay(day)
-    setHistoryDate(occurrence < todayISO ? occurrence : null)
+    setHistoryDate(null)
     closePlanMenu()
   }
 
@@ -885,6 +918,10 @@ function App() {
 
   function viewCurrentPlan() {
     setHistoryDate(null)
+  }
+
+  function viewRecordedWorkout() {
+    if (selectedOccurrenceISO) setHistoryDate(selectedOccurrenceISO)
   }
 
   function markEditPending(id, updates, changedFields) {
@@ -1605,6 +1642,11 @@ function App() {
               </>
             ) : (
               <>
+            {canViewRecordedWorkout && (
+              <button type="button" className="view-current-plan-btn" onClick={viewRecordedWorkout}>
+                View {formatHistoryDate(selectedOccurrenceISO)}
+              </button>
+            )}
             {loading && <p className="loading-message">Loading exercises...</p>}
             {!loading && serverDown && (
               <div className="empty-day">
