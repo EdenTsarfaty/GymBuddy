@@ -1266,6 +1266,78 @@
   background: #8a5cd0;
 }
 
+.month-legend-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  width: 100%;
+  margin: 0;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.month-legend-toggle:hover {
+  color: var(--accent);
+}
+
+.month-legend-chevron {
+  transition: transform 0.2s ease;
+}
+
+.month-legend-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* The animated element itself: max-height (not a keyframe) so this can
+   reverse mid-animation if toggled quickly, and so it works on an
+   always-mounted element rather than needing mount/unmount timing tricks.
+   The padding/gap that give the open state its visible spacing live on
+   .month-legend-inner instead — put here, they'd leave a gap even at
+   max-height:0. */
+.month-legend {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+.month-legend.is-open {
+  max-height: 160px;
+}
+
+.month-legend-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px 4px 2px;
+}
+
+.month-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* Bumped up from the grid's own 4px — that size is right for a day cell but
+   too small to read clearly as a standalone swatch next to explanatory text. */
+.month-legend-row .month-grid-day-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+
 /* Comes after .has-workout so today's stronger highlight always wins when a
    workout day and today land in the same cell. */
 .month-grid-day.is-today {

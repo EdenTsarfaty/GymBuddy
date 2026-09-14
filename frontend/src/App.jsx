@@ -7,6 +7,7 @@ import Logo from './components/Logo'
 import SettingsPage from './components/SettingsPage'
 import CalendarIcon from './components/icons/CalendarIcon'
 import OfflineIcon from './components/icons/OfflineIcon'
+import ChevronDownIcon from './components/icons/ChevronDownIcon'
 import ChevronLeftIcon from './components/icons/ChevronLeftIcon'
 import GearIcon from './components/icons/GearIcon'
 import FlameIcon from './components/icons/FlameIcon'
@@ -27,7 +28,7 @@ import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.6.3'
+const APP_VERSION = 'RC 0.8.6.4'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -323,6 +324,7 @@ function App() {
   const [isOffline, setIsOffline] = useState(false)
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
+  const [legendOpen, setLegendOpen] = useState(false)
   const [musicPanelOpen, setMusicPanelOpen] = useState(false)
   const [musicPanelRemoveMode, setMusicPanelRemoveMode] = useState(false)
   const [planView, setPlanView] = useState('week')
@@ -1492,6 +1494,36 @@ function App() {
                       </>
                     )
                   })()}
+                </div>
+
+                <button
+                  type="button"
+                  className="month-legend-toggle"
+                  onClick={() => setLegendOpen((v) => !v)}
+                  aria-expanded={legendOpen}
+                >
+                  Legend
+                  <ChevronDownIcon size={12} className={`month-legend-chevron ${legendOpen ? 'is-open' : ''}`} />
+                </button>
+                <div className={`month-legend ${legendOpen ? 'is-open' : ''}`}>
+                  <div className="month-legend-inner">
+                    <div className="month-legend-row">
+                      <span className="month-grid-day-dot is-green" aria-hidden="true" />
+                      <span>Workout completed</span>
+                    </div>
+                    <div className="month-legend-row">
+                      <span className="month-grid-day-dot is-orange" aria-hidden="true" />
+                      <span>Missed — still within the grace window</span>
+                    </div>
+                    <div className="month-legend-row">
+                      <span className="month-grid-day-dot is-red" aria-hidden="true" />
+                      <span>Missed — grace window closed</span>
+                    </div>
+                    <div className="month-legend-row">
+                      <span className="month-grid-day-dot is-purple" aria-hidden="true" />
+                      <span>Missed — protected by Streak Freeze</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
