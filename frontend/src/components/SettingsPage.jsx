@@ -6,7 +6,6 @@ import EyeIcon from './icons/EyeIcon'
 import EyeOffIcon from './icons/EyeOffIcon'
 import MonitorIcon from './icons/MonitorIcon'
 import MoonIcon from './icons/MoonIcon'
-import OfflineIcon from './icons/OfflineIcon'
 import SunIcon from './icons/SunIcon'
 import XIcon from './icons/XIcon'
 import { API_BASE } from '../apiBase'
@@ -560,19 +559,6 @@ function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEd
 
   return (
     <div className="settings-list">
-      {isOffline && (
-        <>
-          <div className="settings-offline-banner">
-            <OfflineIcon size={32} />
-            <span>
-              Offline mode — showing a cached version of your workout. Edits will sync once the app is open again with the server reachable.
-              <br />
-              Check - are both nodes powered on Tailscale?
-            </span>
-          </div>
-          <div className="settings-separator" />
-        </>
-      )}
 
       <UserPicker users={users} currentUser={currentUser} onChangeUser={onChangeUser} disabled={isOffline} />
 

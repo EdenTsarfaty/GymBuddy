@@ -8,7 +8,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (not 'autoUpdate') so a new service worker waits for
+      // updateServiceWorker() instead of silently taking over — the
+      // homescreen banner's whole point is asking first, not surprising
+      // someone with a reload/state loss mid-workout.
+      registerType: 'prompt',
       // Service workers (and therefore push) are otherwise disabled entirely
       // under `vite dev` — only a production build registers one by default.
       devOptions: { enabled: true, type: 'module' },

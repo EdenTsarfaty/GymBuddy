@@ -24,11 +24,14 @@ import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
 import UndoIcon from './components/icons/UndoIcon'
+import ResetIcon from './components/icons/ResetIcon'
+import HomeBanner from './components/HomeBanner'
 import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.6.4'
+const APP_VERSION = 'RC 0.8.6.5'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -322,6 +325,21 @@ function App() {
   const [error, setError] = useState(null)
   const [serverDown, setServerDown] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  // needRefresh flips true once a new service worker has installed and is
+  // waiting — registerType is 'prompt' (vite.config.js) specifically so
+  // this doesn't auto-apply itself; updateServiceWorker() is what the
+  // homescreen banner's action button calls. Without onRegisteredSW below,
+  // the only thing that ever asks "is there a new service worker" is the
+  // browser's own default behavior (page load/navigation, plus its own
+  // internal ~daily check) — someone who leaves a tab open for a while
+  // wouldn't see the banner until they happened to reload. Calling
+  // registration.update() on an interval asks explicitly instead.
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(swScriptUrl, registration) {
+      if (!registration) return
+      setInterval(() => registration.update(), 60 * 60 * 1000)
+    },
+  })
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
   const [legendOpen, setLegendOpen] = useState(false)
@@ -461,6 +479,34 @@ function App() {
   const canViewRecordedWorkout = !!selectedOccurrenceISO
     && selectedOccurrenceISO >= startOfWeekISO(todayISOForWeek)
     && selectedOccurrenceISO < todayISOForWeek
+
+  // Priority-ordered — HomeBanner shows only the first non-dismissed entry,
+  // so order here doubles as the actual priority. Offline first: it's
+  // active app state that makes other information (like "update
+  // available") momentarily irrelevant to act on anyway.
+  const homeBannerMessages = useMemo(() => {
+    const messages = []
+    if (isOffline) {
+      messages.push({
+        id: 'offline',
+        icon: <OfflineIcon size={20} />,
+        title: 'Offline mode',
+        body: 'Showing a cached version of your workout.\nEdits will sync once the app is open again with the server reachable.\nCheck - are both nodes powered on Tailscale?',
+        dismissible: true,
+      })
+    }
+    if (needRefresh) {
+      messages.push({
+        id: 'update-available',
+        icon: <ResetIcon size={18} />,
+        title: 'Update available',
+        body: 'A new version of GymBuddy is ready.',
+        dismissible: true,
+        actions: [{ label: 'Update', onClick: () => updateServiceWorker(true) }],
+      })
+    }
+    return messages
+  }, [isOffline, needRefresh, updateServiceWorker])
 
   const exercises = useMemo(
     () => allExercises
@@ -1687,6 +1733,7 @@ function App() {
           />
         ) : (
           <main className="card-list">
+            <HomeBanner messages={homeBannerMessages} />
             {historyDate ? (
               <>
                 <button type="button" className="view-current-plan-btn" onClick={viewCurrentPlan}>

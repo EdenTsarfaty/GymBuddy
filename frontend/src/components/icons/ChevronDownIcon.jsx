@@ -1,4 +1,4 @@
-function ChevronDownIcon({ size = 18 }) {
+function ChevronDownIcon({ size = 18, className }) {
   return (
     <svg
       width={size}
@@ -9,6 +9,7 @@ function ChevronDownIcon({ size = 18 }) {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
+      className={className}
     >
       <path d="m6 9 6 6 6-6" />
     </svg>

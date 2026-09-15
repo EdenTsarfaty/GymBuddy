@@ -11,11 +11,6 @@
   display: flex;
   flex-direction: column;
   padding: 24px 16px;
-  /* The swipe-to-complete drag can push a card's right edge past the viewport
-     edge, which briefly widens the document's scrollable area on mobile and
-     flashes the overlay scrollbars. Clip (not hidden) so it doesn't turn this
-     into a scroll container of its own. */
-  overflow-x: clip;
   /* Makes this a stacking context so the easter egg's negative-z layers
      (see .nyan-spark-overlay) resolve *inside* here — painting under this
      page's content but still over the page background. Without it they'd
@@ -24,6 +19,19 @@
      propagating to the canvas. Fixed descendants are unaffected: isolation
      doesn't make this a containing block for them. */
   isolation: isolate;
+}
+
+/* Mobile only: the swipe-to-complete drag can push a card's right edge past
+   the viewport edge, which briefly widens the document's scrollable area on
+   mobile and flashes the overlay scrollbars. Clip (not hidden) so it
+   doesn't turn this into a scroll container of its own. Desktop doesn't get
+   this — .page there sits in a centered column with room on either side
+   that a drag rarely reaches, so there's no scrollbar to flash and no
+   reason to hard-clip a swipe that's still in view. */
+@media (max-width: 600px) {
+  .page {
+    overflow-x: clip;
+  }
 }
 
 .page-header {
@@ -1390,6 +1398,199 @@
   flex: 1;
 }
 
+/* Homescreen-only sticky message — see HomeBanner.jsx. Collapsed by default:
+   full-opacity title line, muted single-line preview beneath it. Expanding
+   lets the preview wrap to its full text and reveals any action buttons. */
+/* The card's own drag translation can push it past .page's overflow-x:clip
+   boundary — clipped there, its rectangular edge (background + border)
+   just stops dead in a hard vertical line. This wrapper gives it its own
+   local clip instead, masked to fade out over the last ~24px rather than
+   cut sharply, so a swipe in progress reads as "sliding off" rather than
+   "hitting a wall". */
+.home-banner-wrap {
+  overflow: hidden;
+  /* --edge-fade (set from dragX in HomeBanner.jsx) is 0px at rest, so this
+     collapses to a plain opaque mask — no fade visible until an actual drag
+     is in progress, then it widens ("intensifies") as the card approaches
+     this wrapper's own edge, capping out well before the hard clip line. */
+  -webkit-mask-image: linear-gradient(to right, transparent, black var(--edge-fade, 0px), black calc(100% - var(--edge-fade, 0px)), transparent);
+  mask-image: linear-gradient(to right, transparent, black var(--edge-fade, 0px), black calc(100% - var(--edge-fade, 0px)), transparent);
+}
+
+.home-banner {
+  border-radius: 12px;
+  /* Dimmer than the page background, not an accent tint, so this doesn't
+     compete with actually-accented UI. Plain neutral hex rather than
+     derived from --chip-bg/--border: those are genuinely navy-blue in dark
+     theme (#1a2244/#2a3358), and darkening a blue by mixing in black keeps
+     it blue rather than neutralizing it — so anything derived from those
+     tokens kept reading as a teal/blue hint no matter the mix ratio. */
+  background: #f0f0f0;
+  border: 1px solid #d6d6d6;
+  overflow: hidden;
+  touch-action: pan-y;
+  transform: translateX(var(--drag-x, 0px));
+  opacity: var(--drag-fade, 1);
+}
+
+[data-theme='dark'] .home-banner {
+  background: #1a2140;
+  border-color: #38383c;
+}
+
+[data-theme='dark'] .home-banner-action-btn,
+[data-theme='dark'] .home-banner-action-btn.is-secondary {
+  color: var(--bg);
+}
+
+.home-banner.is-swiping {
+  transition: none;
+}
+
+.home-banner:not(.is-swiping):not(.is-exiting) {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* Past the dismiss threshold and released: keeps travelling in the same
+   direction out to SWIPE_EXIT_PX instead of snapping back, ease-out for a
+   "thrown" feel rather than the snap-back's plain ease. onTransitionEnd
+   (HomeBanner.jsx) waits for this to finish before actually removing the
+   message, so it's never yanked out of the DOM mid-flight. */
+.home-banner.is-exiting {
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+}
+
+/* A column now, not a row: the header (icon/title/chevron) is its own row,
+   with the preview/body below it spanning the full width — previously the
+   body sat in the same narrow column as the title, next to the icon, so it
+   read as "indented" relative to the rest of the card once it wrapped to
+   more than one line. */
+.home-banner-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.home-banner-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-banner-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.home-banner-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-h);
+}
+
+.home-banner-preview {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+  /* Collapsed shows just under the line's own height, not half of it — half
+     cut the line off mid-glyph and made the preview unreadable. Most of the
+     line stays fully legible; the mask only pulls the very bottom edge
+     toward transparent, so it still reads as "hinting at more" rather than
+     "just grey text" (a flat opacity dim on the whole line looked like the
+     latter). mask-image needs no vendor-prefixed fallback split from the
+     -webkit one; browsers new enough for `mask-image` unprefixed also
+     support it. */
+  max-height: 1.15em;
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: max-height 0.15s ease;
+}
+
+.home-banner.is-expanded .home-banner-preview {
+  max-height: 200px;
+  -webkit-mask-image: none;
+  mask-image: none;
+  /* pre-line (not normal): preserves the \n line breaks authored into a
+     message's body — normal would collapse them to a single space like any
+     other whitespace, same as it already treats the source's own line
+     wraps. */
+  white-space: pre-line;
+}
+
+.home-banner-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.home-banner.is-expanded .home-banner-chevron {
+  transform: rotate(180deg);
+}
+
+.home-banner-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 12px 10px 12px;
+}
+
+/* Same accent-filled pill as Settings' own buttons (.bio-edit-btn +
+   .regen-settings-btn's auto-width variant, for labels like "Update"/
+   "Dismiss" that don't fit that fixed-58px original) — matching those
+   exactly rather than the previous bespoke styling here. */
+.home-banner-action-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  /* Pure white rather than var(--bg) (#fbfbfc) — close enough to white that
+     it looked dim/off against the accent fill in light theme specifically;
+     dark theme's own --bg (a dark navy) already had good contrast, so that
+     one keeps using the token below instead of also going flat white. */
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 5px 16px;
+  width: auto;
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.home-banner-action-btn:hover {
+  opacity: 0.85;
+}
+
+/* Still accent-filled, not a neutral grey outline — just dimmed toward the
+   card's own surface color so it reads as secondary against the primary
+   action's full-strength fill without abandoning the accent look entirely. */
+.home-banner-action-btn.is-secondary {
+  color: #fff;
+  /* Darkening via a filter (the previous approach) dims the whole rendered
+     element, text included — the computed `color` stayed pure white but
+     the actual painted pixels came out light grey, which is why this still
+     looked muted. Darkening only the background color itself keeps the
+     white text at full brightness. */
+  background: color-mix(in srgb, var(--accent) 85%, black);
+  border: none;
+}
+
+.home-banner-action-btn.is-secondary:hover {
+  opacity: 0.85;
+}
+
 .status-message {
   text-align: center;
   color: var(--text-muted);
@@ -2332,25 +2533,6 @@
 .settings-row-label.is-disabled,
 .settings-row-sublabel.is-disabled {
   opacity: 0.4;
-}
-
-.settings-offline-banner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 0;
-  color: var(--accent);
-}
-
-.settings-offline-banner svg {
-  flex-shrink: 0;
-}
-
-.settings-offline-banner span {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--text);
 }
 
 .settings-separator {
