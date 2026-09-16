@@ -68,6 +68,21 @@ async function deleteStoredPhoto(filename) {
   } catch {}
 }
 
+// Used when copying an exercise (Edit Plan's "Copy to") that has a locally
+// uploaded photo — the copy needs its own file on disk under its own
+// filename, since sharing the source's filename would leave it pointing at
+// nothing once the source is later deleted and swept.
+async function duplicateStoredPhoto(filename) {
+  if (!isValidStoredFilename(filename)) return null
+  const newFilename = `${crypto.randomUUID()}.${OUTPUT_FORMAT}`
+  try {
+    await fs.copyFile(path.join(EXERCISE_PHOTOS_DIR, filename), path.join(EXERCISE_PHOTOS_DIR, newFilename))
+    return newFilename
+  } catch {
+    return null
+  }
+}
+
 // Used by the Undo/Redo photo-revert endpoint to confirm a previously-known
 // filename hasn't actually been swept yet before pointing `photo` back at
 // it — the grace period is short, and undoing something from days ago
@@ -110,6 +125,7 @@ module.exports = {
   isValidPhotoUrl,
   saveUploadedPhoto,
   deleteStoredPhoto,
+  duplicateStoredPhoto,
   storedPhotoExists,
   reencodeForAnalysis,
 }

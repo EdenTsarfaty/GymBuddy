@@ -846,7 +846,9 @@ fastify.patch('/api/exercises/:id', async (request, reply) => {
 // changed) so the UPDATE below is a plain unconditional write, same idea as
 // `copies` duplicating a full row. No AI involved; this only restructures/
 // edits rows that already exist. copies/creates always start with a clean
-// photo/adjustments slate rather than sharing state with their source.
+// adjustments slate rather than sharing state with their source; a copy's
+// photo *is* carried over (an external URL as-is, a locally uploaded photo
+// duplicated to its own file — see exercisePhotos.duplicateStoredPhoto).
 // Returns the rows actually created/copied (same order as the request
 // arrays) so the caller can learn their real ids immediately — there's no
 // later Save response to learn them from any more.
@@ -868,10 +870,16 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
     if (!VALID_DAYS.includes(day)) continue
     const source = db.prepare('SELECT * FROM exercises WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(sourceId, uid)
     if (!source) continue
+    let photo = null
+    if (exercisePhotos.isValidStoredFilename(source.photo)) {
+      photo = await exercisePhotos.duplicateStoredPhoto(source.photo)
+    } else if (exercisePhotos.isValidPhotoUrl(source.photo)) {
+      photo = source.photo
+    }
     const result = db.prepare(
       `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo, muscles)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', NULL, ?)`,
-    ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order, source.muscles)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)`,
+    ).run(uid, source.name, day, source.sets, source.reps, source.weight, source.duration, source.description, source.bullets, source.video_id, source.category, sort_order, photo, source.muscles)
     copied.push(parseExerciseRow(db.prepare('SELECT * FROM exercises WHERE id = ?').get(result.lastInsertRowid)))
   }
 
