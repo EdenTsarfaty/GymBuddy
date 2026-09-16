@@ -4991,6 +4991,95 @@
   font-size: 14px;
 }
 
+.edit-plan-import-export {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 12px;
+}
+
+/* Same dashed-border/drag-state language as the exercise photo dropzone
+   (.edit-plan-photo-square) — a file being dragged anywhere shows a dashed
+   border, hovering this specific zone while dragging swaps to accent. */
+.edit-plan-import-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  color: var(--text-muted);
+  background: var(--chip-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-import-dropzone.is-drag-active {
+  border-width: 4px;
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+.edit-plan-import-dropzone.is-drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--chip-bg));
+}
+
+.edit-plan-import-icon {
+  color: var(--accent);
+}
+
+.edit-plan-import-title {
+  max-width: 260px;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.edit-plan-import-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.edit-plan-import-filename {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+  word-break: break-all;
+}
+
+.edit-plan-import-export-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.edit-plan-import-export-divider::before,
+.edit-plan-import-export-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.edit-plan-export-btn {
+  align-self: center;
+  padding: 8px 18px;
+  font-size: 14px;
+}
+
 .edit-plan-card {
   display: flex;
   align-items: center;

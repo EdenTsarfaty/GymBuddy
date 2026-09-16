@@ -22,6 +22,7 @@ import PlusIcon from './icons/PlusIcon'
 import ChevronUpIcon from './icons/ChevronUpIcon'
 import CameraIcon from './icons/CameraIcon'
 import UploadIcon from './icons/UploadIcon'
+import DownloadIcon from './icons/DownloadIcon'
 import WebIcon from './icons/WebIcon'
 import PhotoIcon from './icons/PhotoIcon'
 import SearchIcon from './icons/SearchIcon'
@@ -1543,6 +1544,13 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   // chain[0] and requires chain[last] to have been empty beforehand.
   const [dayReorderMode, setDayReorderMode] = useState(false)
   const [reorderChain, setReorderChain] = useState([])
+  // Import/Export: UI only for now — picking or dropping a file just shows
+  // its name, nothing is sent anywhere yet. Lives in the same place the
+  // day's exercise cards normally do, same idea as day-reorder taking over
+  // that space with its own blueprint.
+  const [importExportMode, setImportExportMode] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [isImportDragOver, setIsImportDragOver] = useState(false)
   const [applyingReorder, setApplyingReorder] = useState(false)
   const [activeDragDay, setActiveDragDay] = useState(null)
   const [activeDragSource, setActiveDragSource] = useState(null)
@@ -1560,6 +1568,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   // card itself was opened for full editing.
   const [editingShowsDividers, setEditingShowsDividers] = useState(true)
   const newKeyCounter = useRef(0)
+  const importFileInputRef = useRef(null)
+  const isDraggingFileAnywhere = useIsDraggingFile()
 
   // Count of in-flight persist requests, driving the header's cloud sync
   // indicator (muted while >0, accent once every request has settled) —
@@ -2395,6 +2405,36 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setReorderChain([])
   }
 
+  function openImportExport() {
+    setImportExportMode(true)
+    setShowMoreOptions(false)
+  }
+
+  function closeImportExport() {
+    setImportExportMode(false)
+    setImportFile(null)
+    setIsImportDragOver(false)
+  }
+
+  function handleImportDragOver(e) {
+    e.preventDefault()
+    setIsImportDragOver(true)
+  }
+  function handleImportDragLeave() {
+    setIsImportDragOver(false)
+  }
+  function handleImportDrop(e) {
+    e.preventDefault()
+    setIsImportDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) setImportFile(file)
+  }
+  function handleImportFileChange(e) {
+    const file = e.target.files?.[0]
+    if (file) setImportFile(file)
+    e.target.value = ''
+  }
+
   function cancelReorder() {
     setDayReorderMode(false)
     setReorderChain([])
@@ -2603,47 +2643,46 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
           <button
             type="button"
             className={`edit-plan-icon-btn ${showMoreOptions ? 'is-active' : ''}`}
-            onClick={() => { if (!dayReorderMode) setShowMoreOptions((v) => !v) }}
+            onClick={() => { if (!dayReorderMode && !importExportMode) setShowMoreOptions((v) => !v) }}
             aria-label="More options"
           >
             <KebabIcon size={17} />
           </button>
-          {showMoreOptions ? (
+          {importExportMode ? (
+            <button type="button" className="edit-plan-pill-btn" onClick={closeImportExport}>
+              <XIcon size={14} />
+              <span>Cancel</span>
+            </button>
+          ) : showMoreOptions ? (
             <>
-              {/* Import/Export is still a placeholder. Day reordering is
-                  live — while active, Apply/Cancel appear to its left. */}
-              {dayReorderMode && (
+              {/* Day reordering is live — while active, "Reorder days" makes
+                  way for Apply/Cancel (Cancel does the same job "Reorder
+                  days" itself would, so there's no need for both). */}
+              {dayReorderMode ? (
                 <>
                   <button
                     type="button"
-                    className="edit-plan-icon-btn"
+                    className="edit-plan-pill-btn is-filled"
                     onClick={applyReorderChain}
                     disabled={chainValidity !== true || applyingReorder}
-                    aria-label="Apply day reorder"
                   >
-                    <CheckIcon size={17} />
+                    <CheckIcon size={14} />
+                    <span>Apply</span>
                   </button>
-                  <button
-                    type="button"
-                    className="edit-plan-icon-btn"
-                    onClick={cancelReorder}
-                    aria-label="Cancel day reorder"
-                  >
-                    <XIcon size={16} />
+                  <button type="button" className="edit-plan-pill-btn" onClick={cancelReorder}>
+                    <XIcon size={14} />
+                    <span>Cancel</span>
                   </button>
                 </>
-              )}
-              <button
-                type="button"
-                className={`edit-plan-pill-btn ${dayReorderMode ? 'is-filled' : ''}`}
-                onClick={toggleReorderMode}
-              >
-                <span>Reorder days</span>
-              </button>
-              {!dayReorderMode && (
-                <button type="button" className="edit-plan-pill-btn" disabled>
-                  <span>Import/Export</span>
-                </button>
+              ) : (
+                <>
+                  <button type="button" className="edit-plan-pill-btn" onClick={toggleReorderMode}>
+                    <span>Reorder days</span>
+                  </button>
+                  <button type="button" className="edit-plan-pill-btn" onClick={openImportExport}>
+                    <span>Import/Export</span>
+                  </button>
+                </>
               )}
             </>
           ) : isSelecting ? (
@@ -2777,7 +2816,46 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
       {actionError && <p className="edit-plan-save-error">{actionError}</p>}
 
       <div className={`edit-plan-list ${editingEntry ? 'has-edit-panel' : ''}`}>
-        {dayExercises.length === 0 ? (
+        {importExportMode ? (
+          <div className="edit-plan-import-export">
+            <div
+              className={`edit-plan-import-dropzone ${isDraggingFileAnywhere ? 'is-drag-active' : ''} ${isImportDragOver ? 'is-drag-over' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => importFileInputRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') importFileInputRef.current?.click() }}
+              onDragOver={handleImportDragOver}
+              onDragLeave={handleImportDragLeave}
+              onDrop={handleImportDrop}
+            >
+              <UploadIcon size={44} className="edit-plan-import-icon" />
+              {importFile ? (
+                <span className="edit-plan-import-filename">{importFile.name}</span>
+              ) : (
+                <>
+                  <span className="edit-plan-import-title">Drag an existing plan here</span>
+                  <span className="edit-plan-import-subtitle">or tap to choose a file</span>
+                </>
+              )}
+            </div>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={handleImportFileChange}
+            />
+
+            <div className="edit-plan-import-export-divider">
+              <span>Or</span>
+            </div>
+
+            <button type="button" className="edit-plan-pill-btn is-filled edit-plan-export-btn">
+              <DownloadIcon size={16} />
+              <span>Export current plan</span>
+            </button>
+          </div>
+        ) : dayExercises.length === 0 ? (
           <div className="edit-plan-empty-day">
             <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
             {!dayReorderMode && (
@@ -2828,7 +2906,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
             </SortableContext>
           </DndContext>
         )}
-        {dayExercises.length > 0 && !dayReorderMode && (
+        {!importExportMode && dayExercises.length > 0 && !dayReorderMode && (
           <button
             type="button"
             className="edit-plan-pill-btn is-filled edit-plan-add-exercise-btn"
