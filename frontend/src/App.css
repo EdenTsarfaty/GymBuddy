@@ -526,6 +526,15 @@
   opacity: 0.75;
 }
 
+.music-provider-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.music-provider-add-btn:disabled:hover {
+  opacity: 0.4;
+}
+
 .music-link-cell {
   display: flex;
   flex-direction: column;
@@ -594,6 +603,17 @@
 .music-link-remove-btn:hover {
   background: rgba(255, 255, 255, 0.9);
   color: #000;
+}
+
+.music-link-remove-btn:disabled,
+.music-link-remove-btn-big:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.music-link-remove-btn:disabled:hover {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
 }
 
 /* Mobile only, shown while the panel is in remove-mode (entered via a

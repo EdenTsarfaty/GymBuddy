@@ -26,7 +26,7 @@ function visibleRowCount(slots) {
 // sent to the resolve endpoint since it's the only one that exists, but
 // nothing about this component's own shape assumes Spotify specifically —
 // swapping in a provider picker later wouldn't change this file's structure.
-function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared }) {
+function MusicLinkSlot({ slotIndex, slot, userId, removeMode, isOffline, onSaved, onCleared }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
@@ -101,6 +101,7 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
             type="button"
             className="music-link-remove-btn"
             onClick={handleClear}
+            disabled={isOffline}
             aria-label="Remove"
           >
             <XIcon size={12} />
@@ -114,6 +115,7 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
               type="button"
               className="music-link-remove-btn-big"
               onClick={handleClear}
+              disabled={isOffline}
               aria-label="Remove"
             >
               <XIcon size={20} />
@@ -146,7 +148,7 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
             type="button"
             className="music-link-input-btn"
             onClick={handleSubmit}
-            disabled={loading || !draft.trim()}
+            disabled={loading || !draft.trim() || isOffline}
             aria-label="Save link"
           >
             <CheckIcon size={13} />
@@ -172,7 +174,7 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
   return (
     <div className="music-link-cell-empty">
       <div className="music-link-artwork-slot">
-        <button type="button" className="music-provider-add-btn" onClick={startEditing} aria-label="Add link">
+        <button type="button" className="music-provider-add-btn" onClick={startEditing} disabled={isOffline} aria-label="Add link">
           <PlusIcon size={18} />
         </button>
       </div>
@@ -190,7 +192,7 @@ function MusicLinkSlot({ slotIndex, slot, userId, removeMode, onSaved, onCleared
 // Starts hidden and re-measures whenever the content that determines its
 // size changes (slot data loading in is the main one — the grid is a lot
 // wider once real artwork/titles replace the plain "+" buttons).
-function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, removeMode }) {
+function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, removeMode, isOffline }) {
   const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Music Provider'
   const [slots, setSlots] = useState({})
   const [positionStyle, setPositionStyle] = useState({ visibility: 'hidden' })
@@ -271,13 +273,21 @@ function MusicProviderPanel({ userId, provider, panelRef, anchorRef, boundsRef, 
       style={{ ...positionStyle, '--cone-left': `${coneLeft}px` }}
     >
       <div className="music-provider-grid">
-        {Array.from({ length: visibleRowCount(slots) * COLUMNS }).map((_, i) => (
+        {Array.from({ length: visibleRowCount(slots) }).flatMap((_, row) => {
+          const indices = Array.from({ length: COLUMNS }, (_, col) => row * COLUMNS + col)
+          // Offline: a row of nothing but "+" buttons can't do anything (adding
+          // hits the server), so it's just noise — skip it. A row with at
+          // least one real link still shows, "+" disabled alongside it.
+          if (isOffline && !indices.some((i) => slots[i])) return []
+          return indices
+        }).map((i) => (
           <MusicLinkSlot
             key={i}
             slotIndex={i}
             slot={slots[i] || null}
             userId={userId}
             removeMode={removeMode}
+            isOffline={isOffline}
             onSaved={(data) => setSlots((prev) => ({ ...prev, [data.slot_index]: data }))}
             onCleared={(index) => setSlots((prev) => {
               const next = { ...prev }
