@@ -1523,7 +1523,7 @@ function ExerciseEditPanel({
 // recreating a lookalike. No AI involved in the structural actions
 // themselves. See the manual-edit-mode design notes in memory for the full
 // spec this is being built toward.
-function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSaved, onClose, onRegeneratePlan }) {
+function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDayTitleSaved, onClose, onRegeneratePlan }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
   const [editingDayTitle, setEditingDayTitle] = useState(false)
   const [dayTitleDraft, setDayTitleDraft] = useState('')
@@ -1551,6 +1551,8 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
   const [importExportMode, setImportExportMode] = useState(false)
   const [importFile, setImportFile] = useState(null)
   const [isImportDragOver, setIsImportDragOver] = useState(false)
+  const [exportingPlan, setExportingPlan] = useState(false)
+  const [exportError, setExportError] = useState(null)
   const [applyingReorder, setApplyingReorder] = useState(false)
   const [activeDragDay, setActiveDragDay] = useState(null)
   const [activeDragSource, setActiveDragSource] = useState(null)
@@ -2414,6 +2416,7 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     setImportExportMode(false)
     setImportFile(null)
     setIsImportDragOver(false)
+    setExportError(null)
   }
 
   function handleImportDragOver(e) {
@@ -2433,6 +2436,32 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
     const file = e.target.files?.[0]
     if (file) setImportFile(file)
     e.target.value = ''
+  }
+
+  async function handleExportPlan() {
+    setExportingPlan(true)
+    setExportError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/plan/export?user_id=${userId}`)
+      if (!res.ok) throw new Error('Export failed')
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const today = new Date().toISOString().slice(0, 10)
+      // Cosmetic only — the exported file itself carries no user identity
+      // (see the export endpoint), so this is just a filename convenience,
+      // not something an import path should ever read back.
+      const safeName = (userName || 'plan').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      a.href = url
+      a.download = `gymbuddy-plan-${safeName}-${today}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportError("Couldn't export — check your connection and try again.")
+    } finally {
+      setExportingPlan(false)
+    }
   }
 
   function cancelReorder() {
@@ -2833,8 +2862,9 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
                 <span className="edit-plan-import-filename">{importFile.name}</span>
               ) : (
                 <>
-                  <span className="edit-plan-import-title">Drag an existing plan here</span>
-                  <span className="edit-plan-import-subtitle">or tap to choose a file</span>
+                  <span className="edit-plan-import-title edit-plan-desktop-only-text">Drag an existing plan here</span>
+                  <span className="edit-plan-import-title edit-plan-mobile-only-text">Tap to choose a file</span>
+                  <span className="edit-plan-import-subtitle edit-plan-desktop-only-text">or click to choose a file</span>
                 </>
               )}
             </div>
@@ -2850,10 +2880,16 @@ function EditPlanView({ allExercises, dayTitles, userId, onSaved, onDayTitleSave
               <span>Or</span>
             </div>
 
-            <button type="button" className="edit-plan-pill-btn is-filled edit-plan-export-btn">
+            <button
+              type="button"
+              className="edit-plan-pill-btn is-filled edit-plan-export-btn"
+              onClick={handleExportPlan}
+              disabled={exportingPlan}
+            >
               <DownloadIcon size={16} />
-              <span>Export current plan</span>
+              <span>{exportingPlan ? 'Exporting…' : 'Export current plan'}</span>
             </button>
+            {exportError && <p className="edit-plan-save-error">{exportError}</p>}
           </div>
         ) : dayExercises.length === 0 ? (
           <div className="edit-plan-empty-day">

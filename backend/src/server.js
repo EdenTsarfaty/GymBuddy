@@ -911,6 +911,65 @@ fastify.post('/api/exercises/plan', async (request, reply) => {
   return { ok: true, created, copied }
 })
 
+// Edit Plan's Import/Export — a full snapshot of one user's plan: every
+// active exercise (all days, not just one), each one's chat history, and
+// its photo. A locally uploaded photo is embedded as base64 (so the export
+// is one self-contained file, no separate asset folder to keep track of);
+// an external https:// URL is carried over as a plain string instead of
+// being fetched, same "never fetched server-side" rule as everywhere else
+// photo URLs appear. Soft-deleted exercises are excluded, same as every
+// other read — there's nothing for an export to preserve there once the
+// grace period photo/chat cleanup (exerciseSweep.js) has already run.
+fastify.get('/api/exercises/plan/export', async (request, reply) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+
+  const days = {}
+  for (const { day, title } of db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)) {
+    days[day] = { title }
+  }
+
+  const rows = db.prepare(
+    'SELECT * FROM exercises WHERE user_id = ? AND deleted_at IS NULL ORDER BY day, sort_order',
+  ).all(uid)
+
+  const chatStmt = db.prepare('SELECT role, text, proposals, created_at FROM chat_messages WHERE exercise_id = ? ORDER BY id ASC')
+
+  const exercises = []
+  for (const row of rows) {
+    let photo = null
+    if (exercisePhotos.isValidStoredFilename(row.photo)) {
+      try {
+        const data = await fs.promises.readFile(path.join(exercisePhotos.EXERCISE_PHOTOS_DIR, row.photo))
+        photo = { type: 'embedded', data: data.toString('base64') }
+      } catch {
+        photo = null
+      }
+    } else if (exercisePhotos.isValidPhotoUrl(row.photo)) {
+      photo = { type: 'url', value: row.photo }
+    }
+
+    exercises.push({
+      day: row.day,
+      sort_order: row.sort_order,
+      name: row.name,
+      sets: row.sets,
+      reps: row.reps,
+      weight: row.weight,
+      duration: row.duration,
+      description: row.description,
+      bullets: JSON.parse(row.bullets),
+      video_id: row.video_id,
+      category: row.category,
+      adjustments: row.adjustments ? JSON.parse(row.adjustments) : [],
+      muscles: row.muscles ? JSON.parse(row.muscles) : [],
+      photo,
+      chat: chatStmt.all(row.id).map(parseChatMessage),
+    })
+  }
+
+  return { format: 'gymbuddy-plan', version: 1, exported_at: new Date().toISOString(), days, exercises }
+})
+
 // Undoes a soft-delete — the exact inverse of the `deletes` loop above.
 fastify.post('/api/exercises/:id/restore', async (request, reply) => {
   const { id } = request.params

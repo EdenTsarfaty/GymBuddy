@@ -31,7 +31,7 @@ import { meowifyDocument } from './meowify'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.7.2'
+const APP_VERSION = 'RC 0.8.7.3'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -1734,6 +1734,7 @@ function App() {
             allExercises={allExercises}
             dayTitles={dayTitles}
             userId={currentUser?.id}
+            userName={currentUser?.name}
             onSaved={() => setExercisesRefreshKey((k) => k + 1)}
             onDayTitleSaved={(day, title) => setDayTitles((prev) => new Map(prev).set(day, title))}
             onClose={() => setView('settings')}
