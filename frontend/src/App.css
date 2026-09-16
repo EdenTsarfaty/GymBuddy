@@ -41,16 +41,14 @@
   align-items: center;
   height: 40px;
   margin-top: 16px;
-  margin-bottom: 48px;
-}
-
-.offline-indicator {
-  position: absolute;
-  top: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  color: var(--accent);
+  /* Was 48px, with a -20px margin-top hack on .view-current-plan-btn
+     clawing part of it back — that hack broke once other elements
+     (the homescreen banner) started sitting between the header and that
+     button, since the fixed -20px pull didn't know what was above it.
+     Shrinking the actual gap here instead means every following element
+     — banner, button, or a plain exercise card — just uses .card-list's
+     own uniform gap, with no special-cased negative margins anywhere. */
+  margin-bottom: 28px;
 }
 
 .page-logo {
@@ -1438,8 +1436,7 @@
   border-color: #38383c;
 }
 
-[data-theme='dark'] .home-banner-action-btn,
-[data-theme='dark'] .home-banner-action-btn.is-secondary {
+[data-theme='dark'] .home-banner-action-btn {
   color: var(--bg);
 }
 
@@ -1483,6 +1480,36 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  color: var(--accent);
+}
+
+/* What a swiped-away (not Dismiss-button-removed) message collapses down
+   to — no card chrome at all, just enough to know the status is still
+   there. .card-list's own 16px flex gap would otherwise put as much space
+   above the next exercise card as a full message gets; the negative
+   margin claws most of that back down to a few px. */
+.home-banner-minimized {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  margin-bottom: -10px;
+  padding: 2px 4px;
+  user-select: none;
+}
+
+/* Geometrically centered against the title already (verified via measured
+   bounding-box centers) — this nudges for the icon's own asymmetric shape
+   (more visual weight toward the top), not a real box-alignment bug.
+   Scoped to just this row so it doesn't touch the icon's other usage in
+   the full banner's header row. */
+.home-banner-minimized .home-banner-icon {
+  transform: translateY(1px);
+}
+
+.home-banner-minimized-title {
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--accent);
 }
 
@@ -1573,22 +1600,16 @@
   opacity: 0.85;
 }
 
-/* Still accent-filled, not a neutral grey outline — just dimmed toward the
-   card's own surface color so it reads as secondary against the primary
-   action's full-strength fill without abandoning the accent look entirely. */
+/* Light accent tint rather than a full fill, so it reads as secondary
+   against the primary action's solid accent without going neutral/grey. */
 .home-banner-action-btn.is-secondary {
-  color: #fff;
-  /* Darkening via a filter (the previous approach) dims the whole rendered
-     element, text included — the computed `color` stayed pure white but
-     the actual painted pixels came out light grey, which is why this still
-     looked muted. Darkening only the background color itself keeps the
-     white text at full brightness. */
-  background: color-mix(in srgb, var(--accent) 85%, black);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   border: none;
 }
 
 .home-banner-action-btn.is-secondary:hover {
-  opacity: 0.85;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .status-message {
@@ -3179,12 +3200,6 @@
   border: 1.5px solid var(--border);
   border-radius: 999px;
   padding: 6px 16px;
-  /* .card-list's own 16px gap above this (its first child) reads as bigger
-     than it should — the pill's thin border and rounded shape make the
-     whitespace above it look heavier than the same 16px gap between denser
-     elements like exercise cards. Pulling it up tightens that illusion
-     without touching the gap value itself, which every other row relies on. */
-  margin-top: -20px;
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }

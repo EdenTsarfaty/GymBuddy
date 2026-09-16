@@ -31,7 +31,7 @@ import { meowifyDocument } from './meowify'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.6.5'
+const APP_VERSION = 'RC 0.8.7'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -343,6 +343,10 @@ function App() {
   const [planMenuOpen, setPlanMenuOpen] = useState(false)
   const [planMenuScreen, setPlanMenuScreen] = useState('root')
   const [legendOpen, setLegendOpen] = useState(false)
+  // Lifted out of HomeBanner itself — App.jsx needs to know when the
+  // banner minimizes so it can move it to a different spot in the page
+  // (see the two <HomeBanner> call sites below).
+  const [homeBannerMinimized, setHomeBannerMinimized] = useState(false)
   const [musicPanelOpen, setMusicPanelOpen] = useState(false)
   const [musicPanelRemoveMode, setMusicPanelRemoveMode] = useState(false)
   const [planView, setPlanView] = useState('week')
@@ -1400,15 +1404,18 @@ function App() {
 
         {view === 'settings' ? (
           <div className="plan-picker">
-            <span className="today is-static">Settings</span>
+            <div className="today is-static">
+              <span className="today-main">Settings</span>
+              {isOffline && (
+                <div className="home-banner-minimized">
+                  <span className="home-banner-icon" aria-hidden="true"><OfflineIcon size={20} /></span>
+                  <span className="home-banner-minimized-title">Offline mode</span>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="plan-picker" ref={planMenuRef}>
-            {isOffline && !serverDown && (
-              <span className="offline-indicator" title="Offline — showing cached data">
-                <OfflineIcon size={30} />
-              </span>
-            )}
             <button
               type="button"
               className="today"
@@ -1733,7 +1740,13 @@ function App() {
           />
         ) : (
           <main className="card-list">
-            <HomeBanner messages={homeBannerMessages} />
+            {!homeBannerMinimized && (
+              <HomeBanner
+                messages={homeBannerMessages}
+                minimized={homeBannerMinimized}
+                onMinimize={() => setHomeBannerMinimized(true)}
+              />
+            )}
             {historyDate ? (
               <>
                 <button type="button" className="view-current-plan-btn" onClick={viewCurrentPlan}>
@@ -1756,6 +1769,13 @@ function App() {
               <button type="button" className="view-current-plan-btn" onClick={viewRecordedWorkout}>
                 View {formatRecordedWorkoutDate(selectedOccurrenceISO)}
               </button>
+            )}
+            {homeBannerMinimized && (
+              <HomeBanner
+                messages={homeBannerMessages}
+                minimized={homeBannerMinimized}
+                onMinimize={() => setHomeBannerMinimized(true)}
+              />
             )}
             {loading && <p className="loading-message">Loading exercises...</p>}
             {!loading && serverDown && (

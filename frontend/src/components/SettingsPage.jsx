@@ -559,7 +559,6 @@ function SettingsPage({ themeMode, onChangeThemeMode, onChangeBeginnerMode, onEd
 
   return (
     <div className="settings-list">
-
       <UserPicker users={users} currentUser={currentUser} onChangeUser={onChangeUser} disabled={isOffline} />
 
       <div className="settings-separator" />
