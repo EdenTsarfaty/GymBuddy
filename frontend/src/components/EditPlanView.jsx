@@ -1553,6 +1553,13 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
   const [isImportDragOver, setIsImportDragOver] = useState(false)
   const [exportingPlan, setExportingPlan] = useState(false)
   const [exportError, setExportError] = useState(null)
+  // Set once a picked/dropped file has been read and passes the basic
+  // format/version check — reading happens immediately on pick, before the
+  // person commits to anything, so a bad file surfaces its error right away
+  // instead of only after they've also confirmed the (destructive) import.
+  const [importParsed, setImportParsed] = useState(null)
+  const [importFileError, setImportFileError] = useState(null)
+  const [importSubmitting, setImportSubmitting] = useState(false)
   const [applyingReorder, setApplyingReorder] = useState(false)
   const [activeDragDay, setActiveDragDay] = useState(null)
   const [activeDragSource, setActiveDragSource] = useState(null)
@@ -2417,6 +2424,31 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
     setImportFile(null)
     setIsImportDragOver(false)
     setExportError(null)
+    setImportParsed(null)
+    setImportFileError(null)
+  }
+
+  function resetImportSelection() {
+    setImportFile(null)
+    setImportParsed(null)
+    setImportFileError(null)
+  }
+
+  async function readImportFile(file) {
+    setImportFile(file)
+    setImportParsed(null)
+    setImportFileError(null)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (data.format !== 'gymbuddy-plan' || data.version !== 1 || !Array.isArray(data.exercises)) {
+        setImportFileError("This doesn't look like a GymBuddy plan file.")
+        return
+      }
+      setImportParsed(data)
+    } catch {
+      setImportFileError("Couldn't read that file — make sure it's a plan exported from GymBuddy.")
+    }
   }
 
   function handleImportDragOver(e) {
@@ -2430,12 +2462,35 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
     e.preventDefault()
     setIsImportDragOver(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) setImportFile(file)
+    if (file) readImportFile(file)
   }
   function handleImportFileChange(e) {
     const file = e.target.files?.[0]
-    if (file) setImportFile(file)
+    if (file) readImportFile(file)
     e.target.value = ''
+  }
+
+  async function handleConfirmImport() {
+    if (!importParsed) return
+    setImportSubmitting(true)
+    setImportFileError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/exercises/plan/import?user_id=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(importParsed),
+      })
+      if (!res.ok) throw new Error('Import failed')
+      // Same reasoning as regenerate-whole-plan (see onRegeneratePlan): the
+      // draft here is a one-time snapshot taken at mount, now stale under a
+      // full server-side replace — closing rather than trying to patch it
+      // in place is what onSaved/onClose already exist for.
+      onSaved?.()
+      onClose?.()
+    } catch {
+      setImportFileError("Couldn't import — check your connection and try again.")
+      setImportSubmitting(false)
+    }
   }
 
   async function handleExportPlan() {
@@ -2875,21 +2930,57 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
               hidden
               onChange={handleImportFileChange}
             />
+            {importFileError && <p className="edit-plan-save-error">{importFileError}</p>}
+            {importParsed ? (
+              <div className="edit-plan-import-confirm">
+                <p className="edit-plan-import-confirm-summary">
+                  {importParsed.exercises.length} exercise{importParsed.exercises.length === 1 ? '' : 's'} across{' '}
+                  {new Set(importParsed.exercises.map((e) => e.day)).size} day{new Set(importParsed.exercises.map((e) => e.day)).size === 1 ? '' : 's'}
+                </p>
+                <p className="edit-plan-import-confirm-warning">This replaces your entire current plan — this can't be undone.</p>
+                <div className="edit-plan-import-confirm-actions">
+                  <button
+                    type="button"
+                    className="edit-plan-pill-btn is-filled edit-plan-import-confirm-btn"
+                    onClick={handleConfirmImport}
+                    disabled={importSubmitting}
+                  >
+                    <UploadIcon size={14} />
+                    <span>{importSubmitting ? 'Importing…' : 'Replace my plan'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="edit-plan-pill-btn is-filled edit-plan-export-btn"
+                    onClick={handleExportPlan}
+                    disabled={exportingPlan}
+                  >
+                    <DownloadIcon size={16} />
+                    <span>{exportingPlan ? 'Exporting…' : 'Export existing plan'}</span>
+                  </button>
+                </div>
+                {exportError && <p className="edit-plan-save-error">{exportError}</p>}
+                <button type="button" className="edit-plan-pill-btn edit-plan-import-goback-btn" onClick={resetImportSelection}>
+                  <span>Go back</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="edit-plan-import-export-divider">
+                  <span>Or</span>
+                </div>
 
-            <div className="edit-plan-import-export-divider">
-              <span>Or</span>
-            </div>
-
-            <button
-              type="button"
-              className="edit-plan-pill-btn is-filled edit-plan-export-btn"
-              onClick={handleExportPlan}
-              disabled={exportingPlan}
-            >
-              <DownloadIcon size={16} />
-              <span>{exportingPlan ? 'Exporting…' : 'Export current plan'}</span>
-            </button>
-            {exportError && <p className="edit-plan-save-error">{exportError}</p>}
+                <button
+                  type="button"
+                  className="edit-plan-pill-btn is-filled edit-plan-export-btn"
+                  onClick={handleExportPlan}
+                  disabled={exportingPlan}
+                >
+                  <DownloadIcon size={16} />
+                  <span>{exportingPlan ? 'Exporting…' : 'Export existing plan'}</span>
+                </button>
+                {exportError && <p className="edit-plan-save-error">{exportError}</p>}
+              </>
+            )}
           </div>
         ) : dayExercises.length === 0 ? (
           <div className="edit-plan-empty-day">

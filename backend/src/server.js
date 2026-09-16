@@ -970,6 +970,111 @@ fastify.get('/api/exercises/plan/export', async (request, reply) => {
   return { format: 'gymbuddy-plan', version: 1, exported_at: new Date().toISOString(), days, exercises }
 })
 
+// The import side of the above — always a full replace, never a merge (see
+// the export endpoint's own comment for why: re-importing the same file
+// twice would otherwise just duplicate everything, and there's no clean way
+// to "load someone else's plan" without mixing it into your own). Mirrors
+// how POST /api/plan/structure already wipes a user's whole plan to
+// regenerate it — same one-way, no-Undo shape — except this also cleans up
+// the old photo files first, which that path has never done.
+//
+// A locally-uploaded photo is decoded and re-encoded through the exact same
+// saveUploadedPhoto pipeline a live upload goes through — never written to
+// disk as-is — so an embedded photo from an untrusted file can't smuggle
+// anything past the same polyglot/SVG-payload defense regular uploads get.
+// An external https:// URL is stored as a plain string and never fetched
+// here, same "browser renders it, server never touches it" rule as
+// everywhere else a photo URL appears. A generous bodyLimit accounts for a
+// plan with many embedded photos (base64 inflates their size ~33%).
+fastify.post('/api/exercises/plan/import', { bodyLimit: 20 * 1024 * 1024 }, async (request, reply) => {
+  const uid = request.query.user_id ? Number(request.query.user_id) : 1
+  const payload = request.body || {}
+
+  if (payload.format !== 'gymbuddy-plan' || payload.version !== 1 || !Array.isArray(payload.exercises)) {
+    reply.code(400)
+    return { error: 'Unrecognized or malformed plan file' }
+  }
+
+  const oldPhotos = db.prepare('SELECT photo FROM exercises WHERE user_id = ?').all(uid)
+  for (const { photo } of oldPhotos) {
+    if (exercisePhotos.isValidStoredFilename(photo)) await exercisePhotos.deleteStoredPhoto(photo)
+  }
+
+  db.prepare('DELETE FROM chat_messages WHERE exercise_id IN (SELECT id FROM exercises WHERE user_id = ?)').run(uid)
+  db.prepare('DELETE FROM exercises WHERE user_id = ?').run(uid)
+  db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(uid)
+
+  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title) VALUES (?, ?, ?)')
+  for (const [day, info] of Object.entries(payload.days || {})) {
+    if (!VALID_DAYS.includes(day)) continue
+    const title = info && typeof info.title === 'string' ? info.title.trim().slice(0, 200) : ''
+    if (!title) continue
+    insertDayPlan.run(uid, day, title)
+  }
+
+  const insertExercise = db.prepare(
+    `INSERT INTO exercises (user_id, name, day, sets, reps, weight, duration, description, bullets, video_id, category, sort_order, adjustments, photo, muscles)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const insertChat = db.prepare(
+    'INSERT INTO chat_messages (exercise_id, role, text, proposals, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  )
+
+  const nextSortOrder = {}
+  let imported = 0
+  for (const item of payload.exercises) {
+    if (!item || typeof item !== 'object') continue
+    if (!VALID_DAYS.includes(item.day)) continue
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 200) : ''
+    if (!name) continue
+
+    let photo = null
+    if (item.photo?.type === 'embedded' && typeof item.photo.data === 'string') {
+      try {
+        photo = await exercisePhotos.saveUploadedPhoto(Buffer.from(item.photo.data, 'base64'))
+      } catch {
+        photo = null
+      }
+    } else if (item.photo?.type === 'url' && exercisePhotos.isValidPhotoUrl(item.photo.value)) {
+      photo = item.photo.value
+    }
+
+    const sortOrder = nextSortOrder[item.day] ?? 0
+    nextSortOrder[item.day] = sortOrder + 1
+
+    const result = insertExercise.run(
+      uid,
+      name,
+      item.day,
+      Number.isFinite(item.sets) ? item.sets : null,
+      Number.isFinite(item.reps) ? item.reps : null,
+      Number.isFinite(item.weight) ? item.weight : null,
+      Number.isFinite(item.duration) ? item.duration : null,
+      typeof item.description === 'string' ? item.description.slice(0, 5000) : '',
+      JSON.stringify(Array.isArray(item.bullets) ? item.bullets.filter((b) => typeof b === 'string').slice(0, 50) : []),
+      typeof item.video_id === 'string' ? item.video_id.slice(0, 50) : null,
+      typeof item.category === 'string' ? item.category.slice(0, 50) : null,
+      sortOrder,
+      JSON.stringify(Array.isArray(item.adjustments) ? item.adjustments.slice(0, 50) : []),
+      photo,
+      JSON.stringify(Array.isArray(item.muscles) ? item.muscles.filter((m) => typeof m === 'string').slice(0, 50) : []),
+    )
+    imported++
+
+    if (Array.isArray(item.chat)) {
+      for (const msg of item.chat.slice(0, 500)) {
+        if (!msg || (msg.role !== 'user' && msg.role !== 'assistant') || typeof msg.text !== 'string') continue
+        const text = msg.text.slice(0, 20000)
+        const proposals = Array.isArray(msg.proposals) && msg.proposals.length > 0 ? JSON.stringify(msg.proposals) : null
+        const createdAt = typeof msg.created_at === 'string' ? msg.created_at : new Date().toISOString()
+        insertChat.run(result.lastInsertRowid, msg.role, text, proposals, countTokens(text), createdAt)
+      }
+    }
+  }
+
+  return { ok: true, imported }
+})
+
 // Undoes a soft-delete — the exact inverse of the `deletes` loop above.
 fastify.post('/api/exercises/:id/restore', async (request, reply) => {
   const { id } = request.params
