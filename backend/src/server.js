@@ -278,6 +278,19 @@ const VALID_DAYS = [
   'Saturday',
 ]
 
+// Closed list for day_plans.cardio_type / workout_log.cardio_type — kept in
+// sync by hand with the frontend's own copy (no shared package between the
+// two, same as VALID_DAYS/WEEKDAYS above). Label is what gets written into
+// day_plans.title when a day is marked cardio.
+const CARDIO_TYPES = {
+  swimming: 'Swimming',
+  jogging: 'Jogging',
+  cycling: 'Cycling',
+  climbing: 'Indoor Climbing',
+  rowing: 'Rowing',
+  hiking: 'Hiking',
+}
+
 function currentDayName() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' })
 }
@@ -488,7 +501,7 @@ fastify.post('/api/exercises/identify-photo', async (request, reply) => {
 
 fastify.get('/api/day-plans', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  return db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)
+  return db.prepare('SELECT day, title, cardio_type FROM day_plans WHERE user_id = ?').all(uid)
 })
 
 // Renames a single day's title from Edit Plan's header — upserts since a
@@ -530,6 +543,41 @@ fastify.delete('/api/day-plans/:day', async (request, reply) => {
 
   db.prepare('DELETE FROM day_plans WHERE user_id = ? AND day = ?').run(uid, day)
   return { day }
+})
+
+// Sets or clears a day's cardio type (see the cardio_type column comment in
+// db.js — NULL/omitted clears it, any CARDIO_TYPES key sets it). Setting it
+// also overwrites the day's title to that type's label, same "should
+// already be filled from the closed list" reasoning the type itself is
+// picked from — clearing it deliberately leaves the title alone, since
+// turning cardio off shouldn't silently blank out a title someone typed.
+fastify.put('/api/day-plans/:day/cardio', async (request, reply) => {
+  const { day } = request.params
+  const { user_id, cardio_type } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  if (cardio_type == null) {
+    db.prepare('UPDATE day_plans SET cardio_type = NULL WHERE user_id = ? AND day = ?').run(uid, day)
+    return { day, cardio_type: null }
+  }
+
+  const label = CARDIO_TYPES[cardio_type]
+  if (!label) {
+    reply.code(400)
+    return { error: 'Invalid cardio type' }
+  }
+
+  db.prepare(
+    `INSERT INTO day_plans (user_id, day, title, cardio_type) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, day) DO UPDATE SET title = excluded.title, cardio_type = excluded.cardio_type`,
+  ).run(uid, day, label, cardio_type)
+
+  return { day, title: label, cardio_type }
 })
 
 const MUSIC_LINK_SLOTS = 6
@@ -924,8 +972,8 @@ fastify.get('/api/exercises/plan/export', async (request, reply) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
 
   const days = {}
-  for (const { day, title } of db.prepare('SELECT day, title FROM day_plans WHERE user_id = ?').all(uid)) {
-    days[day] = { title }
+  for (const { day, title, cardio_type } of db.prepare('SELECT day, title, cardio_type FROM day_plans WHERE user_id = ?').all(uid)) {
+    days[day] = { title, cardio_type: cardio_type || null }
   }
 
   const rows = db.prepare(
@@ -1004,12 +1052,13 @@ fastify.post('/api/exercises/plan/import', { bodyLimit: 20 * 1024 * 1024 }, asyn
   db.prepare('DELETE FROM exercises WHERE user_id = ?').run(uid)
   db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(uid)
 
-  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title) VALUES (?, ?, ?)')
+  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title, cardio_type) VALUES (?, ?, ?, ?)')
   for (const [day, info] of Object.entries(payload.days || {})) {
     if (!VALID_DAYS.includes(day)) continue
+    const cardioType = info && typeof info.cardio_type === 'string' && CARDIO_TYPES[info.cardio_type] ? info.cardio_type : null
     const title = info && typeof info.title === 'string' ? info.title.trim().slice(0, 200) : ''
-    if (!title) continue
-    insertDayPlan.run(uid, day, title)
+    if (!title && !cardioType) continue
+    insertDayPlan.run(uid, day, title || CARDIO_TYPES[cardioType], cardioType)
   }
 
   const insertExercise = db.prepare(
@@ -1548,8 +1597,9 @@ fastify.post('/api/workout-log/complete', async (request, reply) => {
   }
 
   // Only queue the protein reminder for a "just finished" completion (today),
-  // not a backfilled/past performed_date.
-  if ((performed_date || streak.todayISODate()) === streak.todayISODate()) {
+  // not a backfilled/past performed_date — and not for a day that was
+  // already recorded as done (a reload re-sending the completion).
+  if (!result.alreadyPerformed && (performed_date || streak.todayISODate()) === streak.todayISODate()) {
     const profile = db.prepare(
       'SELECT protein_reminder, protein_reminder_delay_minutes FROM user_profile WHERE id = ?',
     ).get(uid)
@@ -1582,6 +1632,26 @@ fastify.post('/api/workout-log/uncomplete', async (request, reply) => {
 
   db.prepare('UPDATE user_profile SET protein_reminder_pending_at = NULL WHERE id = ?').run(uid)
 
+  return result
+})
+
+// The cardio entry's own check-off (a cardio day's hero card), saved the
+// same way each stretch's completion is so it survives a reload — see the
+// cardio_done column comment in db.js for why it isn't just performed_date.
+fastify.post('/api/workout-log/cardio-done', async (request, reply) => {
+  const { user_id, scheduled_date, done } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!scheduled_date || !/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date)) {
+    reply.code(400)
+    return { error: 'scheduled_date is required (YYYY-MM-DD)' }
+  }
+
+  const result = streak.setCardioDone(uid, scheduled_date, !!done)
+  if (!result) {
+    reply.code(404)
+    return { error: 'No scheduled workout found for that date' }
+  }
   return result
 })
 

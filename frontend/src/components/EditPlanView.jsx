@@ -35,9 +35,23 @@ import CloudIcon from './icons/CloudIcon'
 import KebabIcon from './icons/KebabIcon'
 import PlanGeneratingOverlay from './PlanGeneratingOverlay'
 import XIcon from './icons/XIcon'
+import ChevronLeftIcon from './icons/ChevronLeftIcon'
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+// Kept in sync by hand with the backend's own copy (backend/src/server.js) —
+// no shared package between the two, same as WEEKDAYS above. Icon is a
+// placeholder (TreadmillIcon, already used for warm_up) until per-type
+// icons exist.
+const CARDIO_TYPES = {
+  swimming: 'Swimming',
+  jogging: 'Jogging',
+  cycling: 'Cycling',
+  climbing: 'Indoor Climbing',
+  rowing: 'Rowing',
+  hiking: 'Hiking',
+}
 
 const CATEGORY_ICONS = {
   free_weight: DumbbellIcon,
@@ -1512,6 +1526,88 @@ function ExerciseEditPanel({
   )
 }
 
+// Only ever shown when there's somewhere for it to lead — next to Add
+// exercise on an empty day, or next to it once every exercise already on
+// the day is a stretch (see selectedDayAllStretches). Clicking it commits
+// immediately to a default type rather than opening onto a blank picker;
+// CardioActivityCard (below) is where the type actually gets chosen/changed
+// and where a cardio day gets turned back into a regular one.
+const DEFAULT_CARDIO_TYPE = 'jogging'
+
+function SetCardioDayButton({ onClick, disabled }) {
+  return (
+    <button type="button" className="edit-plan-pill-btn" onClick={() => onClick(DEFAULT_CARDIO_TYPE)} disabled={disabled}>
+      <TreadmillIcon size={16} />
+      <span>Set cardio day</span>
+    </button>
+  )
+}
+
+// The tinted, borderless band a cardio day gets instead of a normal exercise
+// card (design call: closer to a soft banner than a bordered WorkoutCard,
+// since "an exercise" doesn't really describe what this day is). Turning
+// cardio off entirely lives here as an explicit trash icon, not a "not
+// cardio" option buried in the type list.
+function CardioActivityCard({ cardioType, onChangeType, onRemove }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const options = Object.entries(CARDIO_TYPES).map(([id, label]) => ({ id, label }))
+  const current = options.find((o) => o.id === cardioType)
+
+  return (
+    <div className="edit-plan-cardio-card">
+      <TreadmillIcon size={22} className="edit-plan-cardio-card-icon" />
+      <div className="dropdown-picker edit-plan-cardio-card-picker" ref={ref}>
+        <button
+          type="button"
+          className={`edit-plan-cardio-card-type ${open ? 'is-open' : ''}`}
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span>{current?.label}</span>
+          <span className={`dropdown-picker-chevron ${open ? 'is-open' : ''}`}>
+            <ChevronLeftIcon size={12} />
+          </span>
+        </button>
+
+        {open && (
+          <div className="dropdown-picker-menu edit-plan-cardio-card-menu" role="listbox">
+            {options.filter((o) => o.id !== current?.id).map((option, i) => (
+              <div key={option.id}>
+                {i > 0 && <div className="dropdown-picker-separator" />}
+                <button
+                  type="button"
+                  className="dropdown-picker-option"
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => { onChangeType(option.id); setOpen(false) }}
+                >
+                  <TreadmillIcon size={14} />
+                  {option.label}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <button type="button" className="edit-plan-cardio-card-remove" onClick={onRemove} aria-label="Remove cardio day">
+        <TrashIcon size={16} />
+      </button>
+    </div>
+  )
+}
+
 // Live-sync model: every structural/field action (reorder, checkbox
 // multi-select Delete/Copy to/Move to, field edits, add) persists to the
 // server the moment it happens — no local draft, no Save button, no discard-
@@ -1523,7 +1619,7 @@ function ExerciseEditPanel({
 // recreating a lookalike. No AI involved in the structural actions
 // themselves. See the manual-edit-mode design notes in memory for the full
 // spec this is being built toward.
-function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDayTitleSaved, onClose, onRegeneratePlan }) {
+function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userName, onSaved, onDayTitleSaved, onDayCardioSaved, onClose, onRegeneratePlan }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
   const [editingDayTitle, setEditingDayTitle] = useState(false)
   const [dayTitleDraft, setDayTitleDraft] = useState('')
@@ -1742,6 +1838,41 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
     onDayTitleSaved?.(day, title)
   }
 
+  // Setting a cardio type also overwrites the day's title server-side (see
+  // the endpoint's own comment) — mirror that here so the header's title
+  // line updates without waiting on a refetch, same as applyDayTitle does.
+  async function setCardioType(day, cardioType) {
+    try {
+      const res = await track(fetch(`${API_BASE}/api/day-plans/${day}/cardio`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, cardio_type: cardioType }),
+      }))
+      if (!res.ok) throw new Error('Save failed')
+      const data = await res.json()
+      onDayCardioSaved?.(day, cardioType)
+      if (data.title) onDayTitleSaved?.(day, data.title)
+    } catch {
+      setActionError("Couldn't update cardio day — check your connection and try again.")
+    }
+  }
+
+  // Unlike turning cardio off mid-edit elsewhere (which deliberately leaves
+  // the title alone — see setCardioType's own comment), removing the whole
+  // activity from its card is a full undo: title and type were both set
+  // together by picking a type, so they come off together too, via the
+  // same DELETE the day-title "clear" flow already uses.
+  async function removeCardioDay(day) {
+    try {
+      const res = await track(fetch(`${API_BASE}/api/day-plans/${day}?user_id=${userId}`, { method: 'DELETE' }))
+      if (!res.ok) throw new Error('Remove failed')
+      onDayTitleSaved?.(day, '')
+      onDayCardioSaved?.(day, null)
+    } catch {
+      setActionError("Couldn't remove cardio day — check your connection and try again.")
+    }
+  }
+
   // Mirrors handleGenerate in App.jsx (used by whole-plan regenerate) step
   // for step, just scoped to one day: get the exercise names first (no DB
   // writes yet), show the same thinking → per-exercise-progress overlay,
@@ -1894,6 +2025,11 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
   }
 
   const dayExercises = draft[selectedDay]
+  const selectedDayCardioType = dayCardioTypes?.get(selectedDay) || null
+  // Vacuously true on an empty day — that's deliberate, it's what lets
+  // "Set cardio day" show up right alongside "Add exercise" on a day with
+  // nothing on it yet, same as it always could.
+  const selectedDayAllStretches = dayExercises.every((it) => it.category === 'stretch')
   const isSelecting = selectedKeys.size > 0
   // A pending-add card (Manual/Title search/Photo search, not yet resolved
   // into a real exercise) is scaffolding, not a real list item — while one's
@@ -2002,23 +2138,36 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
   // it into an actual exercise.
   function handleInsertPlaceholder(day, index) {
     const key = `pending-${newKeyCounter.current++}`
+    // A cardio day only ever holds stretches — there's no AI-matched
+    // identity to look up (title/photo search both exist for finding a real
+    // gym exercise's sets/reps/weight), so it skips straight past that
+    // 3-way chooser into the plain manual-entry form (same shape
+    // handleManualAdd builds, just inserted directly in one step — reading
+    // the just-spliced item back out via findItem/draft wouldn't see it yet
+    // this same tick, since setDraft hasn't re-rendered).
+    const item = dayCardioTypes?.get(day)
+      ? {
+          _key: key, day, id: undefined, name: '', sets: 3, reps: 10, weight: 0, duration: null,
+          description: '', bullets: [], category: 'stretch', video_id: null, photo: null,
+        }
+      : { _key: key, day, isPendingAdd: true }
     setDraft((current) => {
       const list = [...current[day]]
-      list.splice(index, 0, { _key: key, day, isPendingAdd: true })
+      list.splice(index, 0, item)
       return { ...current, [day]: list }
     })
     // The dividers/panel belong to whichever card is "open" — once a
     // placeholder is inserted, that's no longer the previously-editing
     // card, so close it out rather than leaving its dividers showing too.
-    setEditingKey(null)
-    setEditPanelExpanded(false)
+    setEditingKey(item.isPendingAdd ? null : key)
+    setEditPanelExpanded(!item.isPendingAdd)
   }
 
   // Turns a placeholder into a blank, still-local (no id yet) draft item and
   // opens it straight in the field-edit panel. Nothing is created server-side
   // until a name is actually typed (see commitEditField) — an exercise with
   // no name isn't a real thing worth persisting yet.
-  function handleManualAdd(key) {
+  function handleManualAdd(key, defaultCategory = 'free_weight') {
     const found = findItem(key)
     if (!found) return
     const { day } = found
@@ -2035,7 +2184,7 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
         duration: null,
         description: '',
         bullets: [],
-        category: 'free_weight',
+        category: defaultCategory,
         video_id: null,
         photo: null,
       } : it)),
@@ -2982,67 +3131,97 @@ function EditPlanView({ allExercises, dayTitles, userId, userName, onSaved, onDa
               </>
             )}
           </div>
-        ) : dayExercises.length === 0 ? (
-          <div className="edit-plan-empty-day">
-            <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
-            {!dayReorderMode && (
-              <div className="edit-plan-empty-day-actions">
-                <button
-                  type="button"
-                  className="edit-plan-pill-btn is-filled"
-                  onClick={() => handleInsertPlaceholder(selectedDay, 0)}
-                  disabled={hasPendingAdd}
-                >
-                  <PlusIcon size={16} />
-                  <span>Add exercise</span>
-                </button>
-                <button type="button" className="edit-plan-pill-btn" disabled>
-                  <TreadmillIcon size={16} />
-                  <span>Set cardio day</span>
-                </button>
-              </div>
-            )}
-          </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
-              {dayExercises.map((item, i) => (
-                <div key={item._key} style={{ display: 'contents' }}>
-                  {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
-                    <InsertDivider bleedTop={i > 0} onInsert={() => handleInsertPlaceholder(selectedDay, i)} />
-                  )}
-                  <SortableCard
-                    item={item}
-                    selected={selectedKeys.has(item._key)}
-                    editing={editingKey === item._key}
-                    onToggleSelect={toggleSelect}
-                    onOpenEdit={handleOpenEdit}
-                    onManualAdd={handleManualAdd}
-                    onPhotoAdd={handlePhotoAdd}
-                    userId={userId}
-                    readOnly={dayReorderMode}
-                  />
-                  {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
-                    <InsertDivider
-                      bleedBottom={i < dayExercises.length - 1}
-                      onInsert={() => handleInsertPlaceholder(selectedDay, i + 1)}
-                    />
+          <>
+            {selectedDayCardioType && !dayReorderMode && (
+              <>
+                <CardioActivityCard
+                  cardioType={selectedDayCardioType}
+                  onChangeType={(type) => setCardioType(selectedDay, type)}
+                  onRemove={() => removeCardioDay(selectedDay)}
+                />
+                <div className="edit-plan-cardio-separator" />
+              </>
+            )}
+            {dayExercises.length === 0 ? (
+              selectedDayCardioType ? (
+                !dayReorderMode && (
+                  <button
+                    type="button"
+                    className="edit-plan-pill-btn is-filled edit-plan-add-exercise-btn"
+                    onClick={() => handleInsertPlaceholder(selectedDay, 0)}
+                    disabled={hasPendingAdd}
+                  >
+                    <PlusIcon size={16} />
+                    <span>Add exercise</span>
+                  </button>
+                )
+              ) : (
+                <div className="edit-plan-empty-day">
+                  <p className="edit-plan-empty">No exercises scheduled for {selectedDay}.</p>
+                  {!dayReorderMode && (
+                    <div className="edit-plan-empty-day-actions">
+                      <button
+                        type="button"
+                        className="edit-plan-pill-btn is-filled"
+                        onClick={() => handleInsertPlaceholder(selectedDay, 0)}
+                        disabled={hasPendingAdd}
+                      >
+                        <PlusIcon size={16} />
+                        <span>Add exercise</span>
+                      </button>
+                      <SetCardioDayButton onClick={(type) => setCardioType(selectedDay, type)} />
+                    </div>
                   )}
                 </div>
-              ))}
-            </SortableContext>
-          </DndContext>
+              )
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={dayExercises.map((item) => item._key)} strategy={verticalListSortingStrategy}>
+                  {dayExercises.map((item, i) => (
+                    <div key={item._key} style={{ display: 'contents' }}>
+                      {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
+                        <InsertDivider bleedTop={i > 0} onInsert={() => handleInsertPlaceholder(selectedDay, i)} />
+                      )}
+                      <SortableCard
+                        item={item}
+                        selected={selectedKeys.has(item._key)}
+                        editing={editingKey === item._key}
+                        onToggleSelect={toggleSelect}
+                        onOpenEdit={handleOpenEdit}
+                        onManualAdd={handleManualAdd}
+                        onPhotoAdd={handlePhotoAdd}
+                        userId={userId}
+                        readOnly={dayReorderMode}
+                      />
+                      {!dayReorderMode && editingKey === item._key && editingShowsDividers && (
+                        <InsertDivider
+                          bleedBottom={i < dayExercises.length - 1}
+                          onInsert={() => handleInsertPlaceholder(selectedDay, i + 1)}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
+          </>
         )}
         {!importExportMode && dayExercises.length > 0 && !dayReorderMode && (
-          <button
-            type="button"
-            className="edit-plan-pill-btn is-filled edit-plan-add-exercise-btn"
-            onClick={() => handleInsertPlaceholder(selectedDay, dayExercises.length)}
-            disabled={hasPendingAdd}
-          >
-            <PlusIcon size={16} />
-            <span>Add exercise</span>
-          </button>
+          <div className="edit-plan-list-footer-actions">
+            <button
+              type="button"
+              className="edit-plan-pill-btn is-filled edit-plan-add-exercise-btn"
+              onClick={() => handleInsertPlaceholder(selectedDay, dayExercises.length)}
+              disabled={hasPendingAdd}
+            >
+              <PlusIcon size={16} />
+              <span>Add exercise</span>
+            </button>
+            {!selectedDayCardioType && selectedDayAllStretches && (
+              <SetCardioDayButton onClick={(type) => setCardioType(selectedDay, type)} />
+            )}
+          </div>
         )}
       </div>
 

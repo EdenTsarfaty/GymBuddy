@@ -110,6 +110,11 @@ db.exec(`
     PRIMARY KEY (user_id, day)
   )
 `)
+// NULL = not a cardio day; any other value is both the flag and the type at
+// once (see CARDIO_TYPES in server.js) — a cardio day has no separate
+// boolean column, since "is it cardio" and "what kind" are never
+// independently true/false, only "not cardio" or "cardio of type X".
+try { db.exec('ALTER TABLE day_plans ADD COLUMN cardio_type TEXT') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS chat_messages (
@@ -143,6 +148,18 @@ db.exec(`
 // backfill for freezes that predate this column — it only ever gets set
 // going forward.
 try { db.exec('ALTER TABLE workout_log ADD COLUMN frozen INTEGER DEFAULT 0') } catch {}
+// Snapshot of day_plans.cardio_type as of the moment this row was scheduled
+// — same reasoning as `frozen` just above: day_plans only reflects the
+// *current* state of a weekday, so the Month view reading it live would
+// mislabel a past date the moment someone later changes or clears that
+// day's cardio type. NULL here means "not a cardio day" (or predates this
+// column), same convention as day_plans.cardio_type itself.
+try { db.exec('ALTER TABLE workout_log ADD COLUMN cardio_type TEXT') } catch {}
+// Whether the cardio entry itself has been checked off for this date —
+// independent of performed_date, which only flips once the whole day
+// (cardio plus any stretches) is done. This is what lets the homescreen's
+// cardio pill survive a reload the way per-exercise completion does.
+try { db.exec('ALTER TABLE workout_log ADD COLUMN cardio_done INTEGER DEFAULT 0') } catch {}
 
 // One row per exercise scheduled on a given real date — a frozen snapshot of
 // its collapsed-card fields (title + basic stats), independent of the

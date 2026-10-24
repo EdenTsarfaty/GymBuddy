@@ -23,15 +23,18 @@ import StreakFreezeNotice from './components/StreakFreezeNotice'
 import TableIcon from './components/icons/TableIcon'
 import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
+import CompleteIcon from './components/icons/CompleteIcon'
+import UncompleteIcon from './components/icons/UncompleteIcon'
 import UndoIcon from './components/icons/UndoIcon'
 import ResetIcon from './components/icons/ResetIcon'
+import TreadmillIcon from './components/icons/TreadmillIcon'
 import HomeBanner from './components/HomeBanner'
 import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.8'
+const APP_VERSION = 'RC 0.8.9'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -45,6 +48,7 @@ const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
 const STREAK_FREEZE_SUSPEND_STORAGE_KEY = 'gymbuddy-streak-freeze-suspended-until'
+const LAST_COMPLETION_BATCH_STORAGE_KEY = 'gymbuddy-last-completion-batch'
 const STREAK_FREEZE_SUSPEND_MS = 3 * 60 * 60 * 1000
 const REPORT_BUG_URL = `https://t.me/Azsper?text=${encodeURIComponent('Hey! I found a bug in GymBuddy — ')}`
 
@@ -54,6 +58,18 @@ function categoryRank(category) {
 }
 
 const today = new Date().toLocaleDateString(undefined, { weekday: 'long' })
+
+// Kept in sync by hand with the backend's own copy (backend/src/server.js)
+// and EditPlanView's — no shared package between them, same as WEEKDAYS
+// elsewhere in this codebase.
+const CARDIO_TYPES = {
+  swimming: 'Swimming',
+  jogging: 'Jogging',
+  cycling: 'Cycling',
+  climbing: 'Indoor Climbing',
+  rowing: 'Rowing',
+  hiking: 'Hiking',
+}
 
 const WORKOUT_COMPLETE_MESSAGES = [
   'What a king!',
@@ -191,14 +207,16 @@ function nextScheduledDateAfter(dateStr, scheduledDays) {
   return null
 }
 
-// Maps ISO date -> 'green' (performed, on time or late) | 'orange' (grace-period
-// trail between a missed scheduled day and its late completion) | 'red' (missed,
-// grace window closed, never performed). Dates absent from the map get no dot.
+// Maps ISO date -> 'green' (performed, on time or late) | 'turquoise' (same, but
+// the day was a cardio day when it was done — read off the row's own snapshot,
+// not today's day_plans) | 'orange' (grace-period trail between a missed
+// scheduled day and its late completion) | 'red' (missed, grace window closed,
+// never performed). Dates absent from the map get no dot.
 function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr, protectedDates) {
   const map = new Map()
 
   for (const row of workoutLog) {
-    if (row.performed_date) map.set(row.performed_date, 'green')
+    if (row.performed_date) map.set(row.performed_date, row.cardio_type ? 'turquoise' : 'green')
   }
 
   for (const row of workoutLog) {
@@ -239,6 +257,35 @@ function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr, protectedDa
   return map
 }
 
+// The undo button's record of the last completion (which exercise ids that
+// press or swipe flipped, and the date it counted toward) — kept in
+// localStorage per user so Undo still works after a reload. localStorage has
+// no expiry of its own, so the end-of-day limit is enforced here: an entry
+// saved on an earlier date is deleted the next time it's read.
+function readStoredCompletionBatch(userId) {
+  const key = `${LAST_COMPLETION_BATCH_STORAGE_KEY}-${userId}`
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const stored = JSON.parse(raw)
+    if (stored?.savedOn !== toISODate(new Date()) || !Array.isArray(stored.ids) || !stored.scheduledDate) {
+      localStorage.removeItem(key)
+      return null
+    }
+    return { ids: stored.ids, scheduledDate: stored.scheduledDate }
+  } catch {
+    return null
+  }
+}
+
+function writeStoredCompletionBatch(userId, batch) {
+  const key = `${LAST_COMPLETION_BATCH_STORAGE_KEY}-${userId}`
+  try {
+    if (batch) localStorage.setItem(key, JSON.stringify({ ...batch, savedOn: toISODate(new Date()) }))
+    else localStorage.removeItem(key)
+  } catch {}
+}
+
 function getInitialBeginnerMode() {
   return localStorage.getItem(BEGINNER_MODE_STORAGE_KEY) === 'true'
 }
@@ -272,9 +319,11 @@ function App() {
   const [completedExerciseIds, setCompletedExerciseIds] = useState(() => new Set())
   const [cascadeToken, setCascadeToken] = useState(0)
   // Remembers just the last completion (whichever exercise ids the last cascade
-  // press or finishing swipe actually flipped), in memory only — cleared on
-  // reload and the moment anything is unchecked, since "all complete" stops
-  // being true. That's what lets the undo button target only that action.
+  // press or finishing swipe actually flipped) so the undo button can target
+  // only that action. Mirrored into localStorage (see rememberCompletionBatch)
+  // so it survives a reload, but only until the end of the day. The button
+  // itself hides the moment anything is unchecked, since "all complete" stops
+  // being true.
   const [lastCompletionBatch, setLastCompletionBatch] = useState(null)
   const preCompletionSnapshotRef = useRef(new Set())
   // Snapshot taken the instant "Complete Workout" is clicked, before any of the
@@ -285,6 +334,13 @@ function App() {
   const cascadeStartSnapshotRef = useRef(null)
   const [justRevertedIds, setJustRevertedIds] = useState(() => new Set())
   const [streakUndoTick, setStreakUndoTick] = useState(null)
+  // A cardio day with zero stretches has no exercise to hang a completed-id
+  // on, so "the whole day is done" needs its own flag rather than being
+  // derived from completedExerciseIds like every other day — see the
+  // completion effect below, which treats this exactly like "all exercises
+  // complete" once it's true. Resets with the day so yesterday's cardio
+  // day doesn't read as already-done today.
+  const [cardioActivityCompleted, setCardioActivityCompleted] = useState(false)
 
   // Fires the per-exercise history record alongside the local toggle —
   // independent of the whole-day workout-log/complete call, which only fires
@@ -362,6 +418,12 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [daysWithWorkouts, setDaysWithWorkouts] = useState(new Set())
   const [dayTitles, setDayTitles] = useState(new Map())
+  // day -> cardio_type ('swimming', 'jogging', ...) or absent for a normal
+  // day — kept separate from dayTitles (rather than folding cardio_type
+  // into its value) so every existing dayTitles.get(day) read site (the
+  // homescreen subtitle, day picker, Edit Plan header) keeps working
+  // unchanged; only the places that actually need cardio-ness read this too.
+  const [dayCardioTypes, setDayCardioTypes] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
   const [userSex, setUserSex] = useState(null)
@@ -412,6 +474,18 @@ function App() {
     const stored = Number(localStorage.getItem(`${STREAK_FREEZE_SUSPEND_STORAGE_KEY}-${currentUser.id}`))
     setFreezeSuspendedUntil(stored || 0)
   }, [currentUser?.id])
+
+  // Restores the undo record for whichever user is active — this also
+  // clears it on a user switch, so one user's last completion can't be
+  // undone from another's screen.
+  useEffect(() => {
+    setLastCompletionBatch(currentUser ? readStoredCompletionBatch(currentUser.id) : null)
+  }, [currentUser?.id])
+
+  function rememberCompletionBatch(batch) {
+    setLastCompletionBatch(batch)
+    if (currentUser) writeStoredCompletionBatch(currentUser.id, batch)
+  }
 
   function suspendStreakFreezeNotice() {
     const until = Date.now() + STREAK_FREEZE_SUSPEND_MS
@@ -518,6 +592,7 @@ function App() {
       .sort((a, b) => categoryRank(a.category) - categoryRank(b.category)),
     [allExercises, effectiveDay],
   )
+  const effectiveDayCardioType = dayCardioTypes.get(effectiveDay) || null
 
   const workoutIndicators = useMemo(
     () => buildWorkoutIndicators(workoutLog, daysWithWorkouts, toISODate(new Date()), new Set(streak.protected_dates)),
@@ -675,9 +750,16 @@ function App() {
           return pending ? { ...item, ...pending.updates } : item
         })
         setAllExercises(merged)
-        setDaysWithWorkouts(new Set(merged.map((e) => e.day)))
         const titlesMap = new Map(plans.map((p) => [p.day, p.title]))
         setDayTitles(titlesMap)
+        const cardioMap = new Map(plans.filter((p) => p.cardio_type).map((p) => [p.day, p.cardio_type]))
+        setDayCardioTypes(cardioMap)
+        // A cardio day is scheduled on its own, with or without stretches
+        // under it — same rule backend/src/streak.js's getScheduledWeekdays
+        // uses. Without this, a stretch-less cardio day reads as an empty
+        // slot here, which opens the catch-up surfacing and keeps the
+        // previous workout's grace window open past today.
+        setDaysWithWorkouts(new Set([...merged.map((e) => e.day), ...cardioMap.keys()]))
       })
       .catch((err) => {
         if (err.name === 'AbortError' || err.name === 'TypeError') {
@@ -792,9 +874,56 @@ function App() {
     }
   }, [completedExerciseIds, exercises])
 
+  // The date the live (not history) view's completion actions apply to — a
+  // surfaced catch-up's original date, otherwise today.
+  const liveScheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : toISODate(new Date())
+
+  // A day's own selection resets the cardio flag above — it only ever
+  // means "today's cardio activity, as currently viewed, was marked done."
+  // Clearing the seed key too lets the effect below re-read it from the
+  // server when coming back to today.
+  const cardioSeedKeyRef = useRef(null)
   useEffect(() => {
-    if (!currentUser || historyDate || selectedDay !== today || exercises.length === 0) return
-    if (!exercises.every((item) => completedExerciseIds.has(item.id))) return
+    setCardioActivityCompleted(false)
+    cardioSeedKeyRef.current = null
+  }, [selectedDay])
+
+  // Reads the cardio pill's state back from the day's log row, the way
+  // completedExerciseIds is read back for stretches — without this a reload
+  // showed "Complete" again for an entry already checked off. Seeded once per
+  // (user, date): the log refetches after every completion, and re-seeding
+  // on each of those would overwrite a tap whose save is still in flight.
+  useEffect(() => {
+    if (!currentUser || historyDate || selectedDay !== today) return
+    const row = workoutLog.find((r) => r.scheduled_date === liveScheduledDate)
+    if (!row) return
+    const key = `${currentUser.id}|${liveScheduledDate}`
+    if (cardioSeedKeyRef.current === key) return
+    cardioSeedKeyRef.current = key
+    setCardioActivityCompleted(!!row.cardio_done)
+  }, [workoutLog, currentUser, historyDate, selectedDay, liveScheduledDate])
+
+  function persistCardioDone(done) {
+    if (!currentUser || historyDate || selectedDay !== today) return
+    fetch(`${API_BASE}/api/workout-log/cardio-done`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: liveScheduledDate, done }),
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    if (!currentUser || historyDate || selectedDay !== today) return
+    // A cardio day needs both signals — the activity itself (its own pill,
+    // independent of any exercises) and any stretches alongside it (same
+    // per-exercise completion every other day uses) — before the whole day
+    // counts as done. A non-cardio day is unchanged: exercises-only, same
+    // as it's always been.
+    const stretchesDone = exercises.length === 0 || exercises.every((item) => completedExerciseIds.has(item.id))
+    const isDone = effectiveDayCardioType
+      ? cardioActivityCompleted && stretchesDone
+      : exercises.length > 0 && stretchesDone
+    if (!isDone) return
 
     const todayISO = toISODate(new Date())
     // Completing a surfaced catch-up workout resolves *its* original scheduled
@@ -818,8 +947,12 @@ function App() {
       .then((res) => (res.ok ? res.json() : null))
       .then((result) => {
         if (!result) return
+        // Already recorded as done (this is just a reload re-sending it):
+        // nothing to celebrate, and the undo batch restored from storage
+        // stays as it is rather than being replaced by this empty diff.
+        if (result.alreadyPerformed) return
         setWorkoutLogRefreshKey((k) => k + 1)
-        setLastCompletionBatch({ ids: batchIds, scheduledDate })
+        rememberCompletionBatch({ ids: batchIds, scheduledDate })
         setCelebration({
           message: WORKOUT_COMPLETE_MESSAGES[Math.floor(Math.random() * WORKOUT_COMPLETE_MESSAGES.length)],
           oldStreak,
@@ -831,18 +964,38 @@ function App() {
     // Deliberately excludes `streak` — it's only read to snapshot the
     // pre-completion value at the moment this fires, not to react to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp, historyDate])
+  }, [completedExerciseIds, exercises, selectedDay, currentUser, isShowingCatchUp, pendingCatchUp, historyDate, cardioActivityCompleted, effectiveDayCardioType])
+
+  // The part of taking back a day's completion that doesn't depend on which
+  // control did it: the server's streak result, the in-memory batch, and the
+  // header streak's tick-down roll.
+  function applyDayUncompleted(result, oldStreak) {
+    setStreak(result)
+    rememberCompletionBatch(null)
+    setWorkoutLogRefreshKey((k) => k + 1)
+    setCelebration(null)
+    // Header streak number normally just silently updates behind the
+    // celebration overlay on a real completion — undo has no overlay to
+    // hide behind, so it plays its own little tick-down roll instead.
+    if (result.current_streak !== oldStreak) {
+      setStreakUndoTick({ from: oldStreak, to: result.current_streak })
+      setTimeout(() => setStreakUndoTick(null), 500)
+    }
+  }
+
+  function postUncompleteDay(scheduledDate) {
+    return fetch(`${API_BASE}/api/workout-log/uncomplete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: scheduledDate }),
+    }).then((res) => (res.ok ? res.json() : null))
+  }
 
   function handleUndoComplete() {
     if (!lastCompletionBatch || !currentUser) return
     const { ids, scheduledDate } = lastCompletionBatch
     const oldStreak = streak.current_streak
-    fetch(`${API_BASE}/api/workout-log/uncomplete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: scheduledDate }),
-    })
-      .then((res) => (res.ok ? res.json() : null))
+    postUncompleteDay(scheduledDate)
       .then((result) => {
         if (!result) return
         setCompletedExerciseIds((current) => {
@@ -851,24 +1004,42 @@ function App() {
           return next
         })
         ids.forEach((id) => recordExerciseCompletion(id, false))
+        // Complete Workout also completes a cardio day's own entry, so undoing
+        // it takes that back too (a no-op on days that aren't cardio).
+        setCardioActivityCompleted(false)
+        persistCardioDone(false)
         // See toggleCompleted's comment — leaving this non-zero would replay
         // the cascade on a future remount (e.g. Settings and back).
         setCascadeToken(0)
-        setStreak(result)
-        setLastCompletionBatch(null)
-        setWorkoutLogRefreshKey((k) => k + 1)
-        setCelebration(null)
+        applyDayUncompleted(result, oldStreak)
         // Briefly flags just the reverted cards so they play a fade instead of
         // snapping straight to their uncompleted look.
         setJustRevertedIds(new Set(ids))
         setTimeout(() => setJustRevertedIds(new Set()), 450)
-        // Header streak number normally just silently updates behind the
-        // celebration overlay on a real completion — undo has no overlay to
-        // hide behind, so it plays its own little tick-down roll instead.
-        if (result.current_streak !== oldStreak) {
-          setStreakUndoTick({ from: oldStreak, to: result.current_streak })
-          setTimeout(() => setStreakUndoTick(null), 500)
-        }
+      })
+      .catch(() => {})
+  }
+
+  // The cardio pill is its own revert: tapping "Completed" takes the
+  // completion back. If that completion is what finished the day (the batch
+  // below is the one recorded for it), the server's record and the streak
+  // are rolled back too — otherwise the pill would read "Complete" while
+  // the day stayed performed. This is the only way to undo a cardio day with
+  // no stretches, which never shows the Undo button (that one hangs off
+  // Complete Workout).
+  function handleToggleCardioActivity() {
+    if (!cardioActivityCompleted) {
+      setCardioActivityCompleted(true)
+      persistCardioDone(true)
+      return
+    }
+    setCardioActivityCompleted(false)
+    persistCardioDone(false)
+    if (!currentUser || lastCompletionBatch?.scheduledDate !== liveScheduledDate) return
+    const oldStreak = streak.current_streak
+    postUncompleteDay(liveScheduledDate)
+      .then((result) => {
+        if (result) applyDayUncompleted(result, oldStreak)
       })
       .catch(() => {})
   }
@@ -1565,6 +1736,10 @@ function App() {
                       <span>Workout completed</span>
                     </div>
                     <div className="month-legend-row">
+                      <span className="month-grid-day-dot is-turquoise" aria-hidden="true" />
+                      <span>Cardio day completed</span>
+                    </div>
+                    <div className="month-legend-row">
                       <span className="month-grid-day-dot is-orange" aria-hidden="true" />
                       <span>Missed — still within the grace window</span>
                     </div>
@@ -1733,10 +1908,17 @@ function App() {
           <EditPlanView
             allExercises={allExercises}
             dayTitles={dayTitles}
+            dayCardioTypes={dayCardioTypes}
             userId={currentUser?.id}
             userName={currentUser?.name}
             onSaved={() => setExercisesRefreshKey((k) => k + 1)}
             onDayTitleSaved={(day, title) => setDayTitles((prev) => new Map(prev).set(day, title))}
+            onDayCardioSaved={(day, cardioType) => setDayCardioTypes((prev) => {
+              const next = new Map(prev)
+              if (cardioType) next.set(day, cardioType)
+              else next.delete(day)
+              return next
+            })}
             onClose={() => setView('settings')}
             onRegeneratePlan={() => setRegenOpen(true)}
           />
@@ -1799,7 +1981,27 @@ function App() {
               />
             )}
             {!loading && !serverDown && !showFreezeScreen && error && <p className="status-message">Couldn't load exercises: {error}</p>}
-            {!loading && !serverDown && !showFreezeScreen && !error && exercises.length === 0 && (
+            {!loading && !serverDown && !showFreezeScreen && !error && effectiveDayCardioType && (
+              <div className={`cardio-activity-card ${cardioActivityCompleted ? 'is-complete' : ''}`}>
+                <span className="cardio-activity-icon-circle">
+                  <TreadmillIcon size={58} className="cardio-activity-icon" />
+                </span>
+                <span className="cardio-activity-type">{CARDIO_TYPES[effectiveDayCardioType]}</span>
+                <button
+                  type="button"
+                  className={`complete-workout-btn cardio-activity-complete-btn ${cardioActivityCompleted ? 'is-active' : ''}`}
+                  aria-pressed={cardioActivityCompleted}
+                  onClick={handleToggleCardioActivity}
+                >
+                  {cardioActivityCompleted ? <UncompleteIcon size={18} /> : <CompleteIcon size={18} />}
+                  {cardioActivityCompleted ? 'Completed' : 'Complete'}
+                </button>
+              </div>
+            )}
+            {!loading && !serverDown && !showFreezeScreen && !error && effectiveDayCardioType && exercises.length > 0 && (
+              <div className="cardio-activity-separator" />
+            )}
+            {!loading && !serverDown && !showFreezeScreen && !error && !effectiveDayCardioType && exercises.length === 0 && (
               <div className="empty-day">
                 <ZzzIcon className="empty-day-zzz" />
                 <p className="empty-day-message">
@@ -1842,7 +2044,10 @@ function App() {
                 />
               ))}
             {!loading && !serverDown && !showFreezeScreen && !error && exercises.length > 0 && (() => {
+              // On a cardio day "everything" includes the cardio entry above, not
+              // just the stretches listed here.
               const allComplete = exercises.every((item) => completedExerciseIds.has(item.id))
+                && (!effectiveDayCardioType || cardioActivityCompleted)
               const currentScheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : toISODate(new Date())
               const canUndo = allComplete
                 && selectedDay === today
@@ -1867,6 +2072,10 @@ function App() {
                     onClick={() => {
                       cascadeStartSnapshotRef.current = new Set(completedExerciseIds)
                       setCascadeToken((t) => t + 1)
+                      if (effectiveDayCardioType) {
+                        setCardioActivityCompleted(true)
+                        persistCardioDone(true)
+                      }
                     }}
                     disabled={allComplete}
                   >

@@ -70,27 +70,27 @@ function UserPicker({ users, currentUser, onChangeUser, disabled }) {
   return (
     <div className="settings-row">
       <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>User</span>
-      <div className="user-picker" ref={ref}>
+      <div className="dropdown-picker" ref={ref}>
         <button
-          className={`user-picker-pill ${open ? 'is-open' : ''}`}
+          className={`dropdown-picker-pill ${open ? 'is-open' : ''}`}
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={disabled}
         >
           <span>{currentUser.name}</span>
-          <span className={`user-picker-chevron ${open ? 'is-open' : ''}`}>
+          <span className={`dropdown-picker-chevron ${open ? 'is-open' : ''}`}>
             <ChevronLeftIcon size={12} />
           </span>
         </button>
 
         {open && (
-          <div className="user-picker-menu" role="listbox">
+          <div className="dropdown-picker-menu" role="listbox">
             {users.filter(u => u.id !== currentUser.id).map((user, i) => (
               <div key={user.id}>
-                {i > 0 && <div className="user-picker-separator" />}
+                {i > 0 && <div className="dropdown-picker-separator" />}
                 <button
-                  className="user-picker-option"
+                  className="dropdown-picker-option"
                   role="option"
                   aria-selected={false}
                   onClick={() => { onChangeUser(user); setOpen(false) }}
@@ -135,27 +135,27 @@ function MusicProviderPicker({ value, onChange, disabled }) {
         <span className={`settings-row-label ${disabled ? 'is-disabled' : ''}`}>Music Provider</span>
         <span className={`settings-row-sublabel ${disabled ? 'is-disabled' : ''}`}>Lets you add homescreen shortcuts to your favorite playlists or podcasts</span>
       </div>
-      <div className="user-picker" ref={ref}>
+      <div className="dropdown-picker" ref={ref}>
         <button
-          className={`user-picker-pill ${open ? 'is-open' : ''}`}
+          className={`dropdown-picker-pill ${open ? 'is-open' : ''}`}
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={disabled}
         >
           <span>{current.name}</span>
-          <span className={`user-picker-chevron ${open ? 'is-open' : ''}`}>
+          <span className={`dropdown-picker-chevron ${open ? 'is-open' : ''}`}>
             <ChevronLeftIcon size={12} />
           </span>
         </button>
 
         {open && (
-          <div className="user-picker-menu" role="listbox">
+          <div className="dropdown-picker-menu" role="listbox">
             {MUSIC_PROVIDERS.filter((p) => p.id !== current.id).map((provider, i) => (
               <div key={provider.id}>
-                {i > 0 && <div className="user-picker-separator" />}
+                {i > 0 && <div className="dropdown-picker-separator" />}
                 <button
-                  className="user-picker-option"
+                  className="dropdown-picker-option"
                   role="option"
                   aria-selected={false}
                   onClick={() => { onChange(provider.id); setOpen(false) }}

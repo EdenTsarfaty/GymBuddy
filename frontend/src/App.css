@@ -1272,6 +1272,10 @@
   background: #9b6fd8;
 }
 
+.month-grid-day-dot.is-turquoise {
+  background: #1fcdf0;
+}
+
 [data-theme='light'] .month-grid-column-bg {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
@@ -1290,6 +1294,10 @@
 
 [data-theme='light'] .month-grid-day-dot.is-purple {
   background: #8a5cd0;
+}
+
+[data-theme='light'] .month-grid-day-dot.is-turquoise {
+  background: #0aa8dc;
 }
 
 .month-legend-toggle {
@@ -2667,11 +2675,11 @@
   to   { opacity: 1; transform: scaleY(1); }
 }
 
-.user-picker {
+.dropdown-picker {
   position: relative;
 }
 
-.user-picker-pill {
+.dropdown-picker-pill {
   position: relative;
   z-index: 11;
   display: flex;
@@ -2691,32 +2699,32 @@
   transition: border-color 0.15s ease;
 }
 
-.user-picker-pill:hover,
-.user-picker-pill.is-open {
+.dropdown-picker-pill:hover,
+.dropdown-picker-pill.is-open {
   border-color: var(--accent);
 }
 
-.user-picker-pill:disabled {
+.dropdown-picker-pill:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.user-picker-pill:disabled:hover {
+.dropdown-picker-pill:disabled:hover {
   border-color: var(--accent-border-light);
 }
 
-.user-picker-chevron {
+.dropdown-picker-chevron {
   display: inline-flex;
   color: var(--text-muted);
   transform: rotate(-90deg);
   transition: transform 0.15s ease;
 }
 
-.user-picker-chevron.is-open {
+.dropdown-picker-chevron.is-open {
   transform: rotate(90deg);
 }
 
-.user-picker-menu {
+.dropdown-picker-menu {
   position: absolute;
   top: 50%;
   left: 0;
@@ -2731,8 +2739,10 @@
   transform-origin: top center;
 }
 
-.user-picker-option {
-  display: block;
+.dropdown-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   font: inherit;
   font-size: 14px;
@@ -2746,16 +2756,21 @@
   cursor: pointer;
 }
 
-.user-picker-option:hover {
+.dropdown-picker-option svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.dropdown-picker-option:hover {
   background: var(--chip-bg);
 }
 
-.user-picker-option.is-active {
+.dropdown-picker-option.is-active {
   color: var(--accent);
   font-weight: 600;
 }
 
-.user-picker-separator {
+.dropdown-picker-separator {
   height: 1px;
   margin: 2px 4px;
   background: var(--border);
@@ -3205,6 +3220,127 @@
 .complete-workout-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* A cardio day's homescreen treatment — deliberately not a WorkoutCard
+   (no border, no per-set/rep fields) since "an exercise" doesn't describe
+   what this day is; any stretches still render as normal cards below it.
+   See project_cardio_day memory for the option-A/C design discussion this
+   settled on. */
+.cardio-activity-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.cardio-activity-icon-circle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  overflow: hidden;
+  /* Light theme resting state — inverted from how this looked before:
+     idle is the lighter/livelier gradient (.workout-card.is-completed's
+     own formula, already theme-adaptive via --card-bg), and completing
+     darkens it (see ::after below). Dark theme keeps its original flat
+     tint instead — see the [data-theme='dark'] override — this inversion
+     is a light-theme-only change. */
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, black 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 0%,
+    color-mix(in srgb, white 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 100%
+  );
+}
+
+[data-theme='dark'] .cardio-activity-icon-circle {
+  background: #132022;
+}
+
+/* A plain `background` transition can't cross-fade one gradient into
+   another — so the completed look lives on a separate full-circle layer
+   that fades in via opacity instead, which does animate cleanly. */
+.cardio-activity-icon-circle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  /* Light theme completed: darkens (a bit brighter than a plain 20% mix
+     so it doesn't read as near-black). */
+  background: color-mix(in srgb, var(--accent) 45%, black);
+}
+
+[data-theme='dark'] .cardio-activity-icon-circle::after {
+  /* Dark theme completed: lightens instead, back to the original
+     pre-inversion direction (#132022 → this gradient). */
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, black 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 0%,
+    color-mix(in srgb, white 9%, color-mix(in srgb, var(--accent) 22%, var(--card-bg))) 100%
+  );
+}
+
+.cardio-activity-card.is-complete .cardio-activity-icon-circle::after {
+  opacity: 1;
+}
+
+.cardio-activity-icon {
+  position: relative;
+  /* The darkening ::after overlay above is also positioned/inset:0 and
+     comes later in paint order — without this, it was painting straight
+     over the icon once its opacity reached 1, hiding it completely
+     regardless of what color it was set to. */
+  z-index: 1;
+  color: var(--accent);
+  transition: color 0.25s ease;
+}
+
+/* Light theme: circle darkens on complete, so the icon needs to go light
+   for contrast. */
+.cardio-activity-card.is-complete .cardio-activity-icon {
+  color: color-mix(in srgb, var(--accent) 25%, white);
+}
+
+/* Dark theme: circle lightens on complete instead (the original
+   direction), so the icon stays closer to accent rather than going
+   all the way to white. */
+[data-theme='dark'] .cardio-activity-card.is-complete .cardio-activity-icon {
+  color: color-mix(in srgb, var(--accent) 70%, white);
+}
+
+.cardio-activity-type {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.cardio-activity-complete-btn {
+  margin-top: 6px;
+}
+
+/* Toggled-done look — still a live button (tap again to undo), so it stays
+   readable/clickable rather than going to a disabled state like the
+   exercises-based Complete Workout button does once nothing's left to do. */
+.cardio-activity-complete-btn.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.cardio-activity-complete-btn.is-active:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.cardio-activity-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 }
 
 .view-current-plan-btn {
@@ -4989,6 +5125,96 @@
   margin-top: 8px;
   padding: 7px 13px;
   font-size: 14px;
+}
+
+.edit-plan-list-footer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.edit-plan-list-footer-actions .edit-plan-add-exercise-btn {
+  margin-top: 0;
+}
+
+.edit-plan-list-footer-actions .edit-plan-pill-btn {
+  padding: 7px 13px;
+  font-size: 14px;
+}
+
+/* Tinted, borderless band — deliberately not styled like a WorkoutCard
+   (no border) since a cardio day isn't "an exercise" the way the cards
+   below it are. */
+.edit-plan-cardio-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--chip-bg));
+  border-radius: 14px;
+}
+
+.edit-plan-cardio-card-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.edit-plan-cardio-card-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-plan-cardio-card-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.edit-plan-cardio-card-menu {
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  min-width: 180px;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 6px 4px;
+}
+
+.edit-plan-cardio-card-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.edit-plan-cardio-card-remove:hover {
+  color: var(--text-h);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.edit-plan-cardio-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 }
 
 .edit-plan-import-export {

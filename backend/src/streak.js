@@ -32,7 +32,14 @@ function addDays(dateStr, days) {
 // (App.jsx) straight from the exercises list.
 function getScheduledWeekdays(userId) {
   const rows = db.prepare('SELECT DISTINCT day FROM exercises WHERE user_id = ? AND deleted_at IS NULL').all(userId)
-  return new Set(rows.map((r) => r.day))
+  const scheduled = new Set(rows.map((r) => r.day))
+  // A cardio day is "the workout" on its own — go swim, go jog — independent
+  // of whether any stretches have been added under it, so it counts as
+  // scheduled even with zero exercise rows (unlike a normal day, which is
+  // only ever scheduled by virtue of having exercises).
+  const cardioRows = db.prepare('SELECT day FROM day_plans WHERE user_id = ? AND cardio_type IS NOT NULL').all(userId)
+  for (const { day } of cardioRows) scheduled.add(day)
+  return scheduled
 }
 
 // Next date strictly after `dateStr` whose weekday is scheduled. Always checked
@@ -61,9 +68,18 @@ function syncScheduledWorkouts(userId, todayStr) {
   const last = db.prepare('SELECT MAX(scheduled_date) as d FROM workout_log WHERE user_id = ?').get(userId).d
   let cursor = last ? addDays(last, 1) : todayStr
 
-  const insert = db.prepare('INSERT OR IGNORE INTO workout_log (user_id, scheduled_date) VALUES (?, ?)')
+  // Snapshotted onto the row at creation time (see the `cardio_type` column
+  // comment in db.js) — read once per sync rather than per date, since
+  // day_plans can't change mid-loop.
+  const cardioByDay = new Map(
+    db.prepare('SELECT day, cardio_type FROM day_plans WHERE user_id = ? AND cardio_type IS NOT NULL').all(userId)
+      .map((r) => [r.day, r.cardio_type]),
+  )
+
+  const insert = db.prepare('INSERT OR IGNORE INTO workout_log (user_id, scheduled_date, cardio_type) VALUES (?, ?, ?)')
   while (cursor <= todayStr) {
-    if (scheduledDays.has(weekdayName(cursor))) insert.run(userId, cursor)
+    const day = weekdayName(cursor)
+    if (scheduledDays.has(day)) insert.run(userId, cursor, cardioByDay.get(day) || null)
     cursor = addDays(cursor, 1)
   }
 }
@@ -73,8 +89,22 @@ function syncScheduledWorkouts(userId, todayStr) {
 function getHistory(userId) {
   syncScheduledWorkouts(userId, todayISODate())
   return db.prepare(
-    'SELECT scheduled_date, performed_date FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
+    'SELECT scheduled_date, performed_date, cardio_type, cardio_done FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
   ).all(userId)
+}
+
+// Records whether a cardio day's own entry is checked off, separately from
+// the day-level performed_date (see the cardio_done column comment in
+// db.js). Returns null when there's no row for that date, same as
+// markPerformed.
+function setCardioDone(userId, scheduledDate, done) {
+  syncScheduledWorkouts(userId, todayISODate())
+  const existing = db.prepare(
+    'SELECT id FROM workout_log WHERE user_id = ? AND scheduled_date = ?',
+  ).get(userId, scheduledDate)
+  if (!existing) return null
+  db.prepare('UPDATE workout_log SET cardio_done = ? WHERE id = ?').run(done ? 1 : 0, existing.id)
+  return { scheduled_date: scheduledDate, cardio_done: done ? 1 : 0 }
 }
 
 function recomputeStreak(userId) {
@@ -149,11 +179,30 @@ function markPerformed(userId, scheduledDate, performedDate) {
   syncScheduledWorkouts(userId, today)
 
   const existing = db.prepare(
-    'SELECT id FROM workout_log WHERE user_id = ? AND scheduled_date = ?',
+    'SELECT id, performed_date FROM workout_log WHERE user_id = ? AND scheduled_date = ?',
   ).get(userId, scheduledDate)
   if (!existing) return null
 
-  db.prepare('UPDATE workout_log SET performed_date = ? WHERE id = ?').run(performedDate || today, existing.id)
+  // The app re-sends this on every load of a day that's already finished
+  // (its "everything's checked" condition is true again once completions are
+  // read back). Nothing about the day has changed, so leave it exactly as
+  // recorded — no new performed_date, no cardio re-snapshot — and tell the
+  // caller so it can skip the celebration and the protein reminder.
+  if (existing.performed_date) {
+    const row = db.prepare(
+      'SELECT id, user_id, scheduled_date, performed_date FROM workout_log WHERE id = ?',
+    ).get(existing.id)
+    return { workoutLog: row, ...recomputeStreak(userId), alreadyPerformed: true }
+  }
+
+  // Re-snapshot the cardio type at completion, not just at row creation
+  // (syncScheduledWorkouts) — the row can predate someone marking the day
+  // as cardio, and the Month view colors off this column.
+  const planned = db.prepare(
+    'SELECT cardio_type FROM day_plans WHERE user_id = ? AND day = ?',
+  ).get(userId, weekdayName(scheduledDate))
+  db.prepare('UPDATE workout_log SET performed_date = ?, cardio_type = ? WHERE id = ?')
+    .run(performedDate || today, planned?.cardio_type || null, existing.id)
 
   const streak = recomputeStreak(userId)
   const workoutLog = db.prepare(
@@ -189,6 +238,7 @@ module.exports = {
   recomputeStreak,
   markPerformed,
   markUnperformed,
+  setCardioDone,
   getHistory,
   weekdayName,
   todayISODate,
