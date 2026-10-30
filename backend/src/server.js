@@ -501,7 +501,7 @@ fastify.post('/api/exercises/identify-photo', async (request, reply) => {
 
 fastify.get('/api/day-plans', async (request) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
-  return db.prepare('SELECT day, title, cardio_type FROM day_plans WHERE user_id = ?').all(uid)
+  return db.prepare('SELECT day, title, cardio_type, planned_duration FROM day_plans WHERE user_id = ?').all(uid)
 })
 
 // Renames a single day's title from Edit Plan's header — upserts since a
@@ -578,6 +578,38 @@ fastify.put('/api/day-plans/:day/cardio', async (request, reply) => {
   ).run(uid, day, label, cardio_type)
 
   return { day, title: label, cardio_type }
+})
+
+// Sets or clears a day's planned duration (whole minutes; null clears it).
+// Upserts like the title endpoint — but a row created here has no real title,
+// so the title falls back to '' and the day still reads as untitled.
+const MAX_PLANNED_DURATION_MIN = 600
+fastify.put('/api/day-plans/:day/duration', async (request, reply) => {
+  const { day } = request.params
+  const { user_id, planned_duration } = request.body || {}
+  const uid = user_id ? Number(user_id) : 1
+
+  if (!VALID_DAYS.includes(day)) {
+    reply.code(400)
+    return { error: 'Invalid day' }
+  }
+
+  if (planned_duration == null) {
+    db.prepare('UPDATE day_plans SET planned_duration = NULL WHERE user_id = ? AND day = ?').run(uid, day)
+    return { day, planned_duration: null }
+  }
+
+  if (!Number.isInteger(planned_duration) || planned_duration < 1 || planned_duration > MAX_PLANNED_DURATION_MIN) {
+    reply.code(400)
+    return { error: `planned_duration must be a whole number of minutes between 1 and ${MAX_PLANNED_DURATION_MIN}` }
+  }
+
+  db.prepare(
+    `INSERT INTO day_plans (user_id, day, title, planned_duration) VALUES (?, ?, '', ?)
+     ON CONFLICT(user_id, day) DO UPDATE SET planned_duration = excluded.planned_duration`,
+  ).run(uid, day, planned_duration)
+
+  return { day, planned_duration }
 })
 
 const MUSIC_LINK_SLOTS = 6
@@ -972,8 +1004,8 @@ fastify.get('/api/exercises/plan/export', async (request, reply) => {
   const uid = request.query.user_id ? Number(request.query.user_id) : 1
 
   const days = {}
-  for (const { day, title, cardio_type } of db.prepare('SELECT day, title, cardio_type FROM day_plans WHERE user_id = ?').all(uid)) {
-    days[day] = { title, cardio_type: cardio_type || null }
+  for (const { day, title, cardio_type, planned_duration } of db.prepare('SELECT day, title, cardio_type, planned_duration FROM day_plans WHERE user_id = ?').all(uid)) {
+    days[day] = { title, cardio_type: cardio_type || null, planned_duration: planned_duration || null }
   }
 
   const rows = db.prepare(
@@ -1052,13 +1084,16 @@ fastify.post('/api/exercises/plan/import', { bodyLimit: 20 * 1024 * 1024 }, asyn
   db.prepare('DELETE FROM exercises WHERE user_id = ?').run(uid)
   db.prepare('DELETE FROM day_plans WHERE user_id = ?').run(uid)
 
-  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title, cardio_type) VALUES (?, ?, ?, ?)')
+  const insertDayPlan = db.prepare('INSERT INTO day_plans (user_id, day, title, cardio_type, planned_duration) VALUES (?, ?, ?, ?, ?)')
   for (const [day, info] of Object.entries(payload.days || {})) {
     if (!VALID_DAYS.includes(day)) continue
     const cardioType = info && typeof info.cardio_type === 'string' && CARDIO_TYPES[info.cardio_type] ? info.cardio_type : null
     const title = info && typeof info.title === 'string' ? info.title.trim().slice(0, 200) : ''
-    if (!title && !cardioType) continue
-    insertDayPlan.run(uid, day, title || CARDIO_TYPES[cardioType], cardioType)
+    const plannedDuration = info && Number.isInteger(info.planned_duration)
+      && info.planned_duration >= 1 && info.planned_duration <= MAX_PLANNED_DURATION_MIN
+      ? info.planned_duration : null
+    if (!title && !cardioType && !plannedDuration) continue
+    insertDayPlan.run(uid, day, title || (cardioType ? CARDIO_TYPES[cardioType] : ''), cardioType, plannedDuration)
   }
 
   const insertExercise = db.prepare(

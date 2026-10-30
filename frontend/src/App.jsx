@@ -27,7 +27,7 @@ import CompleteIcon from './components/icons/CompleteIcon'
 import UncompleteIcon from './components/icons/UncompleteIcon'
 import UndoIcon from './components/icons/UndoIcon'
 import ResetIcon from './components/icons/ResetIcon'
-import TreadmillIcon from './components/icons/TreadmillIcon'
+import { cardioIconFor } from './components/icons/cardioIcons'
 import HomeBanner from './components/HomeBanner'
 import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
@@ -424,6 +424,8 @@ function App() {
   // homescreen subtitle, day picker, Edit Plan header) keeps working
   // unchanged; only the places that actually need cardio-ness read this too.
   const [dayCardioTypes, setDayCardioTypes] = useState(new Map())
+  // day -> planned minutes; absent = none set (see day_plans.planned_duration).
+  const [dayPlannedDurations, setDayPlannedDurations] = useState(new Map())
   const [exercisesRefreshKey, setExercisesRefreshKey] = useState(0)
   const [workoutLog, setWorkoutLog] = useState([])
   const [userSex, setUserSex] = useState(null)
@@ -593,6 +595,7 @@ function App() {
     [allExercises, effectiveDay],
   )
   const effectiveDayCardioType = dayCardioTypes.get(effectiveDay) || null
+  const CardioActivityIcon = cardioIconFor(effectiveDayCardioType)
 
   const workoutIndicators = useMemo(
     () => buildWorkoutIndicators(workoutLog, daysWithWorkouts, toISODate(new Date()), new Set(streak.protected_dates)),
@@ -754,6 +757,7 @@ function App() {
         setDayTitles(titlesMap)
         const cardioMap = new Map(plans.filter((p) => p.cardio_type).map((p) => [p.day, p.cardio_type]))
         setDayCardioTypes(cardioMap)
+        setDayPlannedDurations(new Map(plans.filter((p) => p.planned_duration).map((p) => [p.day, p.planned_duration])))
         // A cardio day is scheduled on its own, with or without stretches
         // under it — same rule backend/src/streak.js's getScheduledWeekdays
         // uses. Without this, a stretch-less cardio day reads as an empty
@@ -1909,6 +1913,7 @@ function App() {
             allExercises={allExercises}
             dayTitles={dayTitles}
             dayCardioTypes={dayCardioTypes}
+            dayPlannedDurations={dayPlannedDurations}
             userId={currentUser?.id}
             userName={currentUser?.name}
             onSaved={() => setExercisesRefreshKey((k) => k + 1)}
@@ -1916,6 +1921,12 @@ function App() {
             onDayCardioSaved={(day, cardioType) => setDayCardioTypes((prev) => {
               const next = new Map(prev)
               if (cardioType) next.set(day, cardioType)
+              else next.delete(day)
+              return next
+            })}
+            onDayDurationSaved={(day, minutes) => setDayPlannedDurations((prev) => {
+              const next = new Map(prev)
+              if (minutes) next.set(day, minutes)
               else next.delete(day)
               return next
             })}
@@ -1984,7 +1995,7 @@ function App() {
             {!loading && !serverDown && !showFreezeScreen && !error && effectiveDayCardioType && (
               <div className={`cardio-activity-card ${cardioActivityCompleted ? 'is-complete' : ''}`}>
                 <span className="cardio-activity-icon-circle">
-                  <TreadmillIcon size={58} className="cardio-activity-icon" />
+                  <CardioActivityIcon size={58} className="cardio-activity-icon" />
                 </span>
                 <span className="cardio-activity-type">{CARDIO_TYPES[effectiveDayCardioType]}</span>
                 <button

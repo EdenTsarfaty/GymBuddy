@@ -8,6 +8,7 @@ import DumbbellIcon from './icons/DumbbellIcon'
 import MachineIcon from './icons/MachineIcon'
 import PlankIcon from './icons/PlankIcon'
 import TreadmillIcon from './icons/TreadmillIcon'
+import { cardioIconFor } from './icons/cardioIcons'
 import StretchIcon from './icons/StretchIcon'
 import UndoIcon from './icons/UndoIcon'
 import RedoIcon from './icons/RedoIcon'
@@ -42,8 +43,7 @@ const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // Kept in sync by hand with the backend's own copy (backend/src/server.js) —
 // no shared package between the two, same as WEEKDAYS above. Icon is a
-// placeholder (TreadmillIcon, already used for warm_up) until per-type
-// icons exist.
+// icon per type lives in icons/cardioIcons.js.
 const CARDIO_TYPES = {
   swimming: 'Swimming',
   jogging: 'Jogging',
@@ -96,6 +96,16 @@ function dayLabel(title, hasExercises) {
 // so drift like this is visually obvious rather than silently wrong.
 function isDayLabelMismatched(title, hasExercises) {
   return (!title && hasExercises) || (!!title && !hasExercises)
+}
+
+// 45 -> "45 min", 60 -> "1 hr", 90 -> "1 hr 30 min".
+const DURATION_QUICK_PICKS = [15, 30, 45, 60]
+
+function formatMinutes(total) {
+  if (total < 60) return `${total} min`
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`
 }
 
 function formatDuration(seconds) {
@@ -667,7 +677,7 @@ function SortableCard({ item, selected, editing, onToggleSelect, onOpenEdit, onM
           {selected && <CheckIcon size={12} />}
         </button>
       )}
-      {Icon && <Icon size={20} className="edit-plan-card-icon" />}
+      {Icon && <Icon size={20} />}
       <h3 className="edit-plan-card-title">{item.name}</h3>
       <div className="edit-plan-card-stats">
         {item.sets > 0 && item.reps > 0 && (
@@ -766,14 +776,15 @@ function DayCollectionZone({ children, isEmpty }) {
   )
 }
 
-function DayPickerSheet({ title, currentDay, dayTitles, draft, onPick, onCancel }) {
+function DayPickerSheet({ title, currentDay, dayTitles, dayCardioTypes, draft, onPick, onCancel }) {
   return (
     <div className="edit-plan-sheet-backdrop" onClick={onCancel}>
       <div className="edit-plan-sheet" onClick={(e) => e.stopPropagation()}>
         <h3 className="edit-plan-sheet-title">{title}</h3>
         <div className="edit-plan-sheet-days">
           {WEEKDAYS.map((day) => {
-            const hasExercises = draft[day].some((it) => !it.isPendingAdd)
+            // A cardio day is a real day even with no stretches under it.
+            const hasExercises = draft[day].some((it) => !it.isPendingAdd) || !!dayCardioTypes?.get(day)
             return (
               <button
                 key={day}
@@ -1548,7 +1559,97 @@ function SetCardioDayButton({ onClick, disabled }) {
 // since "an exercise" doesn't really describe what this day is). Turning
 // cardio off entirely lives here as an explicit trash icon, not a "not
 // cardio" option buried in the type list.
-function CardioActivityCard({ cardioType, onChangeType, onRemove }) {
+// Optional planned length for a day's session, in whole minutes (see
+// day_plans.planned_duration). Not tied to cardio — written so a gym day can
+// use the same field later. Unset shows "+ Add duration"; set shows a
+// tappable pill that opens the same inline editor. Saving it empty clears it.
+function DurationField({ minutes, onChange, readOnly = false, hint }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  function startEditing() {
+    setDraft(minutes ? String(minutes) : '')
+    setEditing(true)
+  }
+
+  function commit(value = draft) {
+    setEditing(false)
+    const text = String(value)
+    if (text.trim() === '') {
+      if (minutes != null) onChange(null)
+      return
+    }
+    const parsed = Number(text)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 600) return
+    if (parsed !== minutes) onChange(parsed)
+  }
+
+  if (editing && !readOnly) {
+    return (
+      <div className="edit-plan-duration is-editing">
+       <div className="edit-plan-duration-input-row">
+        <input
+          type="number"
+          inputMode="numeric"
+          min="1"
+          max="600"
+          className="edit-plan-duration-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit()
+            else if (e.key === 'Escape') setEditing(false)
+          }}
+          aria-label="Duration in minutes"
+          autoFocus
+        />
+        <span className="edit-plan-duration-unit">min</span>
+        <button type="button" className="edit-plan-duration-icon-btn" onClick={() => commit()} aria-label="Save duration">
+          <CheckIcon size={14} />
+        </button>
+        <button type="button" className="edit-plan-duration-icon-btn" onClick={() => setEditing(false)} aria-label="Cancel">
+          <XIcon size={14} />
+        </button>
+       </div>
+       <div className="edit-plan-duration-picks">
+         {DURATION_QUICK_PICKS.map((m) => (
+           <button key={m} type="button" className="edit-plan-duration-pick" onClick={() => commit(m)}>{m}</button>
+         ))}
+         {minutes != null && (
+           <button
+             type="button"
+             className="edit-plan-duration-pick is-remove"
+             onClick={() => { setEditing(false); onChange(null) }}
+           >
+             Remove
+           </button>
+         )}
+       </div>
+      </div>
+    )
+  }
+
+  if (minutes != null) {
+    return (
+      <button type="button" className="edit-plan-duration-pill" onClick={startEditing} disabled={readOnly}>
+        {formatMinutes(minutes)}
+      </button>
+    )
+  }
+
+  if (readOnly) return null
+  return (
+    <div className="edit-plan-duration">
+      <button type="button" className="edit-plan-duration-add" onClick={startEditing}>
+        <PlusIcon size={12} />
+        <span>Add duration</span>
+      </button>
+      {hint && <span className="edit-plan-duration-hint">{hint}</span>}
+    </div>
+  )
+}
+
+function CardioActivityCard({ cardioType, onChangeType, onRemove, plannedDuration, onChangeDuration, readOnly = false }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -1563,15 +1664,17 @@ function CardioActivityCard({ cardioType, onChangeType, onRemove }) {
 
   const options = Object.entries(CARDIO_TYPES).map(([id, label]) => ({ id, label }))
   const current = options.find((o) => o.id === cardioType)
+  const CardioIcon = cardioIconFor(cardioType)
 
   return (
     <div className="edit-plan-cardio-card">
-      <TreadmillIcon size={22} className="edit-plan-cardio-card-icon" />
+      <CardioIcon size={22} className="edit-plan-cardio-card-icon" />
       <div className="dropdown-picker edit-plan-cardio-card-picker" ref={ref}>
         <button
           type="button"
           className={`edit-plan-cardio-card-type ${open ? 'is-open' : ''}`}
           onClick={() => setOpen((o) => !o)}
+          disabled={readOnly}
           aria-haspopup="listbox"
           aria-expanded={open}
         >
@@ -1583,27 +1686,39 @@ function CardioActivityCard({ cardioType, onChangeType, onRemove }) {
 
         {open && (
           <div className="dropdown-picker-menu edit-plan-cardio-card-menu" role="listbox">
-            {options.filter((o) => o.id !== current?.id).map((option, i) => (
-              <div key={option.id}>
-                {i > 0 && <div className="dropdown-picker-separator" />}
-                <button
-                  type="button"
-                  className="dropdown-picker-option"
-                  role="option"
-                  aria-selected={false}
-                  onClick={() => { onChangeType(option.id); setOpen(false) }}
-                >
-                  <TreadmillIcon size={14} />
-                  {option.label}
-                </button>
-              </div>
-            ))}
+            {options.map((option, i) => {
+              const OptionIcon = cardioIconFor(option.id)
+              const picked = option.id === current?.id
+              return (
+                <div key={option.id}>
+                  {i > 0 && <div className="dropdown-picker-separator" />}
+                  <button
+                    type="button"
+                    className={`dropdown-picker-option ${picked ? 'is-picked' : ''}`}
+                    role="option"
+                    aria-selected={picked}
+                    onClick={() => { if (!picked) onChangeType(option.id); setOpen(false) }}
+                  >
+                    <OptionIcon size={14} />
+                    {option.label}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
-      <button type="button" className="edit-plan-cardio-card-remove" onClick={onRemove} aria-label="Remove cardio day">
-        <TrashIcon size={16} />
-      </button>
+      <DurationField
+        minutes={plannedDuration}
+        onChange={onChangeDuration}
+        readOnly={readOnly}
+        hint="Required for Google Health"
+      />
+      {!readOnly && (
+        <button type="button" className="edit-plan-cardio-card-remove" onClick={onRemove} aria-label="Remove cardio day">
+          <TrashIcon size={16} />
+        </button>
+      )}
     </div>
   )
 }
@@ -1619,7 +1734,7 @@ function CardioActivityCard({ cardioType, onChangeType, onRemove }) {
 // recreating a lookalike. No AI involved in the structural actions
 // themselves. See the manual-edit-mode design notes in memory for the full
 // spec this is being built toward.
-function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userName, onSaved, onDayTitleSaved, onDayCardioSaved, onClose, onRegeneratePlan }) {
+function EditPlanView({ allExercises, dayTitles, dayCardioTypes, dayPlannedDurations, userId, userName, onSaved, onDayTitleSaved, onDayCardioSaved, onDayDurationSaved, onClose, onRegeneratePlan }) {
   const [selectedDay, setSelectedDay] = useState(WEEKDAYS[new Date().getDay()])
   const [editingDayTitle, setEditingDayTitle] = useState(false)
   const [dayTitleDraft, setDayTitleDraft] = useState('')
@@ -1772,7 +1887,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     }
   }
 
-  async function applyFieldsSnapshot(days, useAfter, titles) {
+  async function applyFieldsSnapshot(days, useAfter, titles, cardio, durations) {
     setDraft((current) => {
       const next = { ...current }
       for (const day of Object.keys(days)) next[day] = useAfter ? days[day].after : days[day].before
@@ -1786,9 +1901,24 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
       })
     }
     if (updates.length > 0) await persistPlan({ updates })
+    // Cardio types go before titles: setting a type stamps the day's title
+    // with the type's label, and the title restore that follows then puts
+    // back whatever the day was actually called.
+    if (cardio) {
+      await Promise.all(
+        Object.keys(cardio).map((day) => persistCardioType(day, useAfter ? cardio[day].after : cardio[day].before)),
+      )
+    }
     if (titles) {
       await Promise.all(
         Object.keys(titles).map((day) => setDayTitle(day, useAfter ? titles[day].after : titles[day].before)),
+      )
+    }
+    // Durations last: clearing a day's title deletes its whole day_plans row
+    // (see setDayTitle), which would take a duration set earlier with it.
+    if (durations) {
+      await Promise.all(
+        Object.keys(durations).map((day) => persistDuration(day, useAfter ? durations[day].after : durations[day].before)),
       )
     }
   }
@@ -1841,17 +1971,39 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
   // Setting a cardio type also overwrites the day's title server-side (see
   // the endpoint's own comment) — mirror that here so the header's title
   // line updates without waiting on a refetch, same as applyDayTitle does.
+  async function persistCardioType(day, cardioType) {
+    const res = await track(fetch(`${API_BASE}/api/day-plans/${day}/cardio`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, cardio_type: cardioType }),
+    }))
+    if (!res.ok) throw new Error('Save failed')
+    const data = await res.json()
+    onDayCardioSaved?.(day, cardioType)
+    if (data.title) onDayTitleSaved?.(day, data.title)
+  }
+
+  async function persistDuration(day, minutes) {
+    const res = await track(fetch(`${API_BASE}/api/day-plans/${day}/duration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, planned_duration: minutes }),
+    }))
+    if (!res.ok) throw new Error('Save failed')
+    onDayDurationSaved?.(day, minutes)
+  }
+
+  async function setPlannedDuration(day, minutes) {
+    try {
+      await persistDuration(day, minutes)
+    } catch {
+      setActionError("Couldn't save the duration — check your connection and try again.")
+    }
+  }
+
   async function setCardioType(day, cardioType) {
     try {
-      const res = await track(fetch(`${API_BASE}/api/day-plans/${day}/cardio`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, cardio_type: cardioType }),
-      }))
-      if (!res.ok) throw new Error('Save failed')
-      const data = await res.json()
-      onDayCardioSaved?.(day, cardioType)
-      if (data.title) onDayTitleSaved?.(day, data.title)
+      await persistCardioType(day, cardioType)
     } catch {
       setActionError("Couldn't update cardio day — check your connection and try again.")
     }
@@ -1868,6 +2020,8 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
       if (!res.ok) throw new Error('Remove failed')
       onDayTitleSaved?.(day, '')
       onDayCardioSaved?.(day, null)
+      // The DELETE removes the whole day_plans row, planned duration included.
+      onDayDurationSaved?.(day, null)
     } catch {
       setActionError("Couldn't remove cardio day — check your connection and try again.")
     }
@@ -1965,7 +2119,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     setSelectedKeys(new Set())
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'delete')
-      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false, entry.titles)
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, false, entry.titles, entry.cardio, entry.durations)
       else if (entry.kind === 'dayTitle') await setDayTitle(entry.day, entry.before)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.before)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, false)
@@ -1982,7 +2136,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     setSelectedKeys(new Set())
     try {
       if (entry.kind === 'toggle') await setActive(entry.items, entry.action === 'create')
-      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true, entry.titles)
+      else if (entry.kind === 'fields') await applyFieldsSnapshot(entry.days, true, entry.titles, entry.cardio, entry.durations)
       else if (entry.kind === 'dayTitle') await setDayTitle(entry.day, entry.after)
       else if (entry.kind === 'photo') await applyPhotoRevert(entry.id, entry.day, entry.key, entry.after)
       else if (entry.kind === 'regenerateDay') await applyRegenerateDay(entry, true)
@@ -2456,6 +2610,12 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     return usedCount < (isFirst ? 2 : 1)
   }
 
+  // A cardio day counts as occupied even with no stretches under it — the
+  // activity itself is the day's plan.
+  function isDayOccupied(day) {
+    return draft[day].some((it) => !it.isPendingAdd) || !!dayCardioTypes?.get(day)
+  }
+
   // null = incomplete (fewer than 2 days picked yet, or a hole still needs
   // filling), false = illegal, true = safe to apply. A closed loop
   // (chain[0] === last) never destroys data since everything just rotates.
@@ -2469,8 +2629,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     if (new Set(filled).size < 2) return false
     const isLoop = filled[0] === filled[filled.length - 1]
     if (!isLoop) {
-      const lastDay = filled[filled.length - 1]
-      if (draft[lastDay].some((it) => !it.isPendingAdd)) return false
+      if (isDayOccupied(filled[filled.length - 1])) return false
     }
     return true
   }
@@ -2486,7 +2645,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     const isLoop = filled[0] === filled[filled.length - 1]
     if (!isLoop) {
       const lastDay = filled[filled.length - 1]
-      if (draft[lastDay].some((it) => !it.isPendingAdd)) {
+      if (isDayOccupied(lastDay)) {
         return `${lastDay} is not empty`
       }
     }
@@ -2685,18 +2844,26 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     const uniqueDays = [...new Set(chain)]
     const before = {}
     const titleBefore = {}
+    const cardioBefore = {}
+    const durationBefore = {}
     for (const day of uniqueDays) {
       before[day] = draft[day]
       titleBefore[day] = dayTitles.get(day) || ''
+      cardioBefore[day] = dayCardioTypes?.get(day) || null
+      durationBefore[day] = dayPlannedDurations?.get(day) ?? null
     }
     const after = {}
     const titleAfter = {}
-    for (let i = 0; i < chain.length - 1; i++) { after[chain[i]] = []; titleAfter[chain[i]] = '' }
+    const cardioAfter = {}
+    const durationAfter = {}
+    for (let i = 0; i < chain.length - 1; i++) { after[chain[i]] = []; titleAfter[chain[i]] = ''; cardioAfter[chain[i]] = null; durationAfter[chain[i]] = null }
     for (let i = 0; i < chain.length - 1; i++) {
       const sourceDay = chain[i]
       const destDay = chain[i + 1]
       after[destDay] = before[sourceDay].map((item) => ({ ...item, day: destDay }))
       titleAfter[destDay] = titleBefore[sourceDay]
+      cardioAfter[destDay] = cardioBefore[sourceDay]
+      durationAfter[destDay] = durationBefore[sourceDay]
     }
     // Exiting reorder mode has to land in the very same render as the
     // optimistic draft update below — otherwise there's a brief window
@@ -2715,15 +2882,31 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
     }
     try {
       if (updates.length > 0) await persistPlan({ updates })
+      // Cardio first, then titles — same ordering reason as applyFieldsSnapshot.
+      const changedCardioDays = uniqueDays.filter((day) => cardioAfter[day] !== cardioBefore[day])
+      if (changedCardioDays.length > 0) {
+        await Promise.all(changedCardioDays.map((day) => persistCardioType(day, cardioAfter[day])))
+      }
       const changedTitleDays = uniqueDays.filter((day) => titleAfter[day] !== titleBefore[day])
       if (changedTitleDays.length > 0) {
         await Promise.all(changedTitleDays.map((day) => setDayTitle(day, titleAfter[day])))
+      }
+      // Durations after titles, same reason as in applyFieldsSnapshot.
+      const changedDurationDays = uniqueDays.filter((day) => durationAfter[day] !== durationBefore[day])
+      if (changedDurationDays.length > 0) {
+        await Promise.all(changedDurationDays.map((day) => persistDuration(day, durationAfter[day])))
       }
       pushUndo({
         kind: 'fields',
         days: Object.fromEntries(uniqueDays.map((day) => [day, { before: before[day], after: after[day] ?? before[day] }])),
         titles: Object.fromEntries(
           changedTitleDays.map((day) => [day, { before: titleBefore[day], after: titleAfter[day] }]),
+        ),
+        cardio: Object.fromEntries(
+          changedCardioDays.map((day) => [day, { before: cardioBefore[day], after: cardioAfter[day] }]),
+        ),
+        durations: Object.fromEntries(
+          changedDurationDays.map((day) => [day, { before: durationBefore[day], after: durationAfter[day] }]),
         ),
       })
     } catch {
@@ -2858,7 +3041,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
             </div>
           ) : (
             <div className="edit-plan-day-title-row">
-              <span className={`edit-plan-day-subtitle ${isDayLabelMismatched(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd)) ? 'is-mismatched' : ''}`}>
+              <span className={`edit-plan-day-subtitle ${isDayLabelMismatched(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd) || !!selectedDayCardioType) ? 'is-mismatched' : ''}`}>
                 {dayLabel(dayTitles.get(selectedDay), dayExercises.some((it) => !it.isPendingAdd))}
               </span>
               <button
@@ -3133,9 +3316,12 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
           </div>
         ) : (
           <>
-            {selectedDayCardioType && !dayReorderMode && (
+            {selectedDayCardioType && (
               <>
                 <CardioActivityCard
+                  readOnly={dayReorderMode}
+                  plannedDuration={dayPlannedDurations?.get(selectedDay) ?? null}
+                  onChangeDuration={(minutes) => setPlannedDuration(selectedDay, minutes)}
                   cardioType={selectedDayCardioType}
                   onChangeType={(type) => setCardioType(selectedDay, type)}
                   onRemove={() => removeCardioDay(selectedDay)}
@@ -3249,6 +3435,7 @@ function EditPlanView({ allExercises, dayTitles, dayCardioTypes, userId, userNam
           title={sheet === 'move' ? 'Move to' : 'Copy to'}
           currentDay={selectedDay}
           dayTitles={dayTitles}
+          dayCardioTypes={dayCardioTypes}
           draft={draft}
           onPick={handleMoveOrCopy}
           onCancel={() => setSheet(null)}

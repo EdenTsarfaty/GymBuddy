@@ -115,6 +115,12 @@ db.exec(`
 // boolean column, since "is it cardio" and "what kind" are never
 // independently true/false, only "not cardio" or "cardio of type X".
 try { db.exec('ALTER TABLE day_plans ADD COLUMN cardio_type TEXT') } catch {}
+// Optional target length of the day's session, in whole minutes — NULL means
+// none set. Deliberately not tied to cardio: gym days can use it later, and
+// nothing in the schema makes it required (the cardio UI just nudges toward it).
+// An earlier, never-committed attempt at this used a `cardio_duration` column;
+// a local DB that ran it may still carry that orphan column, which is unused.
+try { db.exec('ALTER TABLE day_plans ADD COLUMN planned_duration INTEGER') } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS chat_messages (
