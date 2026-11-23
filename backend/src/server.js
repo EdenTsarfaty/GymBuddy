@@ -1674,7 +1674,7 @@ fastify.post('/api/workout-log/uncomplete', async (request, reply) => {
 // same way each stretch's completion is so it survives a reload — see the
 // cardio_done column comment in db.js for why it isn't just performed_date.
 fastify.post('/api/workout-log/cardio-done', async (request, reply) => {
-  const { user_id, scheduled_date, done } = request.body || {}
+  const { user_id, scheduled_date, done, session } = request.body || {}
   const uid = user_id ? Number(user_id) : 1
 
   if (!scheduled_date || !/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date)) {
@@ -1682,10 +1682,15 @@ fastify.post('/api/workout-log/cardio-done', async (request, reply) => {
     return { error: 'scheduled_date is required (YYYY-MM-DD)' }
   }
 
-  const result = streak.setCardioDone(uid, scheduled_date, !!done)
+  // `session` is optional and tri-state — see setCardioDone.
+  const result = streak.setCardioDone(uid, scheduled_date, !!done, session)
   if (!result) {
     reply.code(404)
     return { error: 'No scheduled workout found for that date' }
+  }
+  if (result.invalid) {
+    reply.code(400)
+    return { error: 'Invalid session: started_at/ended_at must be ISO timestamps (end not before start), utc_offset_min a whole number of minutes, duration_sec a whole number of seconds up to 24h' }
   }
   return result
 })

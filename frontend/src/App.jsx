@@ -25,16 +25,20 @@ import ZzzIcon from './components/icons/ZzzIcon'
 import CheckAllIcon from './components/icons/CheckAllIcon'
 import CompleteIcon from './components/icons/CompleteIcon'
 import UncompleteIcon from './components/icons/UncompleteIcon'
+import PlayIcon from './components/icons/PlayIcon'
+import PauseIcon from './components/icons/PauseIcon'
+import { useWorkoutTimer } from './useWorkoutTimer'
 import UndoIcon from './components/icons/UndoIcon'
 import ResetIcon from './components/icons/ResetIcon'
 import { cardioIconFor } from './components/icons/cardioIcons'
 import HomeBanner from './components/HomeBanner'
+import LogSessionSheet from './components/LogSessionSheet'
 import { API_BASE } from './apiBase'
 import { meowifyDocument } from './meowify'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import './App.css'
 
-const APP_VERSION = 'RC 0.8.9'
+const APP_VERSION = 'RC 0.9.0'
 // Vertical slots for the nyan-cat-crossing easter egg (see the spawn effect
 // near handleLogoTap) — a new cat claims a random *free* slot (with a bit
 // of jitter added on top so it's not perfectly on the gridline) and holds
@@ -47,6 +51,7 @@ const BEGINNER_MODE_STORAGE_KEY = 'gymbuddy-beginner-mode'
 const MUSIC_PROVIDER_STORAGE_KEY = 'gymbuddy-music-provider'
 const CURRENT_USER_STORAGE_KEY = 'gymbuddy-current-user-id'
 const PENDING_EDITS_STORAGE_KEY = 'gymbuddy-pending-edits'
+const PENDING_CARDIO_STORAGE_KEY = 'gymbuddy-pending-cardio'
 const STREAK_FREEZE_SUSPEND_STORAGE_KEY = 'gymbuddy-streak-freeze-suspended-until'
 const LAST_COMPLETION_BATCH_STORAGE_KEY = 'gymbuddy-last-completion-batch'
 const STREAK_FREEZE_SUSPEND_MS = 3 * 60 * 60 * 1000
@@ -262,6 +267,81 @@ function buildWorkoutIndicators(workoutLog, scheduledDays, todayStr, protectedDa
 // localStorage per user so Undo still works after a reload. localStorage has
 // no expiry of its own, so the end-of-day limit is enforced here: an entry
 // saved on an earlier date is deleted the next time it's read.
+// 754000 -> "12:34", 3912000 -> "1:05:12".
+function formatTimerReadout(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = String(total % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+// 2700 -> "45 min", 3900 -> "1 hr 5 min", 40 -> "40 sec".
+function formatSessionDuration(seconds) {
+  if (seconds < 60) return `${seconds} sec`
+  const totalMin = Math.round(seconds / 60)
+  if (totalMin < 60) return `${totalMin} min`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`
+}
+
+// The readout line between the activity name and the buttons. It's always
+// mounted and opens/closes by animating its height (and fading), so starting
+// the timer eases the buttons down instead of snapping them. `text` is empty
+// when nothing should show; the last non-empty text is kept while it closes,
+// so it doesn't blank out mid-fade.
+function CardioTimerSlot({ text, paused }) {
+  const lastTextRef = useRef(text)
+  if (text) lastTextRef.current = text
+  return (
+    <div className={`cardio-activity-timer-slot ${text ? 'is-open' : ''}`} aria-hidden={!text}>
+      <div className="cardio-activity-timer-slot-inner">
+        <span className={`cardio-activity-timer ${paused ? 'is-paused' : ''}`}>
+          {text || lastTextRef.current}
+          {paused && <span className="cardio-activity-timer-note">Paused</span>}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// Circumference of the progress ring's r=60 circle (see the SVG in the
+// cardio card).
+const CARDIO_RING_CIRCUMFERENCE = 2 * Math.PI * 60
+
+// Cardio state waiting to reach the server, one entry per scheduled date:
+// { done, session } where `session` follows the same tri-state the
+// cardio-done endpoint takes (undefined = leave the stored one alone, null =
+// clear it, object = replace it). Latest state wins, so a new tap folds into
+// whatever is already pending for that date instead of queuing a second
+// request. Lives in localStorage so it survives a reload while offline.
+function readPendingCardio(userId) {
+  try {
+    const raw = localStorage.getItem(`${PENDING_CARDIO_STORAGE_KEY}-${userId}`)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch { return {} }
+}
+
+function writePendingCardio(userId, map) {
+  try {
+    const key = `${PENDING_CARDIO_STORAGE_KEY}-${userId}`
+    if (Object.keys(map).length === 0) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
+function sessionFromLogRow(row) {
+  if (!row || (row.workout_started_at == null && row.workout_duration_sec == null)) return null
+  return {
+    started_at: row.workout_started_at,
+    ended_at: row.workout_ended_at,
+    utc_offset_min: row.workout_utc_offset_min,
+    duration_sec: row.workout_duration_sec,
+  }
+}
+
 function readStoredCompletionBatch(userId) {
   const key = `${LAST_COMPLETION_BATCH_STORAGE_KEY}-${userId}`
   try {
@@ -341,6 +421,11 @@ function App() {
   // complete" once it's true. Resets with the day so yesterday's cardio
   // day doesn't read as already-done today.
   const [cardioActivityCompleted, setCardioActivityCompleted] = useState(false)
+  // The logged session behind that pill — { started_at, ended_at,
+  // utc_offset_min, duration_sec } or null when it was just checked off.
+  const [cardioSession, setCardioSession] = useState(null)
+  // The "log your session" sheet, for completing cardio that was never timed.
+  const [logSessionOpen, setLogSessionOpen] = useState(false)
 
   // Fires the per-exercise history record alongside the local toggle —
   // independent of the whole-day workout-log/complete call, which only fires
@@ -659,6 +744,7 @@ function App() {
       if (!cancelled) {
         setIsOffline(!ok)
         if (ok && pendingEditsRef.current.size > 0) flushPendingEdits()
+        if (ok) flushPendingCardio()
       }
       checking = false
 
@@ -685,6 +771,13 @@ function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
+
+  // The health check above can finish before the user has loaded (it then has
+  // nobody to flush for), so also send anything queued for this user as soon
+  // as they're known and the server isn't known to be down.
+  useEffect(() => {
+    if (currentUser && !isOffline) flushPendingCardio()
+  }, [currentUser?.id, isOffline])
 
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme
@@ -882,6 +975,15 @@ function App() {
   // surfaced catch-up's original date, otherwise today.
   const liveScheduledDate = isShowingCatchUp ? pendingCatchUp.scheduled_date : toISODate(new Date())
 
+  // The play/pause clock behind the cardio card — see useWorkoutTimer.js.
+  const workoutTimer = useWorkoutTimer(currentUser?.id, liveScheduledDate)
+  const plannedMinutes = dayPlannedDurations.get(effectiveDay) || null
+  // Fills clockwise toward the planned length and just stays full once past
+  // it; with no planned length there's nothing to fill toward, so no ring.
+  const timerRingProgress = workoutTimer.status !== 'idle' && plannedMinutes
+    ? Math.min(1, workoutTimer.elapsedMs / (plannedMinutes * 60000))
+    : null
+
   // A day's own selection resets the cardio flag above — it only ever
   // means "today's cardio activity, as currently viewed, was marked done."
   // Clearing the seed key too lets the effect below re-read it from the
@@ -889,6 +991,7 @@ function App() {
   const cardioSeedKeyRef = useRef(null)
   useEffect(() => {
     setCardioActivityCompleted(false)
+    setCardioSession(null)
     cardioSeedKeyRef.current = null
   }, [selectedDay])
 
@@ -900,20 +1003,77 @@ function App() {
   useEffect(() => {
     if (!currentUser || historyDate || selectedDay !== today) return
     const row = workoutLog.find((r) => r.scheduled_date === liveScheduledDate)
-    if (!row) return
+    // Anything still waiting to be sent is newer than whatever the server
+    // has (or the server may be unreachable and the log empty), so it wins.
+    const pending = readPendingCardio(currentUser.id)[liveScheduledDate]
+    if (!row && !pending) return
     const key = `${currentUser.id}|${liveScheduledDate}`
     if (cardioSeedKeyRef.current === key) return
     cardioSeedKeyRef.current = key
+    if (pending) {
+      setCardioActivityCompleted(!!pending.done)
+      setCardioSession(pending.done ? (pending.session !== undefined ? pending.session : sessionFromLogRow(row)) : null)
+      return
+    }
     setCardioActivityCompleted(!!row.cardio_done)
+    setCardioSession(row.cardio_done ? sessionFromLogRow(row) : null)
   }, [workoutLog, currentUser, historyDate, selectedDay, liveScheduledDate])
 
-  function persistCardioDone(done) {
+  // Saves the cardio pill (and optionally the session behind it) the way the
+  // pending edits above are saved: written to local storage first, then sent;
+  // if the send doesn't land it stays queued and goes out when the server is
+  // reachable again (see flushPendingCardio). `session` is tri-state — omit
+  // it to leave the stored session alone, pass null to clear it, or pass the
+  // session to replace it. Un-doing (done: false) always clears the session.
+  function persistCardioDone(done, session) {
     if (!currentUser || historyDate || selectedDay !== today) return
+    if (!done) {
+      setCardioSession(null)
+      if (workoutTimer.status !== 'idle') workoutTimer.reset()
+    } else if (session !== undefined) setCardioSession(session)
+
+    const uid = currentUser.id
+    const date = liveScheduledDate
+    const queue = readPendingCardio(uid)
+    const previous = queue[date]
+    const entry = { done: !!done }
+    if (done) {
+      if (session !== undefined) entry.session = session
+      else if (previous?.done && previous.session !== undefined) entry.session = previous.session
+    }
+    queue[date] = entry
+    writePendingCardio(uid, queue)
+    sendPendingCardio(uid, date)
+  }
+
+  function sendPendingCardio(uid, date) {
+    const entry = readPendingCardio(uid)[date]
+    if (!entry) return
+    const body = { user_id: uid, scheduled_date: date, done: entry.done }
+    if (entry.done && entry.session !== undefined) body.session = entry.session
     fetch(`${API_BASE}/api/workout-log/cardio-done`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: currentUser.id, scheduled_date: liveScheduledDate, done }),
-    }).catch(() => {})
+      body: JSON.stringify(body),
+    })
+      .then((res) => {
+        // 400/404 won't ever succeed on retry (bad payload, or no log row for
+        // that date), so those are dropped rather than retried forever.
+        if (!res.ok && res.status !== 400 && res.status !== 404) return
+        const latest = readPendingCardio(uid)
+        // A newer tap on the same date replaced this entry while it was in
+        // flight — leave that one queued.
+        if (JSON.stringify(latest[date]) !== JSON.stringify(entry)) return
+        delete latest[date]
+        writePendingCardio(uid, latest)
+      })
+      .catch(() => {})
+  }
+
+  function flushPendingCardio() {
+    const uid = currentUserRef.current?.id
+    if (!uid) return
+    for (const date of Object.keys(readPendingCardio(uid))) sendPendingCardio(uid, date)
   }
 
   useEffect(() => {
@@ -1031,10 +1191,33 @@ function App() {
   // the day stayed performed. This is the only way to undo a cardio day with
   // no stretches, which never shows the Undo button (that one hangs off
   // Complete Workout).
+  // Completes the cardio entry from the log sheet: with the session the user
+  // entered, or with none at all when they skip the details.
+  function completeCardioFromSheet(session) {
+    setLogSessionOpen(false)
+    setCardioActivityCompleted(true)
+    persistCardioDone(true, session)
+  }
+
+  // Shared by the cardio card's Complete button and the bottom Complete
+  // Workout button. A timer that was started (running or paused) already holds
+  // everything the session needs, so finishing it saves that directly. Without
+  // one, the log sheet asks for the start and length — completing (and, if it
+  // finishes the day, the celebration) then happens from the sheet, and
+  // cancelling it leaves the day incomplete.
+  function startCardioCompletion() {
+    if (workoutTimer.status === 'idle') {
+      setLogSessionOpen(true)
+      return
+    }
+    const session = workoutTimer.finish()
+    setCardioActivityCompleted(true)
+    persistCardioDone(true, session || undefined)
+  }
+
   function handleToggleCardioActivity() {
     if (!cardioActivityCompleted) {
-      setCardioActivityCompleted(true)
-      persistCardioDone(true)
+      startCardioCompletion()
       return
     }
     setCardioActivityCompleted(false)
@@ -1994,19 +2177,56 @@ function App() {
             {!loading && !serverDown && !showFreezeScreen && error && <p className="status-message">Couldn't load exercises: {error}</p>}
             {!loading && !serverDown && !showFreezeScreen && !error && effectiveDayCardioType && (
               <div className={`cardio-activity-card ${cardioActivityCompleted ? 'is-complete' : ''}`}>
-                <span className="cardio-activity-icon-circle">
-                  <CardioActivityIcon size={58} className="cardio-activity-icon" />
+                <span className="cardio-activity-ring-wrap">
+                  {timerRingProgress != null && !cardioActivityCompleted && (
+                    <svg className="cardio-activity-ring" viewBox="0 0 126 126" aria-hidden="true">
+                      <circle className="cardio-activity-ring-track" cx="63" cy="63" r="60" />
+                      <circle
+                        className="cardio-activity-ring-progress"
+                        cx="63"
+                        cy="63"
+                        r="60"
+                        strokeDasharray={CARDIO_RING_CIRCUMFERENCE}
+                        strokeDashoffset={CARDIO_RING_CIRCUMFERENCE * (1 - timerRingProgress)}
+                      />
+                    </svg>
+                  )}
+                  <span className="cardio-activity-icon-circle">
+                    <CardioActivityIcon size={58} className="cardio-activity-icon" />
+                  </span>
                 </span>
                 <span className="cardio-activity-type">{CARDIO_TYPES[effectiveDayCardioType]}</span>
-                <button
-                  type="button"
-                  className={`complete-workout-btn cardio-activity-complete-btn ${cardioActivityCompleted ? 'is-active' : ''}`}
-                  aria-pressed={cardioActivityCompleted}
-                  onClick={handleToggleCardioActivity}
-                >
-                  {cardioActivityCompleted ? <UncompleteIcon size={18} /> : <CompleteIcon size={18} />}
-                  {cardioActivityCompleted ? 'Completed' : 'Complete'}
-                </button>
+                <CardioTimerSlot
+                  text={
+                    !cardioActivityCompleted && workoutTimer.status !== 'idle'
+                      ? formatTimerReadout(workoutTimer.elapsedMs)
+                      : cardioActivityCompleted && cardioSession?.duration_sec
+                        ? formatSessionDuration(cardioSession.duration_sec)
+                        : ''
+                  }
+                  paused={!cardioActivityCompleted && workoutTimer.status === 'paused'}
+                />
+                <div className="cardio-activity-actions">
+                  {!cardioActivityCompleted && (
+                    <button
+                      type="button"
+                      className="complete-workout-btn cardio-activity-play-btn"
+                      onClick={workoutTimer.status === 'running' ? workoutTimer.pause : workoutTimer.status === 'paused' ? workoutTimer.resume : workoutTimer.start}
+                    >
+                      {workoutTimer.status === 'running' ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
+                      {workoutTimer.status === 'running' ? 'Pause' : workoutTimer.status === 'paused' ? 'Resume' : 'Play'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`complete-workout-btn cardio-activity-complete-btn ${cardioActivityCompleted ? 'is-active' : ''}`}
+                    aria-pressed={cardioActivityCompleted}
+                    onClick={handleToggleCardioActivity}
+                  >
+                    {cardioActivityCompleted ? <UncompleteIcon size={18} /> : <CompleteIcon size={18} />}
+                    {cardioActivityCompleted ? 'Uncomplete' : 'Complete'}
+                  </button>
+                </div>
               </div>
             )}
             {!loading && !serverDown && !showFreezeScreen && !error && effectiveDayCardioType && exercises.length > 0 && (
@@ -2081,12 +2301,11 @@ function App() {
                     type="button"
                     className="complete-workout-btn"
                     onClick={() => {
-                      cascadeStartSnapshotRef.current = new Set(completedExerciseIds)
+                      // Kept across a cancelled log sheet so the undo batch still
+                      // covers the stretches the first press ticked.
+                      cascadeStartSnapshotRef.current ??= new Set(completedExerciseIds)
                       setCascadeToken((t) => t + 1)
-                      if (effectiveDayCardioType) {
-                        setCardioActivityCompleted(true)
-                        persistCardioDone(true)
-                      }
+                      if (effectiveDayCardioType && !cardioActivityCompleted) startCardioCompletion()
                     }}
                     disabled={allComplete}
                   >
@@ -2108,6 +2327,16 @@ function App() {
       </footer>
       )}
 
+
+      {logSessionOpen && effectiveDayCardioType && (
+        <LogSessionSheet
+          activityLabel={CARDIO_TYPES[effectiveDayCardioType]}
+          plannedMinutes={plannedMinutes}
+          onSave={(session) => completeCardioFromSheet(session)}
+          onSkip={() => completeCardioFromSheet(undefined)}
+          onCancel={() => setLogSessionOpen(false)}
+        />
+      )}
 
       {regenOpen && (
         <RegeneratePlanModal

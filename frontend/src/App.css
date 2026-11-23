@@ -3332,8 +3332,107 @@
   color: var(--text-h);
 }
 
-.cardio-activity-complete-btn {
+.cardio-activity-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   margin-top: 6px;
+}
+
+/* Wraps the icon circle so the progress ring can sit just outside its edge
+   (the circle itself clips its overflow, so the ring can't live inside it). */
+.cardio-activity-ring-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 126px;
+  height: 126px;
+}
+
+.cardio-activity-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Start at 12 o'clock and fill clockwise. */
+  transform: rotate(-90deg);
+}
+
+.cardio-activity-ring-track,
+.cardio-activity-ring-progress {
+  fill: none;
+  stroke-width: 4;
+}
+
+.cardio-activity-ring-track {
+  stroke: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.cardio-activity-ring-progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+.cardio-activity-timer-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  /* Cancels the card's flex gap while collapsed so the closed slot takes no
+     space at all; the margin eases back to 0 as it opens. */
+  margin-top: -10px;
+  opacity: 0;
+  transition: grid-template-rows 0.5s ease, margin-top 0.5s ease, opacity 0.3s ease;
+}
+
+.cardio-activity-timer-slot.is-open {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  opacity: 1;
+  /* Fades in after the buttons have started moving down. */
+  transition: grid-template-rows 0.5s ease, margin-top 0.5s ease, opacity 0.5s ease 0.3s;
+}
+
+.cardio-activity-timer-slot-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+
+.cardio-activity-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  /* Fixed row height: the "Paused" tag sits on the number's baseline and
+     would otherwise make this row taller than while running, pushing the
+     buttons below it. */
+  height: 26px;
+  line-height: 26px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.cardio-activity-timer.is-paused {
+  color: var(--text-muted);
+}
+
+.cardio-activity-timer-note {
+  line-height: 1;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Secondary to Complete: same pill, outlined instead of filled. */
+.cardio-activity-play-btn {
+  color: var(--accent);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* Toggled-done look — still a live button (tap again to undo), so it stays
@@ -6797,3 +6896,180 @@ button.edit-plan-pending-camera-btn {
   object-fit: cover;
 }
 
+/* The "log your session" modal (LogSessionSheet) — built on the shared modal
+   shell (.modal-overlay / .modal-wrap / .modal-box: centered on desktop, a
+   bottom sheet at <=600px) like the regenerate-plan modal; only its own
+   fields live here. */
+.log-session-modal {
+  min-width: 400px;
+  max-width: min(460px, calc(100vw - 32px));
+  gap: 22px;
+}
+
+@media (max-width: 600px) {
+  .log-session-modal {
+    min-width: unset;
+    max-width: unset;
+  }
+}
+
+.log-session-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-session-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.log-session-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.log-session-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-session-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.log-session-input {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+
+.log-session-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.log-session-start-row {
+  display: flex;
+  gap: 10px;
+}
+
+.log-session-date {
+  flex: 1 1 0;
+}
+
+.log-session-time {
+  flex: 1 1 0;
+}
+
+.log-session-duration-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.log-session-minutes {
+  width: 76px;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.log-session-minutes::-webkit-outer-spin-button,
+.log-session-minutes::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.log-session-unit {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.log-session-picks {
+  display: flex;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+.log-session-pick {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  /* Identical to Edit Plan's duration pill (.edit-plan-duration-pill), just a
+     bit bigger. */
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 15px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.log-session-pick:hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.log-session-error {
+  margin: 0;
+  font-size: 13px;
+  color: #e5484d;
+}
+
+.log-session-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-session-secondary {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Skip details is the constructive pill (accent text and outline, tinted on
+   hover); Cancel discards, so it's neutral: black/white outline per theme. */
+.log-session-pill {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: transparent;
+  border: 1.5px solid var(--text-h);
+  border-radius: 999px;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.log-session-pill:hover {
+  color: var(--text-h);
+  border-color: var(--text-muted);
+}
+
+.log-session-skip {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.log-session-skip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}

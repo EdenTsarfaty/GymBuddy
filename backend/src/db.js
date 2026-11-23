@@ -166,6 +166,17 @@ try { db.exec('ALTER TABLE workout_log ADD COLUMN cardio_type TEXT') } catch {}
 // (cardio plus any stretches) is done. This is what lets the homescreen's
 // cardio pill survive a reload the way per-exercise completion does.
 try { db.exec('ALTER TABLE workout_log ADD COLUMN cardio_done INTEGER DEFAULT 0') } catch {}
+// The actual session behind a workout day — all NULL when it was just checked
+// off with no details. Not cardio-specific on purpose: gym days can log the
+// same thing later. Today it's written together with cardio_done (one row,
+// one write) and cleared together with it. started_at/ended_at are UTC ISO
+// strings; utc_offset_min is the phone's offset at the start (minutes east of
+// UTC) so the local wall-clock time can be rebuilt later; duration_sec is the
+// *active* time (excludes pauses), so ended_at - started_at can be longer.
+try { db.exec('ALTER TABLE workout_log ADD COLUMN workout_started_at TEXT') } catch {}
+try { db.exec('ALTER TABLE workout_log ADD COLUMN workout_ended_at TEXT') } catch {}
+try { db.exec('ALTER TABLE workout_log ADD COLUMN workout_utc_offset_min INTEGER') } catch {}
+try { db.exec('ALTER TABLE workout_log ADD COLUMN workout_duration_sec INTEGER') } catch {}
 
 // One row per exercise scheduled on a given real date — a frozen snapshot of
 // its collapsed-card fields (title + basic stats), independent of the

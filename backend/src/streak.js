@@ -89,22 +89,76 @@ function syncScheduledWorkouts(userId, todayStr) {
 function getHistory(userId) {
   syncScheduledWorkouts(userId, todayISODate())
   return db.prepare(
-    'SELECT scheduled_date, performed_date, cardio_type, cardio_done FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
+    'SELECT scheduled_date, performed_date, cardio_type, cardio_done, workout_started_at, workout_ended_at, workout_utc_offset_min, workout_duration_sec FROM workout_log WHERE user_id = ? ORDER BY scheduled_date ASC',
   ).all(userId)
+}
+
+const MAX_SESSION_SEC = 24 * 60 * 60
+
+// Checks a session payload ({ started_at, ended_at, utc_offset_min,
+// duration_sec }) and returns the cleaned values, or null if it isn't valid.
+// Every field is optional on its own (a session logged with only a duration,
+// say) but whatever is present has to make sense.
+function parseSession(session) {
+  if (!session || typeof session !== 'object') return null
+  const isoMs = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v) ? Date.parse(v) : NaN)
+  const out = { started_at: null, ended_at: null, utc_offset_min: null, duration_sec: null }
+  if (session.started_at != null) {
+    if (Number.isNaN(isoMs(session.started_at))) return null
+    out.started_at = new Date(isoMs(session.started_at)).toISOString()
+  }
+  if (session.ended_at != null) {
+    if (Number.isNaN(isoMs(session.ended_at))) return null
+    out.ended_at = new Date(isoMs(session.ended_at)).toISOString()
+  }
+  if (out.started_at && out.ended_at && out.ended_at < out.started_at) return null
+  if (session.utc_offset_min != null) {
+    if (!Number.isInteger(session.utc_offset_min) || Math.abs(session.utc_offset_min) > 14 * 60) return null
+    out.utc_offset_min = session.utc_offset_min
+  }
+  if (session.duration_sec != null) {
+    if (!Number.isInteger(session.duration_sec) || session.duration_sec < 1 || session.duration_sec > MAX_SESSION_SEC) return null
+    out.duration_sec = session.duration_sec
+  }
+  return out
 }
 
 // Records whether a cardio day's own entry is checked off, separately from
 // the day-level performed_date (see the cardio_done column comment in
-// db.js). Returns null when there's no row for that date, same as
-// markPerformed.
-function setCardioDone(userId, scheduledDate, done) {
+// db.js), plus the session behind it. `session` follows "latest state wins":
+//   undefined -> leave whatever session is stored untouched
+//   null      -> clear the session (done, but with no details)
+//   object    -> replace it (validated by parseSession; an invalid one makes
+//                this return { invalid: true } without changing anything)
+// Un-doing the entry always clears the session with it. Returns null when
+// there's no row for that date, same as markPerformed.
+function setCardioDone(userId, scheduledDate, done, session) {
   syncScheduledWorkouts(userId, todayISODate())
   const existing = db.prepare(
     'SELECT id FROM workout_log WHERE user_id = ? AND scheduled_date = ?',
   ).get(userId, scheduledDate)
   if (!existing) return null
-  db.prepare('UPDATE workout_log SET cardio_done = ? WHERE id = ?').run(done ? 1 : 0, existing.id)
-  return { scheduled_date: scheduledDate, cardio_done: done ? 1 : 0 }
+
+  let clean = null
+  if (done && session) {
+    clean = parseSession(session)
+    if (!clean) return { invalid: true }
+  }
+
+  if (!done || session === null || clean) {
+    const s = clean || { started_at: null, ended_at: null, utc_offset_min: null, duration_sec: null }
+    db.prepare(
+      `UPDATE workout_log SET cardio_done = ?, workout_started_at = ?, workout_ended_at = ?,
+         workout_utc_offset_min = ?, workout_duration_sec = ? WHERE id = ?`,
+    ).run(done ? 1 : 0, s.started_at, s.ended_at, s.utc_offset_min, s.duration_sec, existing.id)
+  } else {
+    db.prepare('UPDATE workout_log SET cardio_done = 1 WHERE id = ?').run(existing.id)
+  }
+
+  return db.prepare(
+    `SELECT scheduled_date, cardio_done, workout_started_at, workout_ended_at,
+            workout_utc_offset_min, workout_duration_sec FROM workout_log WHERE id = ?`,
+  ).get(existing.id)
 }
 
 function recomputeStreak(userId) {
