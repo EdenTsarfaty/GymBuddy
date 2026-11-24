@@ -29,3 +29,6 @@ backend/data/
 *.njsproj
 *.sln
 *.sw?
+
+# Local notes and research (not published)
+docs/

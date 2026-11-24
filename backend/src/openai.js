@@ -1,28 +1,31 @@
 const { countTokens } = require('./tokenizer')
 
-// Kept as two separate constants rather than one shared MODEL even though
-// they currently point to the same model — OPENAI_MODEL (routine per-
-// exercise calls) and PLAN_MODEL (plan/multi-exercise generation, chat) are
-// free to diverge again later without an intervening refactor. Swapped from
-// gpt-5.4-nano/gpt-5.4-mini to gpt-5.6-luna: same or lower price than nano
-// on both, and independent benchmarks put it roughly on par with mini
-// overall (tied Artificial Analysis Intelligence Index, ahead on GDPval) —
-// see conversation history for the comparison.
-const OPENAI_MODEL = 'gpt-5.6-luna'
-const PLAN_MODEL = 'gpt-5.6-luna'
+// Kept as two separate settings rather than one shared model even though
+// they normally point to the same one — OPENAI_MODEL (routine per-exercise
+// calls) and OPENAI_PLAN_MODEL (plan/multi-exercise generation, chat) are
+// free to diverge without a refactor. Both come from the environment (see
+// .env.example) and fall back to gpt-5.6-luna: same or lower price than
+// gpt-5.4-nano on both, and independent benchmarks put it roughly on par
+// with gpt-5.4-mini overall (tied Artificial Analysis Intelligence Index,
+// ahead on GDPval).
+const DEFAULT_MODEL = 'gpt-5.6-luna'
+const OPENAI_MODEL = process.env.OPENAI_MODEL || DEFAULT_MODEL
+const PLAN_MODEL = process.env.OPENAI_PLAN_MODEL || DEFAULT_MODEL
 
-// gpt-5.6-luna: 1,050,000 context window, 128,000 max output (per
-// developers.openai.com/api/docs/models/gpt-5.6-luna). Scaled up from
-// gpt-5.4-mini's 400k proportionally — this has always tracked the active
-// PLAN_MODEL's real total window (input + output), not an arbitrarily
-// conservative fraction of it; growing it just lets more real chat history
-// survive trimming before the model's actual ceiling is hit. Verified
-// nothing else in the codebase hardcodes or derives from the old 400000
-// value, and the code that spends this budget (trimHistoryToBudget below)
-// is a plain greedy accumulate-until-full loop with no fixed-size
-// assumptions, so a larger budget is a pure capacity increase, not a
-// behavior change.
-const CHAT_CONTEXT_WINDOW = 1050000
+// The chat's total token window (input + output) for PLAN_MODEL, from
+// OPENAI_CONTEXT_WINDOW. The default is gpt-5.6-luna's: 1,050,000 context,
+// 128,000 max output (per developers.openai.com/api/docs/models/gpt-5.6-luna).
+// This has always tracked the active model's real window, not an arbitrarily
+// conservative fraction of it; a bigger budget just lets more real chat
+// history survive trimming before the model's ceiling is hit. The code that
+// spends it (trimHistoryToBudget below) is a plain greedy accumulate-until-
+// full loop with no fixed-size assumptions. If you change OPENAI_PLAN_MODEL,
+// change this to match its window.
+const DEFAULT_CONTEXT_WINDOW = 1050000
+const configuredWindow = Number(process.env.OPENAI_CONTEXT_WINDOW)
+const CHAT_CONTEXT_WINDOW = Number.isInteger(configuredWindow) && configuredWindow > 0
+  ? configuredWindow
+  : DEFAULT_CONTEXT_WINDOW
 const CHAT_MAX_COMPLETION_TOKENS = 2000
 const CHAT_SAFETY_MARGIN = 1000
 
@@ -1074,4 +1077,4 @@ async function identifyExerciseFromPhoto(imageDataUrl) {
   return JSON.parse(data.choices[0].message.content).name
 }
 
-module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto }
+module.exports = { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto, DEFAULT_CONTEXT_WINDOW }

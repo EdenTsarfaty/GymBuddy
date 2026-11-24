@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const fastify = require('fastify')({ logger: false })
 const db = require('./db')
-const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto } = require('./openai')
+const { generateExerciseData, generateSwapExercise, generatePlanStructure, generateDayExercises, generateChatReply, findVideoForExercise, searchYouTube, checkOpenAIHealth, describeOpenAIError, identifyExerciseFromPhoto, DEFAULT_CONTEXT_WINDOW } = require('./openai')
 const { writeLLMLog, logRequest, logError, logInfo, logWarn, logCli, logCliBlock, logStartup, cli } = require('./logger')
 const { maybeBackupDatabase } = require('./backup')
 const { maybeSyncExerciseNames } = require('./wgerSync')
@@ -245,15 +245,12 @@ fastify.addHook('onResponse', (request, reply, done) => {
 })
 
 const PORT = process.env.PORT || 3001
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || [
-  'http://localhost:5173',
-  'http://localhost:4173',
-  'http://100.106.241.16:5173',
-  'http://100.106.241.16:4173',
-  'https://asus-laptop.tailed3faf.ts.net',
-  'https://asus-laptop.tailed3faf.ts.net:5173',
-  'https://gymbuddy.eden-tsarfaty.workers.dev',
-]
+// Origins the browser may call this API from: a comma-separated list in
+// FRONTEND_ORIGIN (e.g. a Tailscale or hosted address), or the local dev
+// servers when it isn't set.
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN
+  ? process.env.FRONTEND_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : ['http://localhost:5173', 'http://localhost:4173']
 
 fastify.register(require('@fastify/cors'), {
   origin: FRONTEND_ORIGIN,
@@ -1808,6 +1805,12 @@ fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
     logInfo('Tailscale: connected')
   } else {
     logWarn('Tailscale: not connected')
+  }
+  // openai.js quietly falls back to its default for an unusable window, so
+  // say so here instead of leaving a typo in .env unnoticed.
+  const contextWindow = process.env.OPENAI_CONTEXT_WINDOW
+  if (contextWindow && !(Number.isInteger(Number(contextWindow)) && Number(contextWindow) > 0)) {
+    logWarn(`OPENAI_CONTEXT_WINDOW="${contextWindow}" is not a positive whole number; using the default (${DEFAULT_CONTEXT_WINDOW})`)
   }
   push.startScheduler()
 })
